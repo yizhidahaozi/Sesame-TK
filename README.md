@@ -7,6 +7,9 @@
 [![Telegram-Group](https://img.shields.io/badge/Sesame--TK-nul?&logo=Telegram&label=Telegram-Group&labelColor=fff&link=https%3A%2F%2Ft.me%2Ffansirsqi_xposed_sesame)](https://t.me/fansirsqi_xposed_sesame)  
 [![云湖](https://img.shields.io/badge/%E4%BA%91%E6%B9%96-%E4%BA%A4%E6%B5%81%E7%BE%A4-nul?logo=icloud&logoColor=%236F4FD0&label=%E4%BA%91%E6%B9%96&labelColor=fff&color=%236F4FD0&link=https%3A%2F%2Fyhfx.jwznb.com%2Fshare%3Fkey%3DpEGmZ1gsdoBI%26ts%3D1734597564%20)](https://yhfx.jwznb.com/share?key=pEGmZ1gsdoBI&ts=1734597564)
 
+
+## 我只会复制粘贴，有问题我也不知道怎么解决，下面是大佬的原文，出问题概不负责 不负责 不负责。
+
 > 👉懒真人版本: [Sesame](https://github.com/LazyImmortal/Sesame)
 
 ## 💻本人不是专业的开发者，仅仅是一名热爱开源的爱好者
