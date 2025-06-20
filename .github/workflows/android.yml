@@ -171,6 +171,8 @@ jobs:
             * Compatible 为兼容版本，适用于 Android 7.0 及以下的系统，最低支持 Android 5.1
 
             > ~~墙内不再更新~~ 倒卖必死全家
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 确保添加了环境变量
 
       - name: Sync Release to Target Repository
         uses: softprops/action-gh-release@v2
@@ -182,7 +184,7 @@ jobs:
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
             CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          token: ${{ secrets.TARGET_REPO_PAT }}
+          token: ${{ secrets.TARGET_REPO_PAT }}  # 确保 secrets 已在仓库中配置
           tag_name: ${{ steps.extract_info.outputs.version }}
           draft: false
           prerelease: ${{ !startsWith(github.ref, 'refs/heads/main') }}
@@ -191,4 +193,4 @@ jobs:
           body: |
             📦 本 Release 同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})
             ✨ **更新内容**:
-            ${{ github.event.release.body || '无更新说明' }}
+            ${{ github.event.release.body || '无更新说明' }}    
