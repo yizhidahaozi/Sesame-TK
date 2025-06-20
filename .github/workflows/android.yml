@@ -103,10 +103,6 @@ jobs:
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Set SHORT_SHA
-        run: |
-          echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
       - name: Generate APKS Checksum
         run: |
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
@@ -147,7 +143,6 @@ jobs:
           echo "Creating tag: $VERSION_TAG"
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
-
       - name: Upload Assets to Source Release
         uses: softprops/action-gh-release@v2
         with:
@@ -157,17 +152,16 @@ jobs:
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
             CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          tag_name: ${{ steps.extract_info.outputs.version }}
+          tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           append_body: true
           generate_release_notes: true
           body: |
-            ## ✨ What's Changed
+            ## ✨What's Changed
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
-            
             > ## 下载说明
-            * Normal 为正常版本，适用于 Android 8.0 及以上的系统
-            * Compatible 为兼容版本，适用于 Android 7.0 及以下的系统，最低支持 Android 5.1
+              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
+              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
 
             > ~~墙内不再更新~~ 倒卖必死全家
