@@ -73,24 +73,22 @@ public class Privilege {
     private static JSONArray getTaskList(String queryParam) throws JSONException {
         String response = AntForestRpcCall.queryTaskListV2(queryParam);
         JSONObject result = new JSONObject(response);
-        return result.getJSONArray("forestTasksNew")
-                .getJSONObject(0)
-                .getJSONArray("taskInfoList");
+        return result.getJSONArray("forestTasksNew");
     }
 
     private static List<String> handleTaskList(JSONArray taskInfoList, String taskType, String taskName) {
         List<String> results = new ArrayList<>();
         for (int i = 0; i < taskInfoList.length(); i++) {
-            JSONObject task = taskInfoList.optJSONObject(i);
-            if (task == null) continue;
-
-            JSONObject baseInfo = task.optJSONObject("taskBaseInfo");
-            if (baseInfo == null) continue;
-
-            String currentTaskType = baseInfo.optString("taskType");
-            if (!taskType.equals(currentTaskType)) continue;
-
-            processSingleTask(baseInfo, taskType, taskName, results);
+            JSONArray taskList = taskInfoList.getJSONObject(i).getJSONArray("taskInfoList");
+            for (int j = 0; j < taskList.length(); j++) {
+                JSONObject task = taskList.optJSONObject(j);
+                if (task == null) continue;
+                JSONObject baseInfo = task.optJSONObject("taskBaseInfo");
+                if (baseInfo == null) continue;
+                String currentTaskType = baseInfo.optString("taskType");
+                if (!taskType.equals(currentTaskType)) continue;
+                processSingleTask(baseInfo, taskType, taskName, results);
+            }
         }
         return results;
     }
