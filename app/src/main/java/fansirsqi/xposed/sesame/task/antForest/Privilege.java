@@ -78,7 +78,8 @@ public class Privilege {
 
     private static List<String> handleTaskList(JSONArray taskInfoList, String taskType, String taskName) {
         List<String> results = new ArrayList<>();
-        for (int i = 0; i < taskInfoList.length(); i++) {
+        try {
+            for (int i = 0; i < taskInfoList.length(); i++) {
             JSONArray taskList = taskInfoList.getJSONObject(i).getJSONArray("taskInfoList");
             for (int j = 0; j < taskList.length(); j++) {
                 JSONObject task = taskList.optJSONObject(j);
@@ -89,6 +90,10 @@ public class Privilege {
                 if (!taskType.equals(currentTaskType)) continue;
                 processSingleTask(baseInfo, taskType, taskName, results);
             }
+            }
+        } catch (JSONException e) {
+            Log.printStackTrace(TAG + "任务列表解析失败", e);
+            results.add("处理异常");
         }
         return results;
     }
