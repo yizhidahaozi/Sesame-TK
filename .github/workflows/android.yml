@@ -1,9 +1,14 @@
 name: Android CI
 
 on:
-  # 新增：每天 UTC 0 点（北京时间早上 8 点）定时执行
+  # 每8小时触发一次（北京时间）
   schedule:
-    - cron: '9 0,8,12,18 * * *'
+    # 00:00 UTC → 08:00 北京时间
+    - cron: '0 0 * * *'
+    # 08:00 UTC → 16:00 北京时间
+    - cron: '0 8 * * *'
+    # 16:00 UTC → 00:00 北京时间（次日）
+    - cron: '0 16 * * *'
   push:
     branches: ["develop"]
   pull_request:
@@ -17,36 +22,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set Timezone to Asia/Shanghai
+      - name: 设置时区为北京时间
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
-          echo "Current time: $(date)"
+          echo "当前时间: $(date)"
 
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK
+      - name: 配置 JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
           cache: gradle
 
-      - name: Set up Gradle
+      - name: 配置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
           gradle-version: wrapper
 
-      - name: Grant execute permission for gradlew
+      - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
-      - name: Build with Gradle
+      - name: 使用 Gradle 构建
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
 
-      - name: Locate APKs and Set Outputs
+      - name: 定位 APK 文件并设置输出
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
@@ -54,13 +59,13 @@ jobs:
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
-      - name: Copy APKs to staging for signing
+      - name: 复制 APK 到签名目录
         run: |
           mkdir -p app/build/outputs/apk/all
           cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
           cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
 
-      - name: Sign APKs
+      - name: 签名 APK
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
@@ -71,7 +76,7 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: Extract Signed APK Paths
+      - name: 提取签名后的 APK 路径
         id: extract_apks
         run: |
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
@@ -83,112 +88,111 @@ jobs:
             fi
           done
 
-      - name: Upload APK - Compatible
+      - name: 上传兼容版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-compatible
           path: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: Upload APK - Normal
+      - name: 上传标准版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: Extract file names
+      - name: 提取文件信息
         id: extract_info
         run: |
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
           version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(.*)-signed\.apk/\2/')
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Generate APKS Checksum
+      - name: 生成 APK 校验和
         run: |
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      - name: Get Commit Details
+      - name: 获取提交详情
         id: commit_details
         run: |
           COMMIT_MESSAGE_BODY=$( \
             if [[ "${{ github.event_name }}" == "push" ]]; then \
-              echo "🔨 $(git rev-list --count ${{ github.event.before }}..${{ github.event.after }}) new commits to ${{ github.repository }}:${{ github.ref_name }} ([compare view](https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.event.after }}))"; \
+              echo "🔨 $(git rev-list --count ${{ github.event.before }}..${{ github.event.after }}) 个新提交到 ${{ github.repository }}:${{ github.ref_name }} ([对比视图](https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.event.after }}))"; \
               echo ""; \
-              git log --format="  %h ([view commit](https://github.com/${{ github.repository }}/commit/%H)): %s by %an" ${{ github.event.before }}..${{ github.event.after }}; \
+              git log --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an" ${{ github.event.before }}..${{ github.event.after }}; \
             elif [[ "${{ github.event_name }}" == "pull_request" ]]; then \
-              echo "📦 Pull Request #${{ github.event.number }} for ${{ github.repository }}: ${{ github.head_ref }} -> ${{ github.base_ref }} ([view PR](https://github.com/${{ github.repository }}/pull/${{ github.event.number }}))"; \
+              echo "📦 拉取请求 #${{ github.event.number }} 针对 ${{ github.repository }}: ${{ github.head_ref }} -> ${{ github.base_ref }} ([查看 PR](https://github.com/${{ github.repository }}/pull/${{ github.event.number }}))"; \
               echo ""; \
-              echo "Commits:"; \
-              git log --format="  %h ([view commit](https://github.com/${{ github.repository }}/commit/%H)): %s by %an" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}; \
+              echo "提交列表:"; \
+              git log --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}; \
             elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then \
-              echo "⚙️ Manual workflow run on ${{ github.ref_name }} by ${{ github.actor }}"; \
+              echo "⚙️ 由 ${{ github.actor }} 手动触发 ${{ github.ref_name }} 分支的工作流"; \
               echo ""; \
-              echo "Latest commit:"; \
-              git log -1 --format="  %h ([view commit](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
+              echo "最新提交:"; \
+              git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
             elif [[ "${{ github.event_name }}" == "schedule" ]]; then \
-              echo "⏰ Scheduled build on ${{ github.ref_name }}"; \
+              echo "⏰ ${{ github.ref_name }} 分支的定时构建"; \
               echo ""; \
-              echo "Latest commit:"; \
-              git log -1 --format="  %h ([view commit](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
+              echo "最新提交:"; \
+              git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
             else \
-              echo "ℹ️ Commit information for ${{ github.event_name }} event on ${{ github.ref_name }} by ${{ github.actor }}:"; \
+              echo "ℹ️ ${{ github.event_name }} 事件触发 ${{ github.ref_name }} 分支，由 ${{ github.actor }} 操作:"; \
               echo ""; \
-              git log -1 --format="  %h ([view commit](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
+              git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
             fi \
           )
           echo "COMMIT_MESSAGE_BODY<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_MESSAGE_BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Send Combined Message
+      - name: 发送综合消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
-            📦 *New Version ${{ steps.extract_info.outputs.version }} Build!*
+            📦 *新版本 ${{ steps.extract_info.outputs.version }} 构建完成!*
 
-            - Files: 
-              - Normal: `${{ steps.extract_info.outputs.normal_file }}`
-              - Compatible: `${{ steps.extract_info.outputs.compatible_file }}`
-            - Branch: `${{ github.ref_name }}`
-            - Triggered by: `${{ github.actor }}`
-            - Event: `${{ github.event_name }}`
+            - 文件: 
+              - 标准版: `${{ steps.extract_info.outputs.normal_file }}`
+              - 兼容版: `${{ steps.extract_info.outputs.compatible_file }}`
+            - 分支: `${{ github.ref_name }}`
+            - 触发者: `${{ github.actor }}`
+            - 事件: `${{ github.event_name }}`
 
             *下载说明:*
-              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
+              * 标准版适用于 `Android 8.0` 及以上系统
+              * 兼容版适用于 `Android 7.0` 及以下系统，最低支持 `Android 5.1`
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
           format: markdown
 
-      - name: Send Normal APK
+      - name: 发送标准版 APK 到 Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: Send Compatible APK
+      - name: 发送兼容版 APK 到 Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: Create Tag from Version
-        if: startsWith(github.ref, 'refs/heads/main') && github.event_name == 'push'
+      - name: 从版本号创建 Git 标签
+        if: startsWith(github.ref, 'refs/heads/develop') && github.event_name == 'push'
         run: |
           VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
-          echo "Creating tag: $VERSION_TAG"
+          echo "创建标签: $VERSION_TAG"
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
-      - name: Upload Assets to Source Release
+      - name: 上传资产到 GitHub 版本发布
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
@@ -202,11 +206,12 @@ jobs:
           append_body: true
           generate_release_notes: true
           body: |
-            ## ✨What's Changed
+            ## ✨更新内容
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
+            
             > ## 下载说明
-              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
-
-            > ~~墙内不再更新~~ 倒卖必死全家    
+            * 标准版适用于 `Android 8.0` 及以上系统
+            * 兼容版适用于 `Android 7.0` 及以下系统，最低支持 `Android 5.1`
+            
+            > 注意：请通过正规渠道下载使用
