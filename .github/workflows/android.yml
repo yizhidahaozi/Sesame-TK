@@ -129,7 +129,7 @@ jobs:
               echo "提交列表:"; \
               git log --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}; \
             elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then \
-              echo "⚙️ 由 ${{ github.actor }} 手动触发 ${{ github.ref_name }} 分支的工作流"; \
+              echo "⚙️ 手动触发 ${{ github.ref_name }} 分支的工作流"; \
               echo ""; \
               echo "最新提交:"; \
               git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
@@ -139,7 +139,7 @@ jobs:
               echo "最新提交:"; \
               git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
             else \
-              echo "ℹ️ ${{ github.event_name }} 事件触发 ${{ github.ref_name }} 分支，由 ${{ github.actor }} 操作:"; \
+              echo "ℹ️ ${{ github.event_name }} 事件触发 ${{ github.ref_name }} 分支:"; \
               echo ""; \
               git log -1 --format="  %h ([查看提交](https://github.com/${{ github.repository }}/commit/%H)): %s by %an"; \
             fi \
@@ -160,12 +160,11 @@ jobs:
               - 标准版: `${{ steps.extract_info.outputs.normal_file }}`
               - 兼容版: `${{ steps.extract_info.outputs.compatible_file }}`
             - 分支: `${{ github.ref_name }}`
-            - 触发者: `${{ github.actor }}`
-            - 事件: `${{ github.event_name }}`
+            - 触发事件: `${{ github.event_name }}`
 
             *下载说明:*
-              * 标准版适用于 `Android 8.0` 及以上系统
-              * 兼容版适用于 `Android 7.0` 及以下系统，最低支持 `Android 5.1`
+              ✅ 标准版适用于 `Android 8.0` 及以上系统
+              ✅ 兼容版适用于 `Android 7.0` 及以下系统，最低支持 `Android 5.1`
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
           format: markdown
@@ -214,4 +213,4 @@ jobs:
             * 标准版适用于 `Android 8.0` 及以上系统
             * 兼容版适用于 `Android 7.0` 及以下系统，最低支持 `Android 5.1`
             
-            > 注意：请通过正规渠道下载使用
+            > 注意：请通过正规渠道下载使用    
