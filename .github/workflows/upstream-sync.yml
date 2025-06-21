@@ -2,18 +2,16 @@ name: 上游仓库自动同步与代码编辑
 
 on:
   schedule:
-    - cron: '9 16 * * *'
-  workflow_dispatch:
-  repository_dispatch:
-    types: [upstream-push]
+    - cron: '11 16 * * *'  # 北京时间15:59（UTC=北京时间-8小时）
+  workflow_dispatch:  # 保留手动触发选项
 
 jobs:
   sync-and-edit:
     runs-on: ubuntu-latest
     env:
-      UPSTREAM_REPO: Fansirsqi/Sesame-TK  # 上游仓库
-      UPSTREAM_BRANCH: main               # 上游分支
-      TARGET_BRANCH: main                 # 修改为实际存在的分支名称
+      UPSTREAM_REPO: Fansirsqi/Sesame-TK
+      UPSTREAM_BRANCH: main
+      TARGET_BRANCH: main
       AUTO_EDIT: true
       GIT_USERNAME: GitHub Actions
       GIT_EMAIL: actions@github.com
@@ -22,7 +20,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.TARGET_BRANCH }}  # 使用实际分支名称
+          ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
       - name: 配置上游仓库
