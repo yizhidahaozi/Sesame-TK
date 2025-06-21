@@ -2,7 +2,7 @@ name: 上游仓库自动同步与代码编辑
 
 on:
   schedule:
-    - cron: '11 16 * * *'  # 北京时间15:59（UTC=北京时间-8小时）
+    - cron: '19 16 * * *'  # 北京时间15:59（UTC=北京时间-8小时）
   workflow_dispatch:  # 保留手动触发选项
 
 jobs:
