@@ -208,11 +208,11 @@ jobs:
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
             
             ### 📲 安装指引
-            1. **标准版（Android 8.0+）**  
+            1. **标准版 Sesame-TK-Normal（Android 8.0+）**  
                - 直接点击 APK 安装，或通过 Android Studio 拖拽安装  
                - ADB 命令安装：`adb install Sesame-Normal-*.apk`
                
-            2. **兼容版（Android 7.0-）**  
+            2. **兼容版 Sesame-TK-Compatible（Android 7.0-）**  
                - 建议在 Android 5.1~7.0 设备上使用文件管理器安装  
                - 若安装失败，可尝试通过 `adb install -r` 强制覆盖安装
             
