@@ -1,138 +1,55 @@
-name: 上游仓库自动同步与代码编辑
-
-on:
-  schedule:
-    - cron: '59 8 * * *'  # 北京时间16:59（UTC=北京时间-8小时）
-  workflow_dispatch:  # 保留手动触发选项
-
-jobs:
-  sync-and-edit:
-    runs-on: ubuntu-latest
-    env:
-      UPSTREAM_REPO: Fansirsqi/Sesame-TK
-      UPSTREAM_BRANCH: main
-      TARGET_BRANCH: main
-      AUTO_EDIT: true
-      GIT_USERNAME: GitHub Actions
-      GIT_EMAIL: actions@github.com
-      MERGE_STRATEGY: ours  # 冲突解决策略
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TARGET_BRANCH }}
-          fetch-depth: 0
-          repository: yizhidahaozi/Sesame-TK
-          ssh-strict: false  # 禁用SSH严格模式，使用HTTPS
-          persist-credentials: false  # 不保留凭证，使用GITHUB_TOKEN
-          clean: true
-          sparse-checkout-cone-mode: true
-          fetch-tags: false
-          show-progress: true
-          lfs: false
-          submodules: false
-          set-safe-directory: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用自动生成的GITHUB_TOKEN
-
-      - name: 配置上游仓库
-        run: |
-          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
-          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 合并上游变更
-        id: merge
-        run: |
-          git config user.name "${{ env.GIT_USERNAME }}"
-          git config user.email "${{ env.GIT_EMAIL }}"
-          
-          # 获取当前分支和上游分支的最新提交哈希
-          CURRENT_COMMIT=$(git rev-parse HEAD)
-          UPSTREAM_COMMIT=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
-          
-          echo "当前分支最新提交: $CURRENT_COMMIT"
-          echo "上游分支最新提交: $UPSTREAM_COMMIT"
-          
-          # 检查是否需要合并
-          if [[ "$CURRENT_COMMIT" == "$UPSTREAM_COMMIT" ]]; then
-            echo "无需合并，分支已是最新状态"
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-          else
-            # 尝试合并上游分支
-            if [ "${{ env.MERGE_STRATEGY }}" = "ours" ]; then
-              git merge -s ours --no-commit upstream/${{ env.UPSTREAM_BRANCH }} || true
-              git commit -m "Merge upstream/${{ env.UPSTREAM_BRANCH }} into ${{ env.TARGET_BRANCH }} using 'ours' strategy"
-              echo "使用'ours'策略合并成功"
-            else
-              git merge --no-ff upstream/${{ env.UPSTREAM_BRANCH }} -m "Merge upstream/${{ env.UPSTREAM_BRANCH }} into ${{ env.TARGET_BRANCH }}"
-              
-              if [ $? -ne 0 ]; then
-                echo "合并失败，发生冲突"
-                # 自动解决冲突的示例（使用上游版本）
-                git checkout --theirs .
-                git add .
-                git commit -m "Auto-resolve conflicts by using upstream version"
-                echo "已自动解决冲突"
-              fi
-            fi
-            
-            echo "合并成功"
-            echo "should_merge=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 执行代码编辑（示例）
-        if: steps.merge.outputs.should_merge == 'true' && env.AUTO_EDIT == 'true'
-        run: |
-          # 修改特定文件（增加文件存在检查）
-          if [ -f "app/src/main/java/com/example/MainActivity.java" ]; then
-            sed -i 's/old_text/new_text/g' app/src/main/java/com/example/MainActivity.java
-            echo "已修改 MainActivity.java"
-          else
-            echo "文件 MainActivity.java 不存在，跳过修改"
-          fi
-          
-          # 添加注释到文件头部（增加文件存在检查）
-          if [ -f "app/src/main/java/com/example/Utils.java" ]; then
-            echo "// This file is automatically updated by GitHub Actions" | cat - app/src/main/java/com/example/Utils.java > temp && mv temp app/src/main/java/com/example/Utils.java
-            echo "已更新 Utils.java 头部"
-          else
-            echo "文件 Utils.java 不存在，跳过修改"
-          fi
-          
-          # 根据环境变量修改配置
-          mkdir -p app
-          echo "BUILD_TIMESTAMP=$(date +%Y%m%d%H%M%S)" > app/build.properties
-          echo "已更新 build.properties"
-          
-          # 提交修改
+- name: 合并上游变更
+  id: merge
+  run: |
+    git config user.name "${{ env.GIT_USERNAME }}"
+    git config user.email "${{ env.GIT_EMAIL }}"
+    
+    # 获取当前分支和上游分支的最新提交哈希
+    CURRENT_COMMIT=$(git rev-parse HEAD)
+    UPSTREAM_COMMIT=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+    
+    echo "当前分支最新提交: $CURRENT_COMMIT"
+    echo "上游分支最新提交: $UPSTREAM_COMMIT"
+    
+    # 检查是否需要合并（使用git status替代哈希比较）
+    if git status --short | grep -q upstream; then
+      echo "检测到上游分支有新变更"
+      SHOULD_MERGE=true
+    else
+      echo "无需合并，分支已是最新状态"
+      SHOULD_MERGE=false
+    fi
+    
+    if [ "$SHOULD_MERGE" = true ]; then
+      # 尝试合并上游分支
+      if [ "${{ env.MERGE_STRATEGY }}" = "ours" ]; then
+        git merge -s ours --no-commit upstream/${{ env.UPSTREAM_BRANCH }} || true
+        git commit -m "Merge upstream/${{ env.UPSTREAM_BRANCH }} into ${{ env.TARGET_BRANCH }} using 'ours' strategy"
+        echo "使用'ours'策略合并成功"
+      else
+        git merge --no-ff upstream/${{ env.UPSTREAM_BRANCH }} -m "Merge upstream/${{ env.UPSTREAM_BRANCH }} into ${{ env.TARGET_BRANCH }}"
+        
+        if [ $? -ne 0 ]; then
+          echo "合并失败，发生冲突"
+          # 自动解决冲突的示例（使用上游版本）
+          git checkout --theirs .
           git add .
-          if git diff --staged --quiet; then
-            echo "没有可提交的更改"
-          else
-            git commit -m "Automated code edits after upstream sync"
-            echo "已提交代码编辑"
-          fi
-
-      - name: 推送变更到目标分支
-        if: steps.merge.outputs.should_merge == 'true'
-        run: |
-          git push origin ${{ env.TARGET_BRANCH }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用GITHUB_TOKEN进行推送
-
-      - name: 发送通知（可选）
-        if: always()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TG_CHAT_ID }}
-          token: ${{ secrets.TG_BOT_TOKEN }}
-          message: |
-            🔄 上游仓库同步结果:
-            - 仓库: ${{ env.UPSTREAM_REPO }}
-            - 分支: ${{ env.UPSTREAM_BRANCH }} → ${{ env.TARGET_BRANCH }}
-            - 状态: ${{ steps.merge.outcome == 'success' && '✅ 成功' || '❌ 失败' }}
-            - 详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          format: markdown
+          git commit -m "Auto-resolve conflicts by using upstream version"
+          echo "已自动解决冲突"
+        fi
+      fi
+      
+      echo "合并成功"
+      echo "should_merge=true" >> $GITHUB_OUTPUT
+    else
+      echo "should_merge=false" >> $GITHUB_OUTPUT
+    fi
+  shell: /usr/bin/bash -e {0}
+  env:
+    UPSTREAM_REPO: Fansirsqi/Sesame-TK
+    UPSTREAM_BRANCH: main
+    TARGET_BRANCH: main
+    AUTO_EDIT: true
+    GIT_USERNAME: GitHub Actions
+    GIT_EMAIL: actions@github.com
+    MERGE_STRATEGY: ours
