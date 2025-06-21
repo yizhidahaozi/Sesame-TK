@@ -2,7 +2,7 @@ name: 上游仓库自动同步与代码编辑
 
 on:
   schedule:
-    - cron: '57 16 * * *'
+    - cron: '59 16 * * *'
   workflow_dispatch:
   repository_dispatch:
     types: [upstream-push]
