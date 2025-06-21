@@ -4,8 +4,7 @@ on:
   # 每8小时触发一次（北京时间）
   schedule:
     - cron: '0 0 * * *'
-    - cron: '0 8 * * *'
-    - cron: '0 16 * * *'
+    - cron: '0 9 * * *'
   push:
     branches: ["develop"]
   pull_request:
