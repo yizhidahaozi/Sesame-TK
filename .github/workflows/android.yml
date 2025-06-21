@@ -1,5 +1,4 @@
 name: Android CI
-run-name: 📦 ${{ github.actor }} @ 构建版本
 
 on:
   push:
