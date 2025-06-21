@@ -3,7 +3,7 @@ name: Android CI
 on:
   # 新增：每天 UTC 0 点（北京时间早上 8 点）定时执行
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '28 16 * * *'
   push:
     branches: ["develop"]
   pull_request:
