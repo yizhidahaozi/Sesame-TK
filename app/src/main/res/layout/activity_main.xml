@@ -105,7 +105,7 @@
         android:layout_marginBottom="76dp"
         android:fontFamily="sans-serif-smallcaps"
         android:gravity="center"
-        android:text="🤖 源码来自 Fansirsqi 。🤖"
+        android:text="🤖 源码来自  Fansirsqi  。🤖"
         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
         android:textColor="#FF0000"
         android:textSize="15sp"
