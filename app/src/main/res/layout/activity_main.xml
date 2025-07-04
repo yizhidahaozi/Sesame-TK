@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -15,7 +16,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- 统计文本（仅第二个布局有，保留） -->
+    <!-- 统计文本 -->
     <TextView
         android:id="@+id/tv_statistics"
         android:layout_width="171dp"
@@ -32,7 +33,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/base_title" />
 
-    <!-- 主图（融合双方特点，优化约束） -->
+    <!-- 主图 -->
     <ImageView
         android:id="@+id/main_image"
         android:layout_width="208dp"
@@ -53,7 +54,7 @@
         android:id="@+id/one_word"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="10dp"
         android:gravity="center"
         android:onClick="onClick"
         android:text="@string/text_api"
@@ -66,12 +67,11 @@
         tools:ignore="UsingOnClickInXml" />
 
     <!-- 构建信息文本区 -->
-
     <TextView
         android:id="@+id/bulid_target"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="148dp"
+        android:layout_width="296dp"
+        android:layout_height="31dp"
+        android:layout_marginBottom="144dp"
         android:fontFamily="sans-serif-smallcaps"
         android:gravity="center"
         android:text="@string/bulid_target"
@@ -79,21 +79,22 @@
         android:textSize="14sp"
         app:layout_constraintBottom_toBottomOf="@id/message"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.525"
+        app:layout_constraintHorizontal_bias="0.522"
         app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- 底部按钮容器（优化约束链） -->
 
     <TextView
         android:id="@+id/bulid_version"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="4dp"
         android:fontFamily="sans-serif-smallcaps"
         android:gravity="center"
         android:text="@string/build_version_1_0_0"
         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.512"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/bulid_target" />
 
@@ -104,20 +105,19 @@
         android:layout_marginBottom="76dp"
         android:fontFamily="sans-serif-smallcaps"
         android:gravity="center"
-        android:text="🤖 我是盗版，谨慎使用，后果自负。🤖"
+        android:text="🤖 源码来自 Fansirsqi 。🤖"
         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
         android:textColor="#FF0000"
         android:textSize="15sp"
         app:layout_constraintBottom_toBottomOf="@id/message"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.583"
         app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/message"
         android:layout_width="347dp"
         android:layout_height="79dp"
-        android:layout_marginBottom="236dp"
+        android:layout_marginBottom="227dp"
         android:fontFamily="sans-serif-smallcaps"
         android:gravity="center"
         android:text="本APP是为了学习研究而开发，免费开源，禁止用于任何商业用途，并禁止二次修改后闭源发布。\n请于24小时内卸载本APP。\n如果您是通过购买获得，请联系卖家退款或在平台举报卖家。⚠️"
@@ -128,13 +128,12 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@+id/bottom_button_container" />
 
-    <!-- 底部按钮容器（优化约束链） -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/bottom_button_container"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
+        android:layout_width="355dp"
+        android:layout_height="192dp"
         android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="40dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
@@ -143,9 +142,14 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_forest_log"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
+            android:layout_marginStart="8dp"
             android:onClick="onClick"
             android:text="@string/forest_log"
             app:icon="@drawable/forest"
+            app:iconSize="30dp"
+            app:layout_constraintBottom_toTopOf="@id/btn_friend_watch"
             app:layout_constraintEnd_toStartOf="@id/btn_farm_log"
             app:layout_constraintHorizontal_chainStyle="spread_inside"
             app:layout_constraintStart_toStartOf="parent"
@@ -155,9 +159,12 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_farm_log"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
             android:onClick="onClick"
             android:text="@string/farm_log"
             app:icon="@drawable/farm"
+            app:iconSize="30dp"
             app:layout_constraintEnd_toStartOf="@id/btn_other_log"
             app:layout_constraintStart_toEndOf="@id/btn_forest_log"
             app:layout_constraintTop_toTopOf="parent"
@@ -166,9 +173,13 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_other_log"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
+            android:layout_marginEnd="8dp"
             android:onClick="onClick"
             android:text="@string/other_log"
             app:icon="@drawable/all_log"
+            app:iconSize="30dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/btn_farm_log"
             app:layout_constraintTop_toTopOf="parent"
@@ -178,9 +189,13 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_friend_watch"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
+            android:layout_marginStart="8dp"
             android:onClick="onClick"
             android:text="@string/friend_watch"
             app:icon="@drawable/friend"
+            app:iconSize="30dp"
             app:layout_constraintEnd_toStartOf="@id/btn_github"
             app:layout_constraintHorizontal_chainStyle="spread_inside"
             app:layout_constraintStart_toStartOf="parent"
@@ -190,9 +205,12 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_github"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
             android:onClick="onClick"
             android:text="@string/visit_github"
             app:icon="@drawable/github"
+            app:iconSize="30dp"
             app:layout_constraintEnd_toStartOf="@id/btn_settings"
             app:layout_constraintStart_toEndOf="@id/btn_friend_watch"
             app:layout_constraintTop_toBottomOf="@id/btn_farm_log"
@@ -201,9 +219,13 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_settings"
             style="@style/Widget.App.Button.Main"
+            android:layout_width="105dp"
+            android:layout_height="94dp"
+            android:layout_marginEnd="8dp"
             android:onClick="onClick"
             android:text="@string/settings"
             app:icon="@drawable/setting"
+            app:iconSize="30dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/btn_github"
             app:layout_constraintTop_toBottomOf="@id/btn_other_log"
