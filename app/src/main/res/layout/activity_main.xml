@@ -6,21 +6,24 @@
     android:background="@color/background">
 
     <!-- 主图 -->
+
+    <!-- 标题栏 -->
     <ImageView
         android:id="@+id/main_image"
         android:layout_width="320dp"
         android:layout_height="wrap_content"
+        android:alpha="0.8"
         android:contentDescription="@string/the_image_of_main"
         android:onClick="onClick"
-        android:visibility="invisible"
         android:scaleType="centerInside"
+        android:visibility="invisible"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.494"
         app:layout_constraintStart_toStartOf="parent"
         app:srcCompat="@drawable/main"
-        android:alpha="0.8"
-        tools:ignore="ImageContrastCheck,MissingConstraints,UsingOnClickInXml" />
+        tools:ignore="ImageContrastCheck,MissingConstraints,UsingOnClickInXml"
+        tools:layout_editor_absoluteY="0dp" />
 
-    <!-- 标题栏 -->
     <include
         layout="@layout/base_title"
         android:layout_width="0dp"
@@ -43,19 +46,19 @@
         android:id="@+id/one_word"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="72dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="60dp"
         android:gravity="center"
         android:onClick="onClick"
         android:text="@string/text_api"
         android:textAppearance="@style/TextAppearance.Material3.BodySmall"
         android:textColor="?attr/colorOnSurface"
         android:textSize="14sp"
-        android:layout_marginBottom="120dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintBottom_toTopOf="@id/bottom_button_container"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintStart_toStartOf="parent"
         tools:ignore="UsingOnClickInXml" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
