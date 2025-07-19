@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object FansirsqiUtil {
-    // 关键修改：使用现行有效的一言API地址（移除v1前缀）
+
     private const val HITOKOTO_API_URL = "https://v1.hitokoto.cn"
 
     /**
