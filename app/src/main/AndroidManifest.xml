@@ -53,9 +53,9 @@
         </intent-filter>
     </activity>
 
-    <!-- 启动器Activity别名 -->
-    <activity-alias
-        android:name=".ui.MainActivityAlias"
+        <!-- 启动器Activity别名 -->
+        <activity-alias
+            android:name="fansirsqi.xposed.sesame.ui.MainActivityAlias"
         android:enabled="true"
         android:exported="true"
         android:targetActivity="fansirsqi.xposed.sesame.ui.MainActivity">
@@ -73,7 +73,7 @@
 
     <!-- 服务声明，添加了 foregroundServiceType 属性 -->
         <service
-            android:name="fansirsqi.xposed.sesame.service.MyMainService"
+            android:name="com.example.service.MyMainService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync">
