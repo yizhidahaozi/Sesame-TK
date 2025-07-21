@@ -4,8 +4,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 仅在 targetSdkVersion < 33 时需要 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!-- 保留 WRITE_EXTERNAL_STORAGE 用于 targetSdkVersion < 30 的情况 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage,ProtectedPermissions" />
+
+    <!-- 敏感权限，需要特别说明使用场景 -->
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
@@ -15,46 +23,65 @@
         android:enableOnBackInvokedCallback="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:requestLegacyExternalStorage="true"
         android:roundIcon="@drawable/ic_launcher"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true"
-        tools:targetApi="33">
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
-        <meta-data
-            android:name="xposeddescription"
-            android:value="人面不知何处去，桃花依旧笑春风" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="54" />
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scopes" />
+        android:requestLegacyExternalStorage="true"
+    tools:targetApi="33">
 
-        <activity
-            android:name="fansirsqi.xposed.sesame.ui.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
-            </intent-filter>
-        </activity>
-        <activity-alias
-            android:name=".ui.MainActivityAlias"
+    <!-- Xposed模块元数据 -->
+    <meta-data
+        android:name="xposedmodule"
+        android:value="true" />
+    <meta-data
+        android:name="xposeddescription"
+        android:value="人面不知何处去，桃花依旧笑春风" />
+    <meta-data
+        android:name="xposedminversion"
+        android:value="54" />
+    <meta-data
+        android:name="xposedscope"
+        android:resource="@array/xposed_scopes" />
+
+    <!-- 主Activity -->
+    <activity
+        android:name="fansirsqi.xposed.sesame.ui.MainActivity"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+        </intent-filter>
+    </activity>
+
+    <!-- 启动器Activity别名 -->
+    <activity-alias
+        android:name=".ui.MainActivityAlias"
+        android:enabled="true"
+        android:exported="true"
+        android:targetActivity="fansirsqi.xposed.sesame.ui.MainActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity-alias>
+
+    <!-- 其他Activity -->
+    <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
+    <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
+    <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
+    <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+
+    <!-- 服务声明，添加了 foregroundServiceType 属性 -->
+        <service
+            android:name="fansirsqi.xposed.sesame.service.MyMainService"
             android:enabled="true"
-            android:exported="true"
-            android:targetActivity="fansirsqi.xposed.sesame.ui.MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
+        </service>
 
-        <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
-    </application>
-</manifest>
+    <!-- 通知通道元数据 (Android 8.0+) -->
+    <meta-data
+        android:name="com.google.firebase.messaging.default_notification_channel_id"
+        android:value="default_channel" />
+</application>
+    </manifest>
