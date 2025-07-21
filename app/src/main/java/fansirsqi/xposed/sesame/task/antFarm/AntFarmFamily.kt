@@ -356,20 +356,44 @@ data object AntFarmFamily {
             for (userId in familyUserIds) {
                 userIds.put(userId)
             }
+
+            // 调用推荐接口
             val resp1 = JSONObject(AntFarmRpcCall.deliverSubjectRecommend(userIds))
-            if (ResChecker.checkRes(TAG, resp1)) {
-                val ariverRpcTraceId = resp1.getString("ariverRpcTraceId")
-                val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(userIds, ariverRpcTraceId))
-                if (ResChecker.checkRes(TAG, resp2)) {
-                    GlobalThreadPools.sleep(500)
-                    val content = resp1.getString("content")
-                    val deliverId = resp1.getString("deliverId")
-                    val resp3 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
-                    if (ResChecker.checkRes(TAG, resp3)) {
-                        Log.farm("家庭任务🏠道早安: $content 🌈")
-                        Status.setFlagToday("antFarm::deliverMsgSend")
-                    }
-                }
+            if (!ResChecker.checkRes(TAG, resp1)) {
+                Log.error(TAG, "deliverSubjectRecommend 请求失败: $resp1")
+                return
+            }
+
+            // 安全获取 ariverRpcTraceId
+            val ariverRpcTraceId = resp1.optString("ariverRpcTraceId")
+            if (ariverRpcTraceId.isEmpty()) {
+                Log.error(TAG, "JSON数据中缺少 'ariverRpcTraceId' 字段: $resp1")
+                return
+            }
+
+            // 调用内容扩展接口
+            val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(userIds, ariverRpcTraceId))
+            if (!ResChecker.checkRes(TAG, resp2)) {
+                Log.error(TAG, "deliverContentExpand 请求失败: $resp2")
+                return
+            }
+
+            GlobalThreadPools.sleep(500)
+
+            // 安全获取 content 和 deliverId
+            val content = resp1.optString("content")
+            val deliverId = resp1.optString("deliverId")
+
+            if (content.isEmpty() || deliverId.isEmpty()) {
+                Log.error(TAG, "JSON数据中缺少 'content' 或 'deliverId' 字段: $resp1")
+                return
+            }
+
+            // 发送消息
+            val resp3 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
+            if (ResChecker.checkRes(TAG, resp3)) {
+                Log.farm("家庭任务🏠道早安: $content 🌈")
+                Status.setFlagToday("antFarm::deliverMsgSend")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "deliverMsgSend err:", t)
