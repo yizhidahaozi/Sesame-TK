@@ -6,11 +6,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
-import android.telephony.TelephonyManager
-import android.widget.Toast
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,11 +24,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.BuildConfig
-
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 
 class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> {
@@ -48,7 +46,6 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
     )
 }
 
-
 @Composable
 fun DeviceInfoCard(info: Map<String, String>) {
     Card(
@@ -59,13 +56,24 @@ fun DeviceInfoCard(info: Map<String, String>) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             info.forEach { (label, value) ->
+                val chineseLabel = when (label) {
+                    "Product" -> "产品"
+                    "Device" -> "设备"
+                    "Android Version" -> "安卓版本"
+                    "OS Build" -> "系统构建"
+                    "Device ID" -> "设备ID"
+                    "Module Version" -> "模块版本"
+                    "Module Build" -> "模块构建"
+                    else -> label
+                }
+
                 when (label) {
                     "Device ID" -> {
                         var showFull by remember { mutableStateOf(false) }
                         val displayValue = if (showFull) value else "***********"
                         val context = LocalContext.current
                         Text(
-                            text = "$label: $displayValue",
+                            text = "$chineseLabel: $displayValue",
                             fontSize = 14.sp,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -75,19 +83,25 @@ fun DeviceInfoCard(info: Map<String, String>) {
                                     onClick = { showFull = !showFull },
                                     onLongClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("Android ID", value)
+                                        val clip = ClipData.newPlainText("设备ID", value)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Device ID copied", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "设备ID已复制", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                         )
                     }
                     else -> {
-                        Text(text = "$label: $value", fontSize = 14.sp)
+                        Text(text = "$chineseLabel: $value", fontSize = 14.sp)
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
             }
+            // 循环外单独显示红色自定义文字
+            Text(
+                text = "东拼西凑瞎改版",
+                fontSize = 16.sp,
+                color = Color.Red
+            )
         }
     }
 }
@@ -117,7 +131,6 @@ object DeviceInfoUtil {
             }
             return "${Build.BRAND} ${Build.MODEL}"
         }
-
 
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
 
