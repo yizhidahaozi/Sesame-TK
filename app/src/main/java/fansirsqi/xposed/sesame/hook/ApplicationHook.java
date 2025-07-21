@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.Application;
+import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -298,6 +299,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 }
                                 service = appService;
                                 mainHandler = new Handler(Looper.getMainLooper());
+                                Log.runtime(TAG, "mainHandler 已初始化");
 
                                 mainTask = BaseTask.newInstance("MAIN_TASK", () -> {
                                     try {
@@ -340,7 +342,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         }
 
                 );
-                execDelayedHandler(BaseModel.getCheckInterval().getValue());
                 Log.runtime(TAG, "hook service onCreate successfully");
             } catch (Throwable t) {
                 Log.runtime(TAG, "hook service onCreate err");
@@ -617,6 +618,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      * @param delayMillis 延迟执行的毫秒数
      */
     static void execDelayedHandler(long delayMillis) {
+        // 检查 mainHandler 是否为 null，避免空指针
+        if (mainHandler == null) {
+            Log.runtime(TAG, "execDelayedHandler: mainHandler is null, skip postDelayed");
+            return;
+        }
         mainHandler.postDelayed(
                 () -> mainTask.startTask(true), delayMillis);
         try {
