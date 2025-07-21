@@ -690,15 +690,15 @@ public class AntFarmRpcCall {
         args.put("ariverRpcTraceId", ariverRpcTraceId);
         args.put("eventId", "event-deliver-familygoodmorning");
         args.put("eventName", "AI传话家庭版早安");
-        args.put("friendUserIds", friendUserIdList);
         args.put("memo", "SUCCESS");
-        args.put("requestType", "NORMAL");
         args.put("resultCode", "100");
-        args.put("sceneCode", "ANTFARM");
         args.put("sceneId", "deliver-familygoodmorning");
         args.put("sceneName", "小鸡传话家庭版早安");
-        args.put("source", "H5");
         args.put("success", true);
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", "H5");
+        args.put("friendUserIds", friendUserIdList);
         String params = "[" + args + "]";
         return RequestManager.requestString("com.alipay.antfarm.DeliverContentExpand", params);
     }
@@ -709,7 +709,7 @@ public class AntFarmRpcCall {
         args.put("sceneCode", "ANTFARM");
         args.put("source", "H5");
         args.put("deliverId", deliverId);
-        String params = "[{" + args + "}]";
+        String params = "[" + args + "]";
         return RequestManager.requestString("com.alipay.antfarm.QueryExpandContent", params);
     }
 
@@ -724,7 +724,7 @@ public class AntFarmRpcCall {
         args.put("sceneCode", "ANTFARM");
         args.put("source", "H5");
         args.put("spaceType", "ChickFamily");
-        String params = "[{" + args + "}]";
+        String params = "[" + args + "]";
         return RequestManager.requestString("com.alipay.antfarm.DeliverMsgSend", params);
     }
 
