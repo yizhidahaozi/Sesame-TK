@@ -699,7 +699,14 @@ public class AntFarmRpcCall {
         args.put("sceneCode", "ANTFARM");
         args.put("source", "H5");
         args.put("friendUserIds", friendUserIdList);
-        String params = "[" + args + "]";
+
+        // 使用JSONArray来构建参数数组
+        JSONArray paramsArray = new JSONArray();
+        paramsArray.put(args);
+
+        // 将JSONArray转换为字符串
+        String params = paramsArray.toString();
+
         return RequestManager.requestString("com.alipay.antfarm.DeliverContentExpand", params);
     }
 
