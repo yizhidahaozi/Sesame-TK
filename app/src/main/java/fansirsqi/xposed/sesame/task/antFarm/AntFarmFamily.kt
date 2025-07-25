@@ -322,82 +322,99 @@ data object AntFarmFamily {
     }
 
 
-    /**
-     * 发送道早安
-     * @param familyUserIds 家庭成员列表
+/**
+     * 发送道早安消息
+     * @param familyUserIds 家庭成员ID列表
      */
     fun deliverMsgSend(familyUserIds: MutableList<String>) {
+        // 检查时间范围（6-10点）
+        if (!isWithinMorningHours()) return
+
+        // 检查必要参数
+        if (groupId == null) return
+
+        // 准备接收用户列表（排除当前用户）
+        val recipients = familyUserIds.toMutableList().apply {
+            remove(UserMap.currentUid)
+        }
+        if (recipients.isEmpty()) return
+
+        // 检查今日是否已发送
+        if (Status.hasFlagToday("antFarm::deliverMsgSend")) return
+
         try {
-            val currentTime = Calendar.getInstance()
-            currentTime.get(Calendar.HOUR_OF_DAY)
-            currentTime.get(Calendar.MINUTE)
-            // 6-10点早安时间
-            val startTime = Calendar.getInstance()
-            startTime.set(Calendar.HOUR_OF_DAY, 6)
-            startTime.set(Calendar.MINUTE, 0)
-            val endTime = Calendar.getInstance()
-            endTime.set(Calendar.HOUR_OF_DAY, 10)
-            endTime.set(Calendar.MINUTE, 0)
-            if (currentTime.before(startTime) || currentTime.after(endTime)) {
-                return
-            }
-            if (Objects.isNull(groupId)) {
-                return
-            }
-            // 先移除当前用户自己的ID，否则下面接口报错
-            familyUserIds.remove(UserMap.currentUid)
-            if (familyUserIds.isEmpty()) {
-                return
-            }
-            if (Status.hasFlagToday("antFarm::deliverMsgSend")) {
-                return
-            }
-            val userIds = JSONArray()
-            for (userId in familyUserIds) {
-                userIds.put(userId)
+            // 转换用户ID列表为JSON格式
+            val userIds = JSONArray().apply {
+                recipients.forEach { put(it) }
             }
 
-            // 调用推荐接口
-            val resp1 = JSONObject(AntFarmRpcCall.deliverSubjectRecommend(userIds))
-            if (!ResChecker.checkRes(TAG, resp1)) {
-                Log.error(TAG, "deliverSubjectRecommend 请求失败: $resp1")
-                return
-            }
-
-            // 安全获取 ariverRpcTraceId
-            val ariverRpcTraceId = resp1.optString("ariverRpcTraceId")
-            if (ariverRpcTraceId.isEmpty()) {
-                Log.error(TAG, "JSON数据中缺少 'ariverRpcTraceId' 字段: $resp1")
-                return
-            }
+            // 调用推荐接口获取内容
+            val recommendResp = callRecommendApi(userIds)
+            val ariverRpcTraceId = recommendResp.optString("ariverRpcTraceId")
+                .takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("缺少 ariverRpcTraceId")
 
             // 调用内容扩展接口
-            val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(userIds, ariverRpcTraceId))
-            if (!ResChecker.checkRes(TAG, resp2)) {
-                Log.error(TAG, "deliverContentExpand 请求失败: $resp2")
-                return
-            }
+            val expandResp = callContentExpandApi(userIds, ariverRpcTraceId)
 
+            // 延迟处理（避免请求过于频繁）
             GlobalThreadPools.sleep(500)
 
-            // 安全获取 content 和 deliverId
-            val content = resp1.optString("content")
-            val deliverId = resp1.optString("deliverId")
+            // 提取关键信息
+            val content = recommendResp.optString("content")
+            val deliverId = recommendResp.optString("deliverId")
 
+            // 检查必要字段
             if (content.isEmpty() || deliverId.isEmpty()) {
-                Log.error(TAG, "JSON数据中缺少 'content' 或 'deliverId' 字段: $resp1")
-                return
+                throw IllegalArgumentException("缺少 content 或 deliverId")
             }
 
             // 发送消息
-            val resp3 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
-            if (ResChecker.checkRes(TAG, resp3)) {
+            val sendResp = callSendMessageApi(groupId!!, userIds, content, deliverId)
+            if (ResChecker.checkRes(TAG, sendResp)) {
                 Log.farm("家庭任务🏠道早安: $content 🌈")
                 Status.setFlagToday("antFarm::deliverMsgSend")
             }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "deliverMsgSend err:", t)
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "deliverMsgSend 异常:", e)
         }
+    }
+
+    /**
+     * 检查当前时间是否在早晨范围内（6-10点）
+     */
+    private fun isWithinMorningHours(): Boolean {
+        val currentTime = Calendar.getInstance()
+        val hour = currentTime.get(Calendar.HOUR_OF_DAY)
+        return hour in 6 until 10
+    }
+
+    /**
+     * 调用推荐接口并处理响应
+     */
+    private fun callRecommendApi(userIds: JSONArray): JSONObject {
+        val resp = JSONObject(AntFarmRpcCall.deliverSubjectRecommend(userIds))
+        if (!ResChecker.checkRes(TAG, resp)) {
+            throw RuntimeException("推荐接口请求失败: $resp")
+        }
+        return resp
+    }
+
+    /**
+     * 调用内容扩展接口并处理响应
+     */
+    private fun callContentExpandApi(userIds: JSONArray, traceId: String): JSONObject {
+        val resp = JSONObject(AntFarmRpcCall.deliverContentExpand(userIds, traceId))
+        if (!ResChecker.checkRes(TAG, resp)) {
+            throw RuntimeException("内容扩展接口请求失败: $resp")
+        }
+        return resp
+    }
+
+    /**
+     * 调用消息发送接口并处理响应
+     */
+    private fun callSendMessageApi(groupId: String, userIds: JSONArray, content: String, deliverId: String): JSONObject {
+        return JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
     }
 
 
