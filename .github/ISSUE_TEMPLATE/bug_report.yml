@@ -1,5 +1,5 @@
 ---
-name: 报告问题
+name: "\U0001F41B问题反馈"
 about: 使用简练详细的语言描述你遇到的问题
 title: ''
 labels: bug
@@ -26,12 +26,9 @@ assignees: ''
 如果没有的话，请删除此节。
 
 **日志**
-<details>
-  <summary>展开查看</summary>
-    <pre>
-      <code>
+<details><summary>展开查看</summary><pre><code>
+
         (此处粘贴问题 Log)
-      </code>
-    </pre>
-</details>
+
+</code></pre></details>
 <!-- 提交时可以将个人信息脱敏，粘贴你复制的日志，不要破坏代码格式 -->
