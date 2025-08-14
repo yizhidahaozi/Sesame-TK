@@ -1,49 +1,55 @@
-name: Android CI
+name: 🕔 🤖 Android CI 自动化构建
 
 on:
+  # 每天触发 2 次（北京时间）
+  schedule:
+    - cron: '0 22 * * *'    # 🌞 北京时间6点构建
+
+    - cron: '0 11 * * *'    # 🌙 北京时间19点构建
+
   push:
-    branches: ["main"]
+    branches: ["develop"]  # 🚀 代码推送触发
   pull_request:
-    branches: ["main"]
+    branches: ["develop"]  # 📌 PR合并触发
   release:
-    types: [published]
-  workflow_dispatch:
+    types: [published]     # 🏷️ 版本发布触发
+  workflow_dispatch:       # 🕹️ 手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set Timezone to Asia/Shanghai
+      - name: ⏳ 设置时区为北京时间
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
-          echo "Current time: $(date)"
+          echo "当前时间: $(date)"
 
-      - name: Checkout
+      - name: 📂 检出代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 获取完整提交历史
 
-      - name: Set up JDK
+      - name: ☕ 配置 JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
-          cache: gradle
+          cache: gradle  # 缓存依赖加速构建
 
-      - name: Set up Gradle
+      - name: 🛠️ 配置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
           gradle-version: wrapper
 
-      - name: Grant execute permission for gradlew
+      - name: ⚙️ 授予 gradlew 执行权限
         run: chmod +x gradlew
 
-      - name: Build with Gradle
+      - name: 🧰 使用 Gradle 构建
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
 
-      - name: Locate APKs and Set Outputs
+      - name: 📦 定位 APK 文件并设置输出
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
@@ -51,13 +57,13 @@ jobs:
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
-      - name: Copy APKs to staging for signing
+      - name: 🚚 复制 APK 到签名目录
         run: |
           mkdir -p app/build/outputs/apk/all
           cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
           cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
 
-      - name: Sign APKs
+      - name: ✅ 签名 APK
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
@@ -68,7 +74,7 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: Extract Signed APK Paths
+      - name: 📋 提取签名后的 APK 路径
         id: extract_apks
         run: |
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
@@ -80,101 +86,112 @@ jobs:
             fi
           done
 
-      - name: Upload APK - Compatible
+      - name: 📤 上传兼容版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-compatible
           path: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: Upload APK - Normal
+      - name: 📤 上传标准版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: Extract file names
+      - name: ℹ️ 提取文件信息
         id: extract_info
         run: |
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
-          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(v[^-]+).*-signed\.apk/\2/')
+          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(.*)-signed\.apk/\2/')
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Generate APKS Checksum
+      - name: 🔐 生成 APK 校验和
         run: |
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      - name: Create Tag from Version
-        if: startsWith(github.ref, 'refs/heads/main') && github.event_name == 'push'
+      - name: 📢 发送综合消息到 Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TG_CHAT_ID }}
+          token: ${{ secrets.TG_BOT_TOKEN }}
+          message: |
+            🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
+
+            - 📱**标准版** :
+            `${{ steps.extract_info.outputs.normal_file }}`
+
+            - 📱**兼容版** 📱:
+            `${{ steps.extract_info.outputs.compatible_file }}`
+
+            🛠️ 安装指引与说明:
+            ✅ *标准版（Normal）*：直接下载安装 ，适用于 Android 8.0 及以上系统📲 
+            
+            ✅ *兼容版（Compatible）*：低版本设备建议文件管理器安装 📁，适用于 最低支持 Android 5.1-Android 7.0 系统📲
+
+
+
+          format: markdown
+
+      - name: 📱 发送标准版 APK 到 Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          到: ${{ secrets.TG_CHAT_ID }}
+          token: ${{ secrets.TG_BOT_TOKEN }}
+          document: ${{ steps.extract_apks.outputs.signed_normal }}
+          message: "📱 标准版安装包 (Android 8.0+) "
+
+      - name: 📱 发送兼容版 APK 到 Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          到: ${{ secrets.TG_CHAT_ID }}
+          token: ${{ secrets.TG_BOT_TOKEN }}
+          document: ${{ steps.extract_apks.outputs.signed_compatible }}
+          message: "📱 兼容版安装包 (Android 5.1-Android 7.0) "
+
+      - name: 🏷️ 从版本号创建 Git 标签
+        if: startsWith(github.ref, 'refs/heads/develop') && github.event_name == 'push'
         run: |
           VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
-          echo "Creating tag: $VERSION_TAG"
+          echo "创建版本标签: $VERSION_TAG" 🔖
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
-      - name: Post to channel
-        if: github.ref == 'refs/heads/main'
-        env:
-          CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
-          BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
-          COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
-          COMMIT_MESSAGE: |+
-            New push to github\!
-            ```
-            ${{ github.event.head_commit.message }}
-            ```by `${{ github.event.head_commit.author.name }}`
-            See commit detail [here](${{ github.event.head_commit.url }})
-        run: |
-          ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
-          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
-            -F "normal.apk=@${NORMAL_FILE}" \
-            -F "compatible.apk=@${COMPATIBLE_FILE}"
-      
-
-      - name: Upload Assets to Source Release
+      - name: 🎉 上传资产到 GitHub 版本发布
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
-          files: |
+          name: ${{ steps.extract_info.outputs.version }}
+          文件: |
             ${{ steps.extract_apks.outputs.signed_compatible }}
             ${{ steps.extract_apks.outputs.signed_normal }}
-            CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-            CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          tag_name: ${{ steps.extract_info.outputs.version}}
-          draft: false
-          append_body: true
-          generate_release_notes: true
-          body: |
-            ## ✨What's Changed
-
-            ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
-            > ## 下载说明
-              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
-
-            > ~~墙内不再更新~~ 倒卖必死全家
-      - name: Sync Release to Target Repository
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: Xposed-Modules-Repo/fansirsqi.xposed.sesame # 目标仓库的拥有者和仓库名称
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
-          files: |
-            ${{ steps.sign_normal_apk.outputs.signedFile }}
-            ${{ steps.sign_compatible_apk.outputs.signedFile }}
-            CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-            CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          token: ${{ secrets.TARGET_REPO_PAT }}
+            CHECKSUMS-*.sha256
           tag_name: ${{ steps.extract_info.outputs.version }}
           draft: false
-          prerelease: ${{ steps.pre_release.outputs.IS_PRERELEASE }}
-          append_body: false
-          make_latest: true
+          append_body: true
+          generate_release_notes: false
           body: |
-            📦 本 Release 同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})
-            ✨ **更新内容**:
-            ${{ github.event.release.body || '无更新说明' }}
+            ### 🛠️ 安装指引与说明:
+            1. **📱 标准版 （Normal）直接下载安装 ，适用于 (Android 8.0+) 及以上系统📲 **
+               - 直接点击安装 📲  
+
+            2. **📱 兼容版 （Compatible）适用于 最低支持 (Android 5.1~7.0) 系统📲 **
+               - 文件管理器安装 📂  
+  
+
+                🛠 一天自动打包2次，可以忽略
+                🌞 北京时间6点构建
+
+                🌙 北京时间19点构建
+
+    
+            ### ⚠️ 重要声明  
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            >   出现任何问题自行承担一切后果，出现任何问题自行承担一切后果，出现任何问题自行承担一切后果
