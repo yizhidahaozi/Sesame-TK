@@ -1,398 +1,453 @@
-package fansirsqi.xposed.sesame.task.antFarm;
+package fansirsqi.xposed.sesame.task.antFarm
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.entity.AlipayUser
+import fansirsqi.xposed.sesame.entity.OtherEntityProvider.farmFamilyOption
+import fansirsqi.xposed.sesame.entity.ParadiseCoinBenefit
+import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit.addIntervalLimit
+import fansirsqi.xposed.sesame.model.ModelFields
+import fansirsqi.xposed.sesame.model.ModelGroup
+import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField.ListJoinCommaToStringModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
+import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.newutil.DataStore.getOrCreate
+import fansirsqi.xposed.sesame.newutil.DataStore.put
+import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
+import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.TaskCommon
+import fansirsqi.xposed.sesame.task.TaskStatus
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
+import fansirsqi.xposed.sesame.util.JsonUtil
+import fansirsqi.xposed.sesame.util.ListUtil
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.StringUtil
+import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.maps.IdMapManager
+import fansirsqi.xposed.sesame.util.maps.ParadiseCoinBenefitIdMap
+import fansirsqi.xposed.sesame.util.maps.UserMap
+import lombok.ToString
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
+import java.time.LocalDate
+import java.time.YearMonth
+import java.util.Calendar
+import java.util.Locale
+import java.util.Random
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.min
 
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
+class AntFarm : ModelTask() {
 
-import fansirsqi.xposed.sesame.entity.AlipayUser;
-import fansirsqi.xposed.sesame.entity.MapperEntity;
-import fansirsqi.xposed.sesame.entity.OtherEntityProvider;
-import fansirsqi.xposed.sesame.entity.ParadiseCoinBenefit;
-import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
-import fansirsqi.xposed.sesame.model.BaseModel;
-import fansirsqi.xposed.sesame.model.ModelFields;
-import fansirsqi.xposed.sesame.model.ModelGroup;
-import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField;
-import fansirsqi.xposed.sesame.newutil.DataStore;
-import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI;
-import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.task.TaskCommon;
-import fansirsqi.xposed.sesame.task.TaskStatus;
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
-import fansirsqi.xposed.sesame.util.JsonUtil;
-import fansirsqi.xposed.sesame.util.ListUtil;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.maps.IdMapManager;
-import fansirsqi.xposed.sesame.util.maps.ParadiseCoinBenefitIdMap;
-import fansirsqi.xposed.sesame.util.maps.UserMap;
-import fansirsqi.xposed.sesame.util.RandomUtil;
-import fansirsqi.xposed.sesame.util.ResChecker;
-import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.util.StringUtil;
-import fansirsqi.xposed.sesame.util.TimeUtil;
-import lombok.ToString;
+    override fun getName(): String {
+        return "庄园"
+    }
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
+    override fun getGroup(): ModelGroup {
+        return ModelGroup.FARM
+    }
 
-public class AntFarm extends ModelTask {
-    private static final String TAG = AntFarm.class.getSimpleName();
-    private String ownerFarmId;
-    private Animal[] animals;
-    private Animal ownerAnimal = new Animal();
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    override fun getIcon(): String {
+        return "AntFarm.png"
+    }
+
+    private var ownerFarmId: String? = null
+    private var animals: Array<Animal>? = null
+    private var ownerAnimal = Animal()
+
     /**
      * 小鸡饲料g
      */
-    private int foodStock;
-    private int foodStockLimit;
-    private String rewardProductNum;
-    private RewardFriend[] rewardList;
+    private var foodStock = 0
+    private var foodStockLimit = 0
+    private var rewardProductNum: String? = null
+    private var rewardList: Array<RewardFriend>? = null
+
+
     /**
      * 慈善评分
      */
-    private double benevolenceScore;
-    private double harvestBenevolenceScore;
+    private var benevolenceScore = 0.0
+    private var harvestBenevolenceScore = 0.0
 
     /**
      * 未领取的饲料奖励
      */
-    private int unreceiveTaskAward = 0;
+    private var unreceiveTaskAward = 0
+
     /**
      * 小鸡心情值
      */
-    private double finalScore = 0d;
-    private String familyGroupId;
-    private FarmTool[] farmTools;
+    private var finalScore = 0.0
+    private var familyGroupId: String? = null
+    private var farmTools: Array<FarmTool> = emptyArray()
 
-    static {
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    }
-
-    @Override
-    public String getName() {
-        return "庄园";
-    }
-
-    @Override
-    public ModelGroup getGroup() {
-        return ModelGroup.FARM;
-    }
-
-    @Override
-    public String getIcon() {
-        return "AntFarm.png";
-    }
-
-    private static final String FARM_ANSWER_CACHE_KEY = "farmQuestionCache";
-    private static final String ANSWERED_FLAG = "farmQuestion::answered"; // 今日是否已答题
-    private static final String CACHED_FLAG = "farmQuestion::cache";     // 是否已缓存明日答案
 
     /**
      * 小鸡睡觉时间
      */
-    private StringModelField sleepTime;
+    private var sleepTime: StringModelField? = null
+
     /**
      * 小鸡睡觉时长
      */
-    private IntegerModelField sleepMinutes;
+    private var sleepMinutes: IntegerModelField? = null
+
     /**
      * 自动喂鸡
      */
-    private BooleanModelField feedAnimal;
+    private var feedAnimal: BooleanModelField? = null
+
     /**
      * 打赏好友
      */
-    private BooleanModelField rewardFriend;
+    private var rewardFriend: BooleanModelField? = null
+
     /**
      * 遣返小鸡
      */
-    private BooleanModelField sendBackAnimal;
+    private var sendBackAnimal: BooleanModelField? = null
+
     /**
      * 遣返方式
      */
-    private ChoiceModelField sendBackAnimalWay;
+    private var sendBackAnimalWay: ChoiceModelField? = null
+
     /**
      * 遣返动作
      */
-    private ChoiceModelField sendBackAnimalType;
+    private var sendBackAnimalType: ChoiceModelField? = null
+
     /**
      * 遣返好友列表
      */
-    private SelectModelField sendBackAnimalList;
+    private var sendBackAnimalList: SelectModelField? = null
+
     /**
      * 召回小鸡
      */
-    private ChoiceModelField recallAnimalType;
+    private var recallAnimalType: ChoiceModelField? = null
+
     /**
      * s收取道具奖励
      */
-    private BooleanModelField receiveFarmToolReward;
+    private var receiveFarmToolReward: BooleanModelField? = null
+
     /**
      * 游戏改分
      */
-    private BooleanModelField recordFarmGame;
+    private var recordFarmGame: BooleanModelField? = null
+
     /**
      * 小鸡游戏时间
      */
-    private ListModelField.ListJoinCommaToStringModelField farmGameTime;
+    private var farmGameTime: ListJoinCommaToStringModelField? = null
+
     /**
      * 小鸡厨房
      */
-    private BooleanModelField kitchen;
+    private var kitchen: BooleanModelField? = null
+
     /**
      * 使用特殊食品
      */
-    private BooleanModelField useSpecialFood;
-    private BooleanModelField useNewEggCard;
-    private BooleanModelField harvestProduce;
-    private BooleanModelField donation;
-    private ChoiceModelField donationCount;
+    private var useSpecialFood: BooleanModelField? = null
+    private var useNewEggCard: BooleanModelField? = null
+    private var harvestProduce: BooleanModelField? = null
+    private var donation: BooleanModelField? = null
+    private var donationCount: ChoiceModelField? = null
+
     /**
      * 收取饲料奖励
      */
-    private BooleanModelField receiveFarmTaskAward;
-    private BooleanModelField useAccelerateTool;
-    private BooleanModelField useBigEaterTool; // ✅ 新增加饭卡
-    private BooleanModelField useAccelerateToolContinue;
-    private BooleanModelField useAccelerateToolWhenMaxEmotion;
+    private var receiveFarmTaskAward: BooleanModelField? = null
+    private var useAccelerateTool: BooleanModelField? = null
+    private var useBigEaterTool: BooleanModelField? = null // ✅ 新增加饭卡
+    private var useAccelerateToolContinue: BooleanModelField? = null
+    private var useAccelerateToolWhenMaxEmotion: BooleanModelField? = null
+
     /**
      * 喂鸡列表
      */
-    private SelectAndCountModelField feedFriendAnimalList;
-    private BooleanModelField notifyFriend;
-    private ChoiceModelField notifyFriendType;
-    private SelectModelField notifyFriendList;
-    private BooleanModelField acceptGift;
-    private SelectAndCountModelField visitFriendList;
-    private BooleanModelField chickenDiary;
-    private BooleanModelField diaryTietie;
-    private ChoiceModelField collectChickenDiary;
-    private BooleanModelField enableChouchoule;
-    private BooleanModelField listOrnaments;
-    private BooleanModelField hireAnimal;
-    private ChoiceModelField hireAnimalType;
-    private SelectModelField hireAnimalList;
-    private BooleanModelField enableDdrawGameCenterAward;
-    private BooleanModelField getFeed;
-    private SelectModelField getFeedlList;
-    private ChoiceModelField getFeedType;
-    private BooleanModelField family;
-    private SelectModelField familyOptions;
-    private SelectModelField notInviteList;
-    private StringModelField giftFamilyDrawFragment;
-    private BooleanModelField paradiseCoinExchangeBenefit;
-    private SelectModelField paradiseCoinExchangeBenefitList;
+    private var feedFriendAnimalList: SelectAndCountModelField? = null
+    private var notifyFriend: BooleanModelField? = null
+    private var notifyFriendType: ChoiceModelField? = null
+    private var notifyFriendList: SelectModelField? = null
+    private var acceptGift: BooleanModelField? = null
+    private var visitFriendList: SelectAndCountModelField? = null
+    private var chickenDiary: BooleanModelField? = null
+    private var diaryTietie: BooleanModelField? = null
+    private var collectChickenDiary: ChoiceModelField? = null
+    private var enableChouchoule: BooleanModelField? = null
+    private var listOrnaments: BooleanModelField? = null
+    private var hireAnimal: BooleanModelField? = null
+    private var hireAnimalType: ChoiceModelField? = null
+    private var hireAnimalList: SelectModelField? = null
+    private var enableDdrawGameCenterAward: BooleanModelField? = null
+    private var getFeed: BooleanModelField? = null
+    private var getFeedlList: SelectModelField? = null
+    private var getFeedType: ChoiceModelField? = null
+    private var family: BooleanModelField? = null
+    private var familyOptions: SelectModelField? = null
+    private var notInviteList: SelectModelField? = null
+    private var paradiseCoinExchangeBenefit: BooleanModelField? = null
+    private var paradiseCoinExchangeBenefitList: SelectModelField? = null
 
     // 在方法外或类中作为字段缓存当天任务次数（不持久化）
-    private final Map<String, AtomicInteger> farmTaskTryCount = new ConcurrentHashMap<>();
+    private val farmTaskTryCount: MutableMap<String?, AtomicInteger?> = ConcurrentHashMap<String?, AtomicInteger?>()
 
 
-    @Override
-    public ModelFields getFields() {
-        ModelFields modelFields = new ModelFields();
-        modelFields.addField(sleepTime = new StringModelField("sleepTime", "小鸡睡觉时间(关闭:-1)", "2330"));
-        modelFields.addField(sleepMinutes = new IntegerModelField("sleepMinutes", "小鸡睡觉时长(分钟)", 10 * 36, 1, 10 * 60));
-        modelFields.addField(recallAnimalType = new ChoiceModelField("recallAnimalType", "召回小鸡", RecallAnimalType.ALWAYS, RecallAnimalType.nickNames));
-        modelFields.addField(rewardFriend = new BooleanModelField("rewardFriend", "打赏好友", false));
-        modelFields.addField(feedAnimal = new BooleanModelField("feedAnimal", "自动喂小鸡", false));
-        modelFields.addField(feedFriendAnimalList = new SelectAndCountModelField("feedFriendAnimalList", "喂小鸡好友列表", new LinkedHashMap<>(), AlipayUser::getList));
-        modelFields.addField(getFeed = new BooleanModelField("getFeed", "一起拿饲料", false));
-        modelFields.addField(getFeedType = new ChoiceModelField("getFeedType", "一起拿饲料 | 动作", GetFeedType.GIVE, GetFeedType.nickNames));
-        modelFields.addField(getFeedlList = new SelectModelField("getFeedlList", "一起拿饲料 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(acceptGift = new BooleanModelField("acceptGift", "收麦子", false));
-        modelFields.addField(visitFriendList = new SelectAndCountModelField("visitFriendList", "送麦子好友列表", new LinkedHashMap<>(), AlipayUser::getList));
-        modelFields.addField(hireAnimal = new BooleanModelField("hireAnimal", "雇佣小鸡 | 开启", false));
-        modelFields.addField(hireAnimalType = new ChoiceModelField("hireAnimalType", "雇佣小鸡 | 动作", HireAnimalType.DONT_HIRE, HireAnimalType.nickNames));
-        modelFields.addField(hireAnimalList = new SelectModelField("hireAnimalList", "雇佣小鸡 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(sendBackAnimal = new BooleanModelField("sendBackAnimal", "遣返 | 开启", false));
-        modelFields.addField(sendBackAnimalWay = new ChoiceModelField("sendBackAnimalWay", "遣返 | 方式", SendBackAnimalWay.NORMAL, SendBackAnimalWay.nickNames));
-        modelFields.addField(sendBackAnimalType = new ChoiceModelField("sendBackAnimalType", "遣返 | 动作", SendBackAnimalType.NOT_BACK, SendBackAnimalType.nickNames));
-        modelFields.addField(sendBackAnimalList = new SelectModelField("dontSendFriendList", "遣返 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(notifyFriend = new BooleanModelField("notifyFriend", "通知赶鸡 | 开启", false));
-        modelFields.addField(notifyFriendType = new ChoiceModelField("notifyFriendType", "通知赶鸡 | 动作", NotifyFriendType.NOTIFY, NotifyFriendType.nickNames));
-        modelFields.addField(notifyFriendList = new SelectModelField("notifyFriendList", "通知赶鸡 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(donation = new BooleanModelField("donation", "每日捐蛋 | 开启", false));
-        modelFields.addField(donationCount = new ChoiceModelField("donationCount", "每日捐蛋 | 次数", DonationCount.ONE, DonationCount.nickNames));
-        modelFields.addField(useBigEaterTool = new BooleanModelField("useBigEaterTool", "加饭卡 | 使用", false));
-        modelFields.addField(useAccelerateTool = new BooleanModelField("useAccelerateTool", "加速卡 | 使用", false));
-        modelFields.addField(useAccelerateToolContinue = new BooleanModelField("useAccelerateToolContinue", "加速卡 | 连续使用", false));
-        modelFields.addField(useAccelerateToolWhenMaxEmotion = new BooleanModelField("useAccelerateToolWhenMaxEmotion", "加速卡 | 仅在满状态时使用", false));
-        modelFields.addField(useSpecialFood = new BooleanModelField("useSpecialFood", "使用特殊食品", false));
-        modelFields.addField(useNewEggCard = new BooleanModelField("useNewEggCard", "使用新蛋卡", false));
-        modelFields.addField(receiveFarmTaskAward = new BooleanModelField("receiveFarmTaskAward", "收取饲料奖励", false));
-        modelFields.addField(receiveFarmToolReward = new BooleanModelField("receiveFarmToolReward", "收取道具奖励", false));
-        modelFields.addField(harvestProduce = new BooleanModelField("harvestProduce", "收获爱心鸡蛋", false));
-        modelFields.addField(kitchen = new BooleanModelField("kitchen", "小鸡厨房", false));
-        modelFields.addField(chickenDiary = new BooleanModelField("chickenDiary", "小鸡日记", false));
-        modelFields.addField(diaryTietie = new BooleanModelField("diaryTietie", "小鸡日记 | 贴贴", false));
-        modelFields.addField(collectChickenDiary = new ChoiceModelField("collectChickenDiary", "小鸡日记 | 点赞", collectChickenDiaryType.ONCE, collectChickenDiaryType.nickNames));
-        modelFields.addField(enableChouchoule = new BooleanModelField("enableChouchoule", "开启小鸡抽抽乐", false));
-        modelFields.addField(listOrnaments = new BooleanModelField("listOrnaments", "小鸡每日换装", false));
-        modelFields.addField(enableDdrawGameCenterAward = new BooleanModelField("enableDdrawGameCenterAward", "开宝箱", false));
-        modelFields.addField(recordFarmGame = new BooleanModelField("recordFarmGame", "游戏改分(星星球、登山赛、飞行赛、揍小鸡)", false));
-        modelFields.addField(farmGameTime = new ListModelField.ListJoinCommaToStringModelField("farmGameTime", "小鸡游戏时间(范围)", ListUtil.newArrayList("2200-2400")));
-        modelFields.addField(family = new BooleanModelField("family", "家庭 | 开启", false));
-        modelFields.addField(familyOptions = new SelectModelField("familyOptions", "家庭 | 选项", new LinkedHashSet<>(), OtherEntityProvider.farmFamilyOption()));
-        modelFields.addField(notInviteList = new SelectModelField("notInviteList", "家庭 | 好友分享排除列表", new LinkedHashSet<>(), AlipayUser::getList));
-//        modelFields.addField(giftFamilyDrawFragment = new StringModelField("giftFamilyDrawFragment", "家庭 | 扭蛋碎片赠送用户ID(配置目录查看)", ""));
-        modelFields.addField(paradiseCoinExchangeBenefit = new BooleanModelField("paradiseCoinExchangeBenefit", "小鸡乐园 | 兑换权益", false));
-        modelFields.addField(paradiseCoinExchangeBenefitList = new SelectModelField("paradiseCoinExchangeBenefitList", "小鸡乐园 | 权益列表", new LinkedHashSet<>(), ParadiseCoinBenefit::getList));
-        return modelFields;
+    override fun getFields(): ModelFields {
+        val modelFields = ModelFields()
+        modelFields.addField(StringModelField("sleepTime", "小鸡睡觉时间(关闭:-1)", "2330").also { sleepTime = it })
+        modelFields.addField(IntegerModelField("sleepMinutes", "小鸡睡觉时长(分钟)", 10 * 36, 1, 10 * 60).also { sleepMinutes = it })
+        modelFields.addField(ChoiceModelField("recallAnimalType", "召回小鸡", RecallAnimalType.Companion.ALWAYS, RecallAnimalType.Companion.nickNames).also {
+            recallAnimalType = it
+        })
+        modelFields.addField(BooleanModelField("rewardFriend", "打赏好友", false).also { rewardFriend = it })
+        modelFields.addField(BooleanModelField("feedAnimal", "自动喂小鸡", false).also { feedAnimal = it })
+        modelFields.addField(
+            SelectAndCountModelField(
+                "feedFriendAnimalList",
+                "喂小鸡好友列表",
+                LinkedHashMap<String?, Int?>()
+            ) { AlipayUser.getList() }.also { feedFriendAnimalList = it })
+        modelFields.addField(BooleanModelField("getFeed", "一起拿饲料", false).also { getFeed = it })
+        modelFields.addField(ChoiceModelField("getFeedType", "一起拿饲料 | 动作", GetFeedType.Companion.GIVE, GetFeedType.Companion.nickNames).also { getFeedType = it })
+        modelFields.addField(
+            SelectModelField(
+                "getFeedlList",
+                "一起拿饲料 | 好友列表",
+                LinkedHashSet<String?>()
+            ) { AlipayUser.getList() }.also { getFeedlList = it })
+        modelFields.addField(BooleanModelField("acceptGift", "收麦子", false).also { acceptGift = it })
+        modelFields.addField(
+            SelectAndCountModelField(
+                "visitFriendList",
+                "送麦子好友列表",
+                LinkedHashMap<String?, Int?>()
+            ) { AlipayUser.getList() }.also { visitFriendList = it })
+        modelFields.addField(BooleanModelField("hireAnimal", "雇佣小鸡 | 开启", false).also { hireAnimal = it })
+        modelFields.addField(ChoiceModelField("hireAnimalType", "雇佣小鸡 | 动作", HireAnimalType.Companion.DONT_HIRE, HireAnimalType.Companion.nickNames).also {
+            hireAnimalType = it
+        })
+        modelFields.addField(
+            SelectModelField(
+                "hireAnimalList",
+                "雇佣小鸡 | 好友列表",
+                LinkedHashSet<String?>()
+            ) { AlipayUser.getList() }.also { hireAnimalList = it })
+        modelFields.addField(BooleanModelField("sendBackAnimal", "遣返 | 开启", false).also { sendBackAnimal = it })
+        modelFields.addField(
+            ChoiceModelField(
+                "sendBackAnimalWay",
+                "遣返 | 方式",
+                SendBackAnimalWay.Companion.NORMAL,
+                SendBackAnimalWay.Companion.nickNames
+            ).also { sendBackAnimalWay = it })
+        modelFields.addField(
+            ChoiceModelField(
+                "sendBackAnimalType",
+                "遣返 | 动作",
+                SendBackAnimalType.Companion.NOT_BACK,
+                SendBackAnimalType.Companion.nickNames
+            ).also { sendBackAnimalType = it })
+        modelFields.addField(
+            SelectModelField(
+                "dontSendFriendList",
+                "遣返 | 好友列表",
+                LinkedHashSet<String?>()
+            ) { AlipayUser.getList() }.also { sendBackAnimalList = it })
+        modelFields.addField(BooleanModelField("notifyFriend", "通知赶鸡 | 开启", false).also { notifyFriend = it })
+        modelFields.addField(
+            ChoiceModelField(
+                "notifyFriendType",
+                "通知赶鸡 | 动作",
+                NotifyFriendType.Companion.NOTIFY,
+                NotifyFriendType.Companion.nickNames
+            ).also { notifyFriendType = it })
+        modelFields.addField(
+            SelectModelField(
+                "notifyFriendList",
+                "通知赶鸡 | 好友列表",
+                LinkedHashSet<String?>()
+            ) { AlipayUser.getList() }.also { notifyFriendList = it })
+        modelFields.addField(BooleanModelField("donation", "每日捐蛋 | 开启", false).also { donation = it })
+        modelFields.addField(ChoiceModelField("donationCount", "每日捐蛋 | 次数", DonationCount.Companion.ONE, DonationCount.Companion.nickNames).also { donationCount = it })
+        modelFields.addField(BooleanModelField("useBigEaterTool", "加饭卡 | 使用", false).also { useBigEaterTool = it })
+        modelFields.addField(BooleanModelField("useAccelerateTool", "加速卡 | 使用", false).also { useAccelerateTool = it })
+        modelFields.addField(BooleanModelField("useAccelerateToolContinue", "加速卡 | 连续使用", false).also { useAccelerateToolContinue = it })
+        modelFields.addField(BooleanModelField("useAccelerateToolWhenMaxEmotion", "加速卡 | 仅在满状态时使用", false).also { useAccelerateToolWhenMaxEmotion = it })
+        modelFields.addField(BooleanModelField("useSpecialFood", "使用特殊食品", false).also { useSpecialFood = it })
+        modelFields.addField(BooleanModelField("useNewEggCard", "使用新蛋卡", false).also { useNewEggCard = it })
+        modelFields.addField(BooleanModelField("receiveFarmTaskAward", "收取饲料奖励", false).also { receiveFarmTaskAward = it })
+        modelFields.addField(BooleanModelField("receiveFarmToolReward", "收取道具奖励", false).also { receiveFarmToolReward = it })
+        modelFields.addField(BooleanModelField("harvestProduce", "收获爱心鸡蛋", false).also { harvestProduce = it })
+        modelFields.addField(BooleanModelField("kitchen", "小鸡厨房", false).also { kitchen = it })
+        modelFields.addField(BooleanModelField("chickenDiary", "小鸡日记", false).also { chickenDiary = it })
+        modelFields.addField(BooleanModelField("diaryTietie", "小鸡日记 | 贴贴", false).also { diaryTietie = it })
+        modelFields.addField(
+            ChoiceModelField(
+                "collectChickenDiary",
+                "小鸡日记 | 点赞",
+                CollectChickenDiaryType.Companion.ONCE,
+                CollectChickenDiaryType.Companion.nickNames
+            ).also { collectChickenDiary = it })
+        modelFields.addField(BooleanModelField("enableChouchoule", "开启小鸡抽抽乐", false).also { enableChouchoule = it })
+        modelFields.addField(BooleanModelField("listOrnaments", "小鸡每日换装", false).also { listOrnaments = it })
+        modelFields.addField(BooleanModelField("enableDdrawGameCenterAward", "开宝箱", false).also { enableDdrawGameCenterAward = it })
+        modelFields.addField(BooleanModelField("recordFarmGame", "游戏改分(星星球、登山赛、飞行赛、揍小鸡)", false).also { recordFarmGame = it })
+        modelFields.addField(ListJoinCommaToStringModelField("farmGameTime", "小鸡游戏时间(范围)", ListUtil.newArrayList<String?>("2200-2400")).also { farmGameTime = it })
+        modelFields.addField(BooleanModelField("family", "家庭 | 开启", false).also { family = it })
+        modelFields.addField(SelectModelField("familyOptions", "家庭 | 选项", LinkedHashSet<String?>(), farmFamilyOption()).also { familyOptions = it })
+        modelFields.addField(
+            SelectModelField(
+                "notInviteList",
+                "家庭 | 好友分享排除列表",
+                LinkedHashSet<String?>()
+            ) { AlipayUser.getList() }.also { notInviteList = it })
+        //        modelFields.addField(giftFamilyDrawFragment = new StringModelField("giftFamilyDrawFragment", "家庭 | 扭蛋碎片赠送用户ID(配置目录查看)", ""));
+        modelFields.addField(BooleanModelField("paradiseCoinExchangeBenefit", "小鸡乐园 | 兑换权益", false).also { paradiseCoinExchangeBenefit = it })
+        modelFields.addField(
+            SelectModelField(
+                "paradiseCoinExchangeBenefitList",
+                "小鸡乐园 | 权益列表",
+                LinkedHashSet<String?>()
+            ) { ParadiseCoinBenefit.getList() }.also { paradiseCoinExchangeBenefitList = it })
+        return modelFields
     }
 
-    @Override
-    public void boot(ClassLoader classLoader) {
-        super.boot(classLoader);
-        RpcIntervalLimit.INSTANCE.addIntervalLimit("com.alipay.antfarm.enterFarm", 2000);
+    override fun boot(classLoader: ClassLoader?) {
+        super.boot(classLoader)
+        addIntervalLimit("com.alipay.antfarm.enterFarm", 2000)
     }
 
-    @Override
-    public Boolean check() {
+    override fun check(): Boolean {
         if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
-            return false;
+            return false
         } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
-            return false;
+            return false
         } else {
-            return true;
+            return true
         }
     }
 
-    @Override
-    public void run() {
+    override fun run() {
         try {
-            String userId = UserMap.getCurrentUid();
-            Log.record(TAG, "执行开始-蚂蚁" + getName());
+            val userId = UserMap.currentUid
+            Log.record(TAG, "执行开始-蚂蚁" + getName())
             if (enterFarm() == null) {
-                return;
+                return
             }
-            listFarmTool();//装载道具信息
+            listFarmTool() //装载道具信息
 
-            if (rewardFriend.getValue()) {
-                rewardFriend();
+            if (rewardFriend!!.value) {
+                rewardFriend()
             }
-            if (sendBackAnimal.getValue()) {
-                sendBackAnimal();
+            if (sendBackAnimal!!.value) {
+                sendBackAnimal()
             }
 
-            if (receiveFarmToolReward.getValue()) {
-                receiveToolTaskReward();
+            if (receiveFarmToolReward!!.value) {
+                receiveToolTaskReward()
             }
-            if (recordFarmGame.getValue()) {
-                for (String time : farmGameTime.getValue()) {
+            if (recordFarmGame!!.value) {
+                for (time in farmGameTime!!.value) {
                     if (TimeUtil.checkNowInTimeRange(time)) {
-                        recordFarmGame(GameType.starGame);
-                        recordFarmGame(GameType.jumpGame);
-                        recordFarmGame(GameType.flyGame);
-                        recordFarmGame(GameType.hitGame);
-                        break;
+                        recordFarmGame(GameType.StarGame)
+                        recordFarmGame(GameType.JumpGame)
+                        recordFarmGame(GameType.FlyGame)
+                        recordFarmGame(GameType.HitGame)
+                        break
                     }
                 }
             }
-            if (kitchen.getValue()) {
-                collectDailyFoodMaterial();
-                collectDailyLimitedFoodMaterial();
-                cook();
+            if (kitchen!!.value) {
+                collectDailyFoodMaterial()
+                collectDailyLimitedFoodMaterial()
+                cook()
             }
 
-            if (chickenDiary.getValue()) {
-                doChickenDiary();
+            if (chickenDiary!!.value) {
+                doChickenDiary()
             }
 
-            if (useNewEggCard.getValue()) {
-                useFarmTool(ownerFarmId, ToolType.NEWEGGTOOL);
-                syncAnimalStatus(ownerFarmId);
+            if (useNewEggCard!!.value) {
+                useFarmTool(ownerFarmId, ToolType.NEWEGGTOOL)
+                syncAnimalStatus(ownerFarmId)
             }
-            if (harvestProduce.getValue() && benevolenceScore >= 1) {
-                Log.record(TAG, "有可收取的爱心鸡蛋");
-                harvestProduce(ownerFarmId);
+            if (harvestProduce!!.value && benevolenceScore >= 1) {
+                Log.record(TAG, "有可收取的爱心鸡蛋")
+                harvestProduce(ownerFarmId)
             }
-            if (donation.getValue() && Status.canDonationEgg(userId) && harvestBenevolenceScore >= 1) {
-                handleDonation(donationCount.getValue());
+            if (donation!!.value && Status.canDonationEgg(userId) && harvestBenevolenceScore >= 1) {
+                handleDonation(donationCount!!.value)
             }
-            if (receiveFarmTaskAward.getValue()) {
-                doFarmTasks();
-                receiveFarmAwards();
+            if (receiveFarmTaskAward!!.value) {
+                doFarmTasks()
+                receiveFarmAwards()
             }
 
-            recallAnimal();
+            recallAnimal()
 
-            handleAutoFeedAnimal();
+            handleAutoFeedAnimal()
 
             // 到访小鸡送礼
-            visitAnimal();
+            visitAnimal()
             // 送麦子
-            visit();
+            visit()
             // 帮好友喂鸡
-            feedFriend();
+            feedFriend()
             // 通知好友赶鸡
-            if (notifyFriend.getValue()) {
-                notifyFriend();
+            if (notifyFriend!!.value) {
+                notifyFriend()
             }
 
             // 抽抽乐
-            if (enableChouchoule.getValue()) {
-                ChouChouLe ccl = new ChouChouLe();
-                ccl.chouchoule();
+            if (enableChouchoule!!.value) {
+                val ccl = ChouChouLe()
+                ccl.chouchoule()
             }
 
             // 雇佣小鸡
-            if (hireAnimal.getValue()) {
-                hireAnimal();
+            if (hireAnimal!!.value) {
+                hireAnimal()
             }
-            if (getFeed.getValue()) {
-                letsGetChickenFeedTogether();
+            if (getFeed!!.value) {
+                letsGetChickenFeedTogether()
             }
             //家庭
-            if (family.getValue()) {
-
+            if (family!!.value) {
 //                family();
-                AntFarmFamily.INSTANCE.run(familyOptions, notInviteList);
+                AntFarmFamily.run(familyOptions!!, notInviteList!!)
             }
             // 开宝箱
-            if (enableDdrawGameCenterAward.getValue()) {
-                drawGameCenterAward();
+            if (enableDdrawGameCenterAward!!.value) {
+                drawGameCenterAward()
             }
             // 小鸡乐园道具兑换
-            if (paradiseCoinExchangeBenefit.getValue()) {
-                paradiseCoinExchangeBenefit();
+            if (paradiseCoinExchangeBenefit!!.value) {
+                paradiseCoinExchangeBenefit()
             }
             //小鸡睡觉&起床
-            animalSleepAndWake();
-        } catch (Throwable t) {
-            Log.runtime(TAG, "AntFarm.start.run err:");
-            Log.printStackTrace(TAG, t);
+            animalSleepAndWake()
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "AntFarm.start.run err:")
+            Log.printStackTrace(TAG, t)
         } finally {
-            Log.record(TAG, "执行结束-蚂蚁" + getName());
+            Log.record(TAG, "执行结束-蚂蚁" + getName())
         }
     }
 
@@ -400,213 +455,212 @@ public class AntFarm extends ModelTask {
     /**
      * 召回小鸡
      */
-    private void recallAnimal() {
+    private fun recallAnimal() {
         try {
-            //召回小鸡相关操作
-            if (!AnimalInteractStatus.HOME.name().equals(ownerAnimal.animalInteractStatus)) {//如果小鸡不在家
-                if ("ORCHARD".equals(ownerAnimal.locationType)) {
-                    Log.farm("庄园通知📣[你家的小鸡给拉去除草了！]");
-                    JSONObject joRecallAnimal = new JSONObject(AntFarmRpcCall.orchardRecallAnimal(ownerAnimal.animalId, ownerAnimal.currentFarmMasterUserId));
-                    int manureCount = joRecallAnimal.getInt("manureCount");
-                    Log.farm("召回小鸡📣[收获:肥料" + manureCount + "g]");
+            // 召回小鸡相关操作
+            if (AnimalInteractStatus.HOME.name != ownerAnimal.animalInteractStatus) { // 如果小鸡不在家
+                if ("ORCHARD" == ownerAnimal.locationType) {
+                    Log.farm("庄园通知📣[你家的小鸡给拉去除草了！]")
+                    val joRecallAnimal = JSONObject(AntFarmRpcCall.orchardRecallAnimal(ownerAnimal.animalId, ownerAnimal.currentFarmMasterUserId))
+                    val manureCount = joRecallAnimal.getInt("manureCount")
+                    Log.farm("召回小鸡📣[收获:肥料${manureCount}g]") // 使用字符串模板更简洁
                 } else {
+                    syncAnimalStatus(ownerFarmId)
+                    var guest = false
+                    ownerAnimal.subAnimalType?.let {
+                        when (SubAnimalType.valueOf(it)) {
+                            SubAnimalType.GUEST -> {
+                                guest = true
+                                Log.record(TAG, "小鸡到好友家去做客了")
+                            }
 
-                    Log.runtime(TAG, "DEBUG:" + ownerAnimal.toString());
+                            SubAnimalType.NORMAL -> Log.record(TAG, "小鸡太饿，离家出走了")
+                            SubAnimalType.PIRATE -> Log.record(TAG, "小鸡外出探险了")
+                            SubAnimalType.WORK -> Log.record(TAG, "小鸡出去工作啦")
+                        }
+                    }
 
-                    syncAnimalStatus(ownerFarmId);
-                    boolean guest = false;
-                    switch (SubAnimalType.valueOf(ownerAnimal.subAnimalType)) {
-                        case GUEST:
-                            guest = true;
-                            Log.record(TAG, "小鸡到好友家去做客了");
-                            break;
-                        case NORMAL:
-                            Log.record(TAG, "小鸡太饿，离家出走了");
-                            break;
-                        case PIRATE:
-                            Log.record(TAG, "小鸡外出探险了");
-                            break;
-                        case WORK:
-                            Log.record(TAG, "小鸡出去工作啦");
-                            break;
-                        default:
-                            Log.record(TAG, "小鸡不在庄园" + " " + ownerAnimal.subAnimalType);
+                    var hungry = false
+                    val userName = UserMap.getMaskName(AntFarmRpcCall.farmId2UserId(ownerAnimal.currentFarmId))
+                    ownerAnimal.animalFeedStatus?.let {
+                        when (AnimalFeedStatus.valueOf(it)) {
+                            AnimalFeedStatus.HUNGRY -> {
+                                hungry = true
+                                Log.record(TAG, "小鸡在[$userName]的庄园里挨饿")
+                            }
+
+                            AnimalFeedStatus.EATING -> Log.record(TAG, "小鸡在[$userName]的庄园里吃得津津有味")
+                            AnimalFeedStatus.SLEEPY -> Log.record(TAG, "小鸡在[$userName]的庄园")
+                        }
                     }
-                    boolean hungry = false;
-                    String userName = UserMap.getMaskName(AntFarmRpcCall.farmId2UserId(ownerAnimal.currentFarmId));
-                    switch (AnimalFeedStatus.valueOf(ownerAnimal.animalFeedStatus)) {
-                        case HUNGRY:
-                            hungry = true;
-                            Log.record(TAG, "小鸡在[" + userName + "]的庄园里挨饿");
-                            break;
-                        case EATING:
-                            Log.record(TAG, "小鸡在[" + userName + "]的庄园里吃得津津有味");
-                            break;
+                    // 2. 优化recall变量的赋值方式，并简化Companion object的调用
+                    val recall = when (recallAnimalType?.value) {
+                        RecallAnimalType.ALWAYS -> true
+                        RecallAnimalType.WHEN_THIEF -> !guest
+                        RecallAnimalType.WHEN_HUNGRY -> hungry
+                        else -> false
                     }
-                    boolean recall = switch (recallAnimalType.getValue()) {
-                        case RecallAnimalType.ALWAYS -> true;
-                        case RecallAnimalType.WHEN_THIEF -> !guest;
-                        case RecallAnimalType.WHEN_HUNGRY -> hungry;
-                        default -> false;
-                    };
+
                     if (recall) {
-                        recallAnimal(ownerAnimal.animalId, ownerAnimal.currentFarmId, ownerFarmId, userName);
-                        syncAnimalStatus(ownerFarmId);
+                        recallAnimal(ownerAnimal.animalId, ownerAnimal.currentFarmId, ownerFarmId, userName)
+                        syncAnimalStatus(ownerFarmId)
                     }
                 }
             }
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "recallAnimal err:", e);
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "recallAnimal err:", e)
         }
     }
 
-    private void paradiseCoinExchangeBenefit() {
+    private fun paradiseCoinExchangeBenefit() {
         try {
-
-            JSONObject jo = new JSONObject(AntFarmRpcCall.getMallHome());
-
+            val jo = JSONObject(AntFarmRpcCall.mallHome)
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(TAG, "小鸡乐园币💸[未获取到可兑换权益]");
-                return;
+                Log.error(TAG, "小鸡乐园币💸[未获取到可兑换权益]")
+                return
             }
-            JSONArray mallItemSimpleList = jo.getJSONArray("mallItemSimpleList");
-            for (int i = 0; i < mallItemSimpleList.length(); i++) {
-                JSONObject mallItemInfo = mallItemSimpleList.getJSONObject(i);
-                String oderInfo;
-                String spuName = mallItemInfo.getString("spuName");
-                int minPrice = mallItemInfo.getInt("minPrice");
-                String controlTag = mallItemInfo.getString("controlTag");
-                String spuId = mallItemInfo.getString("spuId");
-                oderInfo = spuName + "\n价格" + minPrice + "乐园币\n" + controlTag;
-                IdMapManager.getInstance(ParadiseCoinBenefitIdMap.class).add(spuId, oderInfo);
-                JSONArray itemStatusList = mallItemInfo.getJSONArray("itemStatusList");
-                if (!Status.canParadiseCoinExchangeBenefitToday(spuId) || !paradiseCoinExchangeBenefitList.getValue().contains(spuId) || isExchange(itemStatusList, spuId, spuName)) {
-                    continue;
+            val mallItemSimpleList = jo.getJSONArray("mallItemSimpleList")
+            for (i in 0..<mallItemSimpleList.length()) {
+                val mallItemInfo = mallItemSimpleList.getJSONObject(i)
+                val oderInfo: String?
+                val spuName = mallItemInfo.getString("spuName")
+                val minPrice = mallItemInfo.getInt("minPrice")
+                val controlTag = mallItemInfo.getString("controlTag")
+                val spuId = mallItemInfo.getString("spuId")
+                oderInfo = spuName + "\n价格" + minPrice + "乐园币\n" + controlTag
+                val idMap = IdMapManager.getInstance(ParadiseCoinBenefitIdMap::class.java)
+                idMap.add(spuId, oderInfo)
+                val itemStatusList = mallItemInfo.getJSONArray("itemStatusList")
+                if (!Status.canParadiseCoinExchangeBenefitToday(spuId) ||
+                    !paradiseCoinExchangeBenefitList!!.value.contains(spuId) ||
+                    isExchange(itemStatusList, spuId, spuName)
+                ) {
+                    continue
                 }
-                int exchangedCount = 0;
+                var exchangedCount = 0
                 while (exchangeBenefit(spuId)) {
-                    exchangedCount += 1;
-                    Log.farm("乐园币兑换💸#花费[" + minPrice + "乐园币]" + "#第" + exchangedCount + "次兑换" + "[" + spuName + "]");
-                    TimeUtil.sleep(3000);
+                    exchangedCount += 1
+                    Log.farm("乐园币兑换💸#花费[" + minPrice + "乐园币]" + "#第" + exchangedCount + "次兑换" + "[" + spuName + "]")
+                    TimeUtil.sleep(3000)
                 }
             }
-            IdMapManager.getInstance(ParadiseCoinBenefitIdMap.class).save(UserMap.getCurrentUid());
-        } catch (Throwable t) {
-            Log.runtime(TAG, "paradiseCoinExchangeBenefit err:");
-            Log.printStackTrace(TAG, t);
+            IdMapManager.getInstance(ParadiseCoinBenefitIdMap::class.java).save(UserMap.currentUid)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "paradiseCoinExchangeBenefit err:", t)
         }
     }
 
-    private boolean exchangeBenefit(String spuId) {
+    private fun exchangeBenefit(spuId: String): Boolean {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.getMallItemDetail(spuId));
+            val jo = JSONObject(AntFarmRpcCall.getMallItemDetail(spuId))
             if (!ResChecker.checkRes(TAG, jo)) {
-                return false;
+                return false
             }
-            JSONObject mallItemDetail = jo.getJSONObject("mallItemDetail");
-            JSONArray mallSubItemDetailList = mallItemDetail.getJSONArray("mallSubItemDetailList");
-            for (int i = 0; i < mallSubItemDetailList.length(); i++) {
-                JSONObject mallSubItemDetail = mallSubItemDetailList.getJSONObject(i);
-                String skuId = mallSubItemDetail.getString("skuId");
-                String skuName = mallSubItemDetail.getString("skuName");
-                JSONArray itemStatusList = mallSubItemDetail.getJSONArray("itemStatusList");
+            val mallItemDetail = jo.getJSONObject("mallItemDetail")
+            val mallSubItemDetailList = mallItemDetail.getJSONArray("mallSubItemDetailList")
+            for (i in 0..<mallSubItemDetailList.length()) {
+                val mallSubItemDetail = mallSubItemDetailList.getJSONObject(i)
+                val skuId = mallSubItemDetail.getString("skuId")
+                val skuName = mallSubItemDetail.getString("skuName")
+                val itemStatusList = mallSubItemDetail.getJSONArray("itemStatusList")
 
                 if (isExchange(itemStatusList, spuId, skuName)) {
-                    return false;
+                    return false
                 }
 
                 if (exchangeBenefit(spuId, skuId)) {
-                    return true;
+                    return true
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "exchangeBenefit err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "exchangeBenefit err:")
+            Log.printStackTrace(TAG, t)
         }
-        return false;
+        return false
     }
 
-    private boolean exchangeBenefit(String spuId, String skuId) {
+    private fun exchangeBenefit(spuId: String, skuId: String?): Boolean {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.exchangeBenefit(spuId, skuId));
-            return ResChecker.checkRes(TAG, jo);
-        } catch (Throwable t) {
-            Log.runtime(TAG, "exchangeBenefit err:");
-            Log.printStackTrace(TAG, t);
+            val jo = JSONObject(AntFarmRpcCall.exchangeBenefit(spuId, skuId))
+            return ResChecker.checkRes(TAG, jo)
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "exchangeBenefit err:")
+            Log.printStackTrace(TAG, t)
         }
-        return false;
+        return false
     }
 
-    private boolean isExchange(JSONArray itemStatusList, String spuId, String spuName) {
+    private fun isExchange(itemStatusList: JSONArray, spuId: String?, spuName: String?): Boolean {
         try {
-            for (int j = 0; j < itemStatusList.length(); j++) {
-                String itemStatus = itemStatusList.getString(j);
-                if (PropStatus.REACH_LIMIT.name().equals(itemStatus)
-                        || PropStatus.REACH_USER_HOLD_LIMIT.name().equals(itemStatus)
-                        || PropStatus.NO_ENOUGH_POINT.name().equals(itemStatus)) {
-                    Log.record(TAG, "乐园兑换💸[" + spuName + "]停止:" + PropStatus.valueOf(itemStatus).nickName());
-                    if (PropStatus.REACH_LIMIT.name().equals(itemStatus)) {
-                        Status.setFlagToday("farm::paradiseCoinExchangeLimit::" + spuId);
+            for (j in 0..<itemStatusList.length()) {
+                val itemStatus = itemStatusList.getString(j)
+                if (PropStatus.REACH_LIMIT.name == itemStatus
+                    || PropStatus.REACH_USER_HOLD_LIMIT.name == itemStatus
+                    || PropStatus.NO_ENOUGH_POINT.name == itemStatus
+                ) {
+                    Log.record(TAG, "乐园兑换💸[" + spuName + "]停止:" + PropStatus.valueOf(itemStatus).nickName())
+                    if (PropStatus.REACH_LIMIT.name == itemStatus) {
+                        Status.setFlagToday("farm::paradiseCoinExchangeLimit::$spuId")
                     }
-                    return true;
+                    return true
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "isItemExchange err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "isItemExchange err:")
+            Log.printStackTrace(TAG, t)
         }
-        return false;
+        return false
     }
 
-    private void animalSleepAndWake() {
+    private fun animalSleepAndWake() {
         try {
-            String sleepTimeStr = sleepTime.getValue();
-            if ("-1".equals(sleepTimeStr)) {
-                Log.runtime(TAG, "当前已关闭小鸡睡觉");
-                return;
+            val sleepTimeStr = sleepTime!!.value
+            if ("-1" == sleepTimeStr) {
+                Log.runtime(TAG, "当前已关闭小鸡睡觉")
+                return
             }
-            Calendar now = TimeUtil.getNow();
-            Calendar animalSleepTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(sleepTimeStr);
+            val now = TimeUtil.getNow()
+            val animalSleepTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(sleepTimeStr)
             if (animalSleepTimeCalendar == null) {
-                Log.record(TAG, "小鸡睡觉时间格式错误，请重新设置");
-                return;
+                Log.record(TAG, "小鸡睡觉时间格式错误，请重新设置")
+                return
             }
-            Integer sleepMinutesInt = sleepMinutes.getValue();
-            Calendar animalWakeUpTimeCalendar = (Calendar) animalSleepTimeCalendar.clone();
-            animalWakeUpTimeCalendar.add(Calendar.MINUTE, sleepMinutesInt);
-            long animalSleepTime = animalSleepTimeCalendar.getTimeInMillis();
-            long animalWakeUpTime = animalWakeUpTimeCalendar.getTimeInMillis();
+            val sleepMinutesInt = sleepMinutes!!.value
+            val animalWakeUpTimeCalendar = animalSleepTimeCalendar.clone() as Calendar
+            animalWakeUpTimeCalendar.add(Calendar.MINUTE, sleepMinutesInt)
+            val animalSleepTime = animalSleepTimeCalendar.getTimeInMillis()
+            val animalWakeUpTime = animalWakeUpTimeCalendar.getTimeInMillis()
             if (animalSleepTime > animalWakeUpTime) {
-                Log.record(TAG, "小鸡睡觉设置有误，请重新设置");
-                return;
+                Log.record(TAG, "小鸡睡觉设置有误，请重新设置")
+                return
             }
-            boolean afterSleepTime = now.compareTo(animalSleepTimeCalendar) > 0;
-            boolean afterWakeUpTime = now.compareTo(animalWakeUpTimeCalendar) > 0;
+            val afterSleepTime = now > animalSleepTimeCalendar
+            val afterWakeUpTime = now > animalWakeUpTimeCalendar
             if (afterSleepTime && afterWakeUpTime) {
                 if (!Status.canAnimalSleep()) {
-                    return;
+                    return
                 }
-                Log.record(TAG, "已错过小鸡今日睡觉时间");
-                return;
+                Log.record(TAG, "已错过小鸡今日睡觉时间")
+                return
             }
-            String sleepTaskId = "AS|" + animalSleepTime;
-            String wakeUpTaskId = "AW|" + animalWakeUpTime;
+            val sleepTaskId = "AS|$animalSleepTime"
+            val wakeUpTaskId = "AW|$animalWakeUpTime"
             if (!hasChildTask(sleepTaskId) && !afterSleepTime) {
-                addChildTask(new ChildModelTask(sleepTaskId, "AS", this::animalSleepNow, animalSleepTime));
-                Log.record(TAG, "添加定时睡觉🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(animalSleepTime) + "]执行");
+                addChildTask(ChildModelTask(sleepTaskId, "AS", { this.animalSleepNow() }, animalSleepTime))
+                Log.record(TAG, "添加定时睡觉🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(animalSleepTime) + "]执行")
             }
             if (!hasChildTask(wakeUpTaskId) && !afterWakeUpTime) {
-                addChildTask(new ChildModelTask(wakeUpTaskId, "AW", this::animalWakeUpNow, animalWakeUpTime));
-                Log.record(TAG, "添加定时起床🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(animalWakeUpTime) + "]执行");
+                addChildTask(ChildModelTask(wakeUpTaskId, "AW", { this.animalWakeUpNow() }, animalWakeUpTime))
+                Log.record(TAG, "添加定时起床🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(animalWakeUpTime) + "]执行")
             }
             if (afterSleepTime) {
                 if (Status.canAnimalSleep()) {
-                    animalSleepNow();
+                    animalSleepNow()
                 }
             }
-        } catch (Exception e) {
-            Log.runtime(TAG, "animalSleepAndWake err:");
-            Log.printStackTrace(e);
+        } catch (e: Exception) {
+            Log.runtime(TAG, "animalSleepAndWake err:")
+            Log.printStackTrace(e)
         }
     }
 
@@ -615,182 +669,184 @@ public class AntFarm extends ModelTask {
      *
      * @return 庄园信息
      */
-    private JSONObject enterFarm() {
+    private fun enterFarm(): JSONObject? {
         try {
-            String userId = UserMap.getCurrentUid();
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterFarm(userId, userId));
+            val userId = UserMap.currentUid
+            val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
             if (ResChecker.checkRes(TAG, jo)) {
-                rewardProductNum = jo.getJSONObject("dynamicGlobalConfig").getString("rewardProductNum");
-                JSONObject joFarmVO = jo.getJSONObject("farmVO");
-                JSONObject familyInfoVO = jo.getJSONObject("familyInfoVO");
-                foodStock = joFarmVO.getInt("foodStock");
-                foodStockLimit = joFarmVO.getInt("foodStockLimit");
-                harvestBenevolenceScore = joFarmVO.getDouble("harvestBenevolenceScore");
+                rewardProductNum = jo.getJSONObject("dynamicGlobalConfig").getString("rewardProductNum")
+                val joFarmVO = jo.getJSONObject("farmVO")
+                val familyInfoVO = jo.getJSONObject("familyInfoVO")
+                foodStock = joFarmVO.getInt("foodStock")
+                foodStockLimit = joFarmVO.getInt("foodStockLimit")
+                harvestBenevolenceScore = joFarmVO.getDouble("harvestBenevolenceScore")
 
-                parseSyncAnimalStatusResponse(joFarmVO);
+                parseSyncAnimalStatusResponse(joFarmVO)
 
-                userId = joFarmVO.getJSONObject("masterUserInfoVO").getString("userId");
-                familyGroupId = familyInfoVO.optString("groupId", null);
+                familyGroupId = familyInfoVO.optString("groupId", "")
                 // 领取活动食物
-                JSONObject activityData = jo.optJSONObject("activityData");
+                val activityData = jo.optJSONObject("activityData")
                 if (activityData != null) {
-                    for (Iterator<String> it = activityData.keys(); it.hasNext(); ) {
-                        String key = it.next();
+                    val it = activityData.keys()
+                    while (it.hasNext()) {
+                        val key = it.next()
                         if (key.contains("Gifts")) {
-                            JSONArray gifts = activityData.optJSONArray(key);
-                            if (gifts == null) continue;
-                            for (int i = 0; i < gifts.length(); i++) {
-                                JSONObject gift = gifts.optJSONObject(i);
-                                clickForGiftV2(gift);
+                            val gifts = activityData.optJSONArray(key)
+                            if (gifts == null) {
+                                continue
+                            }
+                            for (i in 0..<gifts.length()) {
+                                val gift = gifts.optJSONObject(i)
+                                clickForGiftV2(gift)
                             }
                         }
                     }
                 }
-                if (useSpecialFood.getValue()) {//使用特殊食品
-                    JSONArray cuisineList = jo.getJSONArray("cuisineList");
-                    if (!AnimalFeedStatus.SLEEPY.name().equals(ownerAnimal.animalFeedStatus))
-                        useSpecialFood(cuisineList);
+                if (useSpecialFood!!.value) { //使用特殊食品
+                    val cuisineList = jo.getJSONArray("cuisineList")
+                    if (AnimalFeedStatus.SLEEPY.name != ownerAnimal.animalFeedStatus) useSpecialFood(cuisineList)
                 }
 
-                if (jo.has("lotteryPlusInfo")) {//彩票附加信息
-                    drawLotteryPlus(jo.getJSONObject("lotteryPlusInfo"));
+                if (jo.has("lotteryPlusInfo")) { //彩票附加信息
+                    drawLotteryPlus(jo.getJSONObject("lotteryPlusInfo"))
                 }
 
-                if (acceptGift.getValue() && joFarmVO.getJSONObject("subFarmVO").has("giftRecord")
-                        && foodStockLimit - foodStock >= 10) {
-                    acceptGift();
+                if (acceptGift!!.value && joFarmVO.getJSONObject("subFarmVO").has("giftRecord")
+                    && foodStockLimit - foodStock >= 10
+                ) {
+                    acceptGift()
                 }
-                return jo;
+                return jo
             }
-        } catch (Exception e) {
-            Log.printStackTrace(e);
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
         }
-        return null;
+        return null
     }
 
     /**
      * 自动喂鸡
      */
-    private void handleAutoFeedAnimal() {
-        if (!AnimalInteractStatus.HOME.name().equals(ownerAnimal.animalInteractStatus)) {
-            return; // 小鸡不在家，不执行喂养逻辑
+    private fun handleAutoFeedAnimal() {
+        if (AnimalInteractStatus.HOME.name != ownerAnimal.animalInteractStatus) {
+            return  // 小鸡不在家，不执行喂养逻辑
         }
-        boolean needReload = false;
+        var needReload = false
         // 1. 判断是否需要喂食
-        if (AnimalFeedStatus.HUNGRY.name().equals(ownerAnimal.animalFeedStatus)) {
-            if (feedAnimal.getValue()) {
-                Log.record("小鸡在挨饿~Tk 尝试为你自动喂食");
+        if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
+            if (feedAnimal!!.value) {
+                Log.record("小鸡在挨饿~Tk 尝试为你自动喂食")
                 if (feedAnimal(ownerFarmId)) {
-                    needReload = true;
+                    needReload = true
                 }
             }
         }
 
         // 2. 使用加饭卡（仅当正在吃饭且开启配置）
-        if (useBigEaterTool.getValue() && AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
-            boolean result = useFarmTool(ownerFarmId, AntFarm.ToolType.BIG_EATER_TOOL);
+        if (useBigEaterTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
+            val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
             if (result) {
-                Log.farm("使用道具🎭[加饭卡]！");
-                GlobalThreadPools.sleep(1000);
-                needReload = true;
+                Log.farm("使用道具🎭[加饭卡]！")
+                GlobalThreadPools.sleep(1000)
+                needReload = true
             } else {
-                Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~");
+                Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
             }
         }
 
         // 3. 判断是否需要使用加速道具
-        if (useAccelerateTool.getValue() && !AnimalFeedStatus.HUNGRY.name().equals(ownerAnimal.animalFeedStatus)) {
+        if (useAccelerateTool!!.value && AnimalFeedStatus.HUNGRY.name != ownerAnimal.animalFeedStatus) {
             if (useAccelerateTool()) {
-                needReload = true;
+                needReload = true
             }
         }
 
         // 4. 如果有操作导致状态变化，则刷新庄园信息
         if (needReload) {
-            enterFarm();
-            syncAnimalStatus(ownerFarmId);
+            enterFarm()
+            syncAnimalStatus(ownerFarmId)
         }
 
         // 5. 计算并安排下一次自动喂食任务
         try {
-            Long startEatTime = ownerAnimal.startEatTime;
-            double allFoodHaveEatten = 0d;
-            double allConsumeSpeed = 0d;
+            val startEatTime = ownerAnimal.startEatTime!!
+            var allFoodHaveEatten = 0.0
+            var allConsumeSpeed = 0.0
 
-            for (Animal animal : animals) {
-                allFoodHaveEatten += animal.foodHaveEatten;
-                allConsumeSpeed += animal.consumeSpeed;
+            for (animal in animals!!) {
+                allFoodHaveEatten += animal.foodHaveEatten!!
+                allConsumeSpeed += animal.consumeSpeed!!
             }
 
             if (allConsumeSpeed > 0) {
-                long nextFeedTime = startEatTime + (long) ((180 - allFoodHaveEatten) / allConsumeSpeed) * 1000;
-                String taskId = "FA|" + ownerFarmId;
+                val nextFeedTime = startEatTime + ((180 - allFoodHaveEatten) / allConsumeSpeed).toLong() * 1000
+                val taskId = "FA|$ownerFarmId"
 
                 if (!hasChildTask(taskId)) {
-                    addChildTask(new ChildModelTask(taskId, "FA", () -> feedAnimal(ownerFarmId), nextFeedTime));
-                    Log.record(TAG, "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(nextFeedTime) + "]执行");
+                    addChildTask(ChildModelTask(taskId, "FA", { feedAnimal(ownerFarmId) }, nextFeedTime))
+                    Log.record(TAG, "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(nextFeedTime) + "]执行")
                 } else {
                     // 更新时间即可
-                    addChildTask(new ChildModelTask(taskId, "FA", () -> feedAnimal(ownerFarmId), nextFeedTime));
+                    addChildTask(ChildModelTask(taskId, "FA", { feedAnimal(ownerFarmId) }, nextFeedTime))
                 }
             }
-        } catch (Exception e) {
-            Log.printStackTrace(e);
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
         }
 
         // 6. 其他功能（换装、领取饲料）
         // 小鸡换装
-        if (listOrnaments.getValue() && Status.canOrnamentToday()) {
-            listOrnaments();
+        if (listOrnaments!!.value && Status.canOrnamentToday()) {
+            listOrnaments()
         }
         if (unreceiveTaskAward > 0) {
-            Log.record(TAG, "还有待领取的饲料");
-            receiveFarmAwards();
+            Log.record(TAG, "还有待领取的饲料")
+            receiveFarmAwards()
         }
     }
 
-    private void animalSleepNow() {
+    private fun animalSleepNow() {
         try {
-            String s = AntFarmRpcCall.queryLoveCabin(UserMap.getCurrentUid());
-            JSONObject jo = new JSONObject(s);
+            var s = AntFarmRpcCall.queryLoveCabin(UserMap.currentUid)
+            var jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject sleepNotifyInfo = jo.getJSONObject("sleepNotifyInfo");
+                val sleepNotifyInfo = jo.getJSONObject("sleepNotifyInfo")
                 if (sleepNotifyInfo.optBoolean("canSleep", false)) {
-                    s = AntFarmRpcCall.sleep();
-                    jo = new JSONObject(s);
+                    s = AntFarmRpcCall.sleep()
+                    jo = JSONObject(s)
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡睡觉🛌");
-                        Status.animalSleep();
+                        Log.farm("小鸡睡觉🛌")
+                        Status.animalSleep()
                     }
                 } else {
-                    Log.farm("小鸡无需睡觉🛌");
+                    Log.farm("小鸡无需睡觉🛌")
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "animalSleepNow err:");
-            Log.printStackTrace(t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "animalSleepNow err:")
+            Log.printStackTrace(t)
         }
     }
 
-    private void animalWakeUpNow() {
+    private fun animalWakeUpNow() {
         try {
-            String s = AntFarmRpcCall.queryLoveCabin(UserMap.getCurrentUid());
-            JSONObject jo = new JSONObject(s);
+            var s = AntFarmRpcCall.queryLoveCabin(UserMap.currentUid)
+            var jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject sleepNotifyInfo = jo.getJSONObject("sleepNotifyInfo");
+                val sleepNotifyInfo = jo.getJSONObject("sleepNotifyInfo")
                 if (!sleepNotifyInfo.optBoolean("canSleep", true)) {
-                    s = AntFarmRpcCall.wakeUp();
-                    jo = new JSONObject(s);
+                    s = AntFarmRpcCall.wakeUp()
+                    jo = JSONObject(s)
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡起床 🛏");
+                        Log.farm("小鸡起床 🛏")
                     }
                 } else {
-                    Log.farm("小鸡无需起床 🛏");
+                    Log.farm("小鸡无需起床 🛏")
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "animalWakeUpNow err:");
-            Log.printStackTrace(t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "animalWakeUpNow err:")
+            Log.printStackTrace(t)
         }
     }
 
@@ -800,375 +856,343 @@ public class AntFarm extends ModelTask {
      *
      * @param farmId 庄园id
      */
-    private JSONObject syncAnimalStatus(String farmId, String operTag, String operateType) {
+    private fun syncAnimalStatus(farmId: String?, operTag: String?, operateType: String?): JSONObject? {
         try {
-            return new JSONObject(AntFarmRpcCall.syncAnimalStatus(farmId, operTag, operateType));
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
-            return null;
+            return JSONObject(AntFarmRpcCall.syncAnimalStatus(farmId, operTag, operateType))
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
+            return null
         }
     }
 
-    private void syncAnimalStatus(String farmId) {
+    private fun syncAnimalStatus(farmId: String?) {
         try {
-            JSONObject jo = syncAnimalStatus(farmId, "SYNC_RESUME", "QUERY_ALL");
-            parseSyncAnimalStatusResponse(jo);
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "syncAnimalStatus err:", t);
+            val jo = syncAnimalStatus(farmId, "SYNC_RESUME", "QUERY_ALL")
+            parseSyncAnimalStatusResponse(jo!!)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "syncAnimalStatus err:", t)
         }
     }
 
-    private JSONObject syncAnimalStatusAfterFeedAnimal(String farmId) {
+    private fun syncAnimalStatusAfterFeedAnimal(farmId: String?): JSONObject? {
         try {
-            return syncAnimalStatus(farmId, "SYNC_AFTER_FEED_ANIMAL", "QUERY_EMOTION_INFO|QUERY_ORCHARD_RIGHTS");
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
+            return syncAnimalStatus(farmId, "SYNC_AFTER_FEED_ANIMAL", "QUERY_EMOTION_INFO|QUERY_ORCHARD_RIGHTS")
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
         }
-        return null;
+        return null
     }
 
-    private JSONObject syncAnimalStatusQueryFamilyAnimals(String farmId) {
+    private fun syncAnimalStatusQueryFamilyAnimals(farmId: String?): JSONObject? {
         try {
-            return syncAnimalStatus(farmId, "SYNC_RESUME_FAMILY", "QUERY_ALL|QUERY_FAMILY_ANIMAL");
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
+            return syncAnimalStatus(farmId, "SYNC_RESUME_FAMILY", "QUERY_ALL|QUERY_FAMILY_ANIMAL")
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
         }
-        return null;
+        return null
     }
 
 
-    private void syncAnimalStatusAtOtherFarm(String userId, String friendUserId) {
+    private fun syncAnimalStatusAtOtherFarm(userId: String?, friendUserId: String?) {
         try {
-            String s = AntFarmRpcCall.enterFarm(userId, friendUserId);
-            JSONObject jo = new JSONObject(s);
-            Log.runtime(TAG, "DEBUG" + jo);
-            jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO");
-            JSONArray jaAnimals = jo.getJSONArray("animals");
-            for (int i = 0; i < jaAnimals.length(); i++) {
-                JSONObject jaAnimaJson = jaAnimals.getJSONObject(i);
-                if (jaAnimaJson.getString("masterFarmId").equals(ownerFarmId)) { // 过滤出当前用户的小鸡
-                    JSONObject animal = jaAnimals.getJSONObject(i);
-                    ownerAnimal = objectMapper.readValue(animal.toString(), Animal.class);
-                    break;
+            val s = AntFarmRpcCall.enterFarm(userId, friendUserId)
+            var jo = JSONObject(s)
+            Log.runtime(TAG, "DEBUG$jo")
+            jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO")
+            val jaAnimals = jo.getJSONArray("animals")
+            for (i in 0..<jaAnimals.length()) {
+                val jaAnimaJson = jaAnimals.getJSONObject(i)
+                if (jaAnimaJson.getString("masterFarmId") == ownerFarmId) { // 过滤出当前用户的小鸡
+                    val animal = jaAnimals.getJSONObject(i)
+                    ownerAnimal = objectMapper.readValue(animal.toString(), Animal::class.java)
+                    break
                 }
             }
-        } catch (JSONException j) {
-            Log.printStackTrace(TAG, "syncAnimalStatusAtOtherFarm err:", j);
-
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "syncAnimalStatusAtOtherFarm err:", t);
+        } catch (j: JSONException) {
+            Log.printStackTrace(TAG, "syncAnimalStatusAtOtherFarm err:", j)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "syncAnimalStatusAtOtherFarm err:", t)
         }
     }
 
-    private void rewardFriend() {
+    private fun rewardFriend() {
         try {
             if (rewardList != null) {
-                for (RewardFriend rewardFriend : rewardList) {
-                    String s = AntFarmRpcCall.rewardFriend(rewardFriend.consistencyKey, rewardFriend.friendId,
-                            rewardProductNum, rewardFriend.time);
-                    JSONObject jo = new JSONObject(s);
-                    String memo = jo.getString("memo");
+                for (rewardFriend in rewardList) {
+                    val s = AntFarmRpcCall.rewardFriend(rewardFriend.consistencyKey, rewardFriend.friendId, rewardProductNum, rewardFriend.time)
+                    val jo = JSONObject(s)
+                    val memo = jo.getString("memo")
                     if (ResChecker.checkRes(TAG, jo)) {
-                        double rewardCount = benevolenceScore - jo.getDouble("farmProduct");
-                        benevolenceScore -= rewardCount;
-                        Log.farm(String.format(Locale.CHINA, "打赏好友💰[%s]# 得%.2f颗爱心鸡蛋", UserMap.getMaskName(rewardFriend.friendId), rewardCount));
+                        val rewardCount = benevolenceScore - jo.getDouble("farmProduct")
+                        benevolenceScore -= rewardCount
+                        Log.farm(String.format(Locale.CHINA, "打赏好友💰[%s]# 得%.2f颗爱心鸡蛋", UserMap.getMaskName(rewardFriend.friendId), rewardCount))
                     } else {
-                        Log.record(memo);
-                        Log.runtime(s);
+                        Log.record(memo)
+                        Log.runtime(s)
                     }
                 }
-                rewardList = null;
+                rewardList = null
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "rewardFriend err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "rewardFriend err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void recallAnimal(String animalId, String currentFarmId, String masterFarmId, String user) {
+    private fun recallAnimal(animalId: String?, currentFarmId: String?, masterFarmId: String?, user: String?) {
         try {
-            String s = AntFarmRpcCall.recallAnimal(animalId, currentFarmId, masterFarmId);
-            JSONObject jo = new JSONObject(s);
-            String memo = jo.getString("memo");
+            val s = AntFarmRpcCall.recallAnimal(animalId, currentFarmId, masterFarmId)
+            val jo = JSONObject(s)
+            val memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
-                double foodHaveStolen = jo.getDouble("foodHaveStolen");
-                Log.farm("召回小鸡📣，偷吃[" + user + "]#" + foodHaveStolen + "g");
+                val foodHaveStolen = jo.getDouble("foodHaveStolen")
+                Log.farm("召回小鸡📣，偷吃[" + user + "]#" + foodHaveStolen + "g")
                 // 这里不需要加
                 // add2FoodStock((int)foodHaveStolen);
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "recallAnimal err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "recallAnimal err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void sendBackAnimal() {
+    private fun sendBackAnimal() {
         if (animals == null) {
-            return;
+            return
         }
         try {
-            for (Animal animal : animals) {
-                if (AnimalInteractStatus.STEALING.name().equals(animal.animalInteractStatus) && !SubAnimalType.GUEST.name().equals(animal.subAnimalType) && !SubAnimalType.WORK.name().equals(animal.subAnimalType)) {
+            for (animal in animals) {
+                if (AnimalInteractStatus.STEALING.name == animal.animalInteractStatus && (SubAnimalType.GUEST.name != animal.subAnimalType) && (SubAnimalType.WORK.name != animal.subAnimalType)) {
                     // 赶鸡
-                    String user = AntFarmRpcCall.farmId2UserId(animal.masterFarmId);
-                    boolean isSendBackAnimal = sendBackAnimalList.getValue().contains(user);
-                    if (sendBackAnimalType.getValue() == SendBackAnimalType.BACK) {
-                        isSendBackAnimal = !isSendBackAnimal;
+                    var user = AntFarmRpcCall.farmId2UserId(animal.masterFarmId)
+                    var isSendBackAnimal = sendBackAnimalList!!.value.contains(user)
+                    if (sendBackAnimalType!!.value == SendBackAnimalType.Companion.BACK) {
+                        isSendBackAnimal = !isSendBackAnimal
                     }
                     if (isSendBackAnimal) {
-                        continue;
+                        continue
                     }
-                    int sendTypeInt = sendBackAnimalWay.getValue();
-                    user = UserMap.getMaskName(user);
-                    String s = AntFarmRpcCall.sendBackAnimal(SendBackAnimalWay.nickNames[sendTypeInt], animal.animalId, animal.currentFarmId, animal.masterFarmId);
-                    JSONObject jo = new JSONObject(s);
-                    String memo = jo.getString("memo");
+                    val sendTypeInt = sendBackAnimalWay!!.value
+                    user = UserMap.getMaskName(user)
+                    var s = AntFarmRpcCall.sendBackAnimal(SendBackAnimalWay.Companion.nickNames[sendTypeInt], animal.animalId, animal.currentFarmId, animal.masterFarmId)
+                    val jo = JSONObject(s)
+                    val memo = jo.getString("memo")
                     if (ResChecker.checkRes(TAG, jo)) {
-                        if (sendTypeInt == SendBackAnimalWay.HIT) {
+                        if (sendTypeInt == SendBackAnimalWay.Companion.HIT) {
                             if (jo.has("hitLossFood")) {
-                                s = "胖揍小鸡🤺[" + user + "]，掉落[" + jo.getInt("hitLossFood") + "g]";
-                                if (jo.has("finalFoodStorage"))
-                                    foodStock = jo.getInt("finalFoodStorage");
-                            } else
-                                s = "[" + user + "]的小鸡躲开了攻击";
+                                s = "胖揍小鸡🤺[" + user + "]，掉落[" + jo.getInt("hitLossFood") + "g]"
+                                if (jo.has("finalFoodStorage")) foodStock = jo.getInt("finalFoodStorage")
+                            } else s = "[$user]的小鸡躲开了攻击"
                         } else {
-                            s = "驱赶小鸡🧶[" + user + "]";
+                            s = "驱赶小鸡🧶[$user]"
                         }
-                        Log.farm(s);
+                        Log.farm(s)
                     } else {
-                        Log.record(memo);
-                        Log.runtime(s);
+                        Log.record(memo)
+                        Log.runtime(s)
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "sendBackAnimal err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "sendBackAnimal err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void receiveToolTaskReward() {
+    private fun receiveToolTaskReward() {
         try {
-            String s = AntFarmRpcCall.listToolTaskDetails();
-            JSONObject jo = new JSONObject(s);
-            String memo = jo.getString("memo");
+            var s = AntFarmRpcCall.listToolTaskDetails()
+            var jo = JSONObject(s)
+            var memo = jo.optString("memo", "")
+
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray jaList = jo.getJSONArray("list");
-                for (int i = 0; i < jaList.length(); i++) {
-                    JSONObject joItem = jaList.getJSONObject(i);
-                    if (joItem.has("taskStatus")
-                            && TaskStatus.FINISHED.name().equals(joItem.getString("taskStatus"))) {
-                        JSONObject bizInfo = new JSONObject(joItem.getString("bizInfo"));
-                        String awardType = bizInfo.getString("awardType");
-                        ToolType toolType = ToolType.valueOf(awardType);
-                        boolean isFull = false;
-                        for (FarmTool farmTool : farmTools) {
-                            if (farmTool.toolType == toolType) {
-                                if (farmTool.toolCount == farmTool.toolHoldLimit) {
-                                    isFull = true;
-                                }
-                                break;
-                            }
-                        }
+                val jaList = jo.getJSONArray("list")
+
+                for (i in 0 until jaList.length()) {
+                    val joItem = jaList.getJSONObject(i)
+
+                    if (joItem.optString("taskStatus") == TaskStatus.FINISHED.name) {
+                        val bizInfo = JSONObject(joItem.getString("bizInfo"))
+                        val awardType = bizInfo.getString("awardType")
+                        val toolType = ToolType.valueOf(awardType)
+
+                        val isFull = farmTools.any { it.toolType == toolType && it.toolCount == it.toolHoldLimit }
+
                         if (isFull) {
-                            Log.record(TAG, "领取道具[" + toolType.nickName() + "]#已满，暂不领取");
-                            continue;
+                            Log.record(TAG, "领取道具[${toolType.nickName()}]#已满，暂不领取")
+                            continue
                         }
-                        int awardCount = bizInfo.getInt("awardCount");
-                        String taskType = joItem.getString("taskType");
-                        String taskTitle = bizInfo.getString("taskTitle");
-                        s = AntFarmRpcCall.receiveToolTaskReward(awardType, awardCount, taskType);
-                        jo = new JSONObject(s);
-                        memo = jo.getString("memo");
+                        val awardCount = bizInfo.getInt("awardCount")
+                        val taskType = joItem.getString("taskType")
+                        val taskTitle = bizInfo.getString("taskTitle")
+                        s = AntFarmRpcCall.receiveToolTaskReward(awardType, awardCount, taskType)
+                        jo = JSONObject(s)
                         if (ResChecker.checkRes(TAG, jo)) {
-                            Log.farm("领取道具🎖️[" + taskTitle + "-" + toolType.nickName() + "]#" + awardCount + "张");
-                        } else {
-                            memo = memo.replace("道具", toolType.nickName());
-                            Log.record(memo);
-                            Log.runtime(s);
+                            Log.farm("领取道具🎖️[$taskTitle-${toolType.nickName()}]#$awardCount 张")
                         }
                     }
                 }
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "receiveToolTaskReward err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "receiveToolTaskReward err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void harvestProduce(String farmId) {
+    private fun harvestProduce(farmId: String?) {
         try {
-            String s = AntFarmRpcCall.harvestProduce(farmId);
-            JSONObject jo = new JSONObject(s);
-            String memo = jo.getString("memo");
+            val s = AntFarmRpcCall.harvestProduce(farmId)
+            val jo = JSONObject(s)
+            val memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
-                double harvest = jo.getDouble("harvestBenevolenceScore");
-                harvestBenevolenceScore = jo.getDouble("finalBenevolenceScore");
-                Log.farm("收取鸡蛋🥚[" + harvest + "颗]#剩余" + harvestBenevolenceScore + "颗");
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
+                val harvest = jo.getDouble("harvestBenevolenceScore")
+                harvestBenevolenceScore = jo.getDouble("finalBenevolenceScore")
+                Log.farm("收取鸡蛋🥚[" + harvest + "颗]#剩余" + harvestBenevolenceScore + "颗")
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "harvestProduce err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "harvestProduce err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
     /* 捐赠爱心鸡蛋 */
-    private void handleDonation(int donationType) {
+    private fun handleDonation(donationType: Int) {
         try {
-            String s = AntFarmRpcCall.listActivityInfo();
-            JSONObject jo = new JSONObject(s);
-            String memo = jo.getString("memo");
+            val s = AntFarmRpcCall.listActivityInfo()
+            var jo = JSONObject(s)
+            val memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray jaActivityInfos = jo.getJSONArray("activityInfos");
-                String activityId = null, activityName;
-                boolean isDonation = false;
-                for (int i = 0; i < jaActivityInfos.length(); i++) {
-                    jo = jaActivityInfos.getJSONObject(i);
-                    if (!jo.get("donationTotal").equals(jo.get("donationLimit"))) {
-                        activityId = jo.getString("activityId");
-                        activityName = jo.optString("projectName", activityId);
+                val jaActivityInfos = jo.getJSONArray("activityInfos")
+                var activityId: String? = null
+                var activityName: String?
+                var isDonation = false
+                for (i in 0..<jaActivityInfos.length()) {
+                    jo = jaActivityInfos.getJSONObject(i)
+                    if (jo.get("donationTotal") != jo.get("donationLimit")) {
+                        activityId = jo.getString("activityId")
+                        activityName = jo.optString("projectName", activityId)
                         if (performDonation(activityId, activityName)) {
-                            isDonation = true;
-                            if (donationType == DonationCount.ONE) {
-                                break;
+                            isDonation = true
+                            if (donationType == DonationCount.Companion.ONE) {
+                                break
                             }
                         }
                     }
                 }
                 if (isDonation) {
-                    String userId = UserMap.getCurrentUid();
-                    Status.donationEgg(userId);
+                    val userId = UserMap.currentUid
+                    Status.donationEgg(userId)
                 }
                 if (activityId == null) {
-                    Log.record(TAG, "今日已无可捐赠的活动");
+                    Log.record(TAG, "今日已无可捐赠的活动")
                 }
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "donation err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "donation err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private Boolean performDonation(String activityId, String activityName) {
+    private fun performDonation(activityId: String?, activityName: String?): Boolean {
         try {
-            String s = AntFarmRpcCall.donation(activityId, 1);
-            JSONObject donationResponse = new JSONObject(s);
-            String memo = donationResponse.getString("memo");
+            val s = AntFarmRpcCall.donation(activityId, 1)
+            val donationResponse = JSONObject(s)
+            val memo = donationResponse.getString("memo")
             if (ResChecker.checkRes(TAG, donationResponse)) {
-                JSONObject donationDetails = donationResponse.getJSONObject("donation");
-                harvestBenevolenceScore = donationDetails.getDouble("harvestBenevolenceScore");
-                Log.farm("捐赠活动❤️[" + activityName + "]#累计捐赠" + donationDetails.getInt("donationTimesStat") + "次");
-                return true;
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
+                val donationDetails = donationResponse.getJSONObject("donation")
+                harvestBenevolenceScore = donationDetails.getDouble("harvestBenevolenceScore")
+                Log.farm("捐赠活动❤️[" + activityName + "]#累计捐赠" + donationDetails.getInt("donationTimesStat") + "次")
+                return true
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(t)
         }
-        return false;
+        return false
     }
 
-    private void answerQuestion(String activityId) {
+    private fun answerQuestion(activityId: String?) {
         try {
-            String today = TimeUtil.getDateStr2();
-            String tomorrow = TimeUtil.getDateStr2(1);
-            Map<String, String> farmAnswerCache = DataStore.INSTANCE.getOrCreate(FARM_ANSWER_CACHE_KEY, new TypeReference<Map<String, String>>() {
-            });
-
-
-            cleanOldAnswers(farmAnswerCache, today);
-
+            val today = TimeUtil.getDateStr2()
+            val tomorrow = TimeUtil.getDateStr2(1)
+            val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY) as MutableMap<String, String>
+            cleanOldAnswers(farmAnswerCache, today)
             // 检查是否今天已经答过题
             if (Status.hasFlagToday(ANSWERED_FLAG)) {
                 if (!Status.hasFlagToday(CACHED_FLAG)) {
-                    JSONObject jo = new JSONObject(DadaDailyRpcCall.home(activityId));
+                    val jo = JSONObject(DadaDailyRpcCall.home(activityId))
                     if (ResChecker.checkRes(TAG, jo)) {
-                        JSONArray operationConfigList = jo.getJSONArray("operationConfigList");
-                        updateTomorrowAnswerCache(operationConfigList, tomorrow);
-                        Status.setFlagToday(CACHED_FLAG);
+                        val operationConfigList = jo.getJSONArray("operationConfigList")
+                        updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                        Status.setFlagToday(CACHED_FLAG)
                     }
                 }
-                return;
+                return
             }
 
             // 获取题目信息
-            JSONObject jo = new JSONObject(DadaDailyRpcCall.home(activityId));
-            if (!ResChecker.checkRes(TAG, jo)) return;
+            val jo = JSONObject(DadaDailyRpcCall.home(activityId))
+            if (!ResChecker.checkRes(TAG, jo)) return
 
-            JSONObject question = jo.getJSONObject("question");
-            long questionId = question.getLong("questionId");
-            JSONArray labels = question.getJSONArray("label");
-            String title = question.getString("title");
+            val question = jo.getJSONObject("question")
+            val questionId = question.getLong("questionId")
+            val labels = question.getJSONArray("label")
+            val title = question.getString("title")
 
-            String answer = null;
-            boolean cacheHit = false;
-            String cacheKey = title + "|" + today;
+            var answer: String? = null
+            var cacheHit = false
+            val cacheKey = "$title|$today"
 
             // 改进的缓存匹配逻辑
-            if (farmAnswerCache != null && farmAnswerCache.containsKey(cacheKey)) {
-                String cachedAnswer = farmAnswerCache.get(cacheKey);
-                Log.farm("🎉 缓存[" + cachedAnswer + "] 🎯 题目：" + cacheKey);
+            if (farmAnswerCache.containsKey(cacheKey)) {
+                val cachedAnswer = farmAnswerCache[cacheKey]
+                Log.farm("🎉 缓存[$cachedAnswer] 🎯 题目：$cacheKey")
 
                 // 1. 首先尝试精确匹配
-                for (int i = 0; i < labels.length(); i++) {
-                    String option = labels.getString(i);
-                    if (option.equals(cachedAnswer)) {
-                        answer = option;
-                        cacheHit = true;
-                        break;
+                for (i in 0..<labels.length()) {
+                    val option = labels.getString(i)
+                    if (option == cachedAnswer) {
+                        answer = option
+                        cacheHit = true
+                        break
                     }
                 }
 
                 // 2. 如果精确匹配失败，尝试模糊匹配
                 if (!cacheHit) {
-                    for (int i = 0; i < labels.length(); i++) {
-                        String option = labels.getString(i);
-                        if (option.contains(cachedAnswer) || cachedAnswer.contains(option)) {
-                            answer = option;
-                            cacheHit = true;
-                            Log.farm("⚠️ 缓存模糊匹配成功：" + cachedAnswer + " → " + option);
-                            break;
+                    for (i in 0..<labels.length()) {
+                        val option = labels.getString(i)
+                        if (option.contains(cachedAnswer!!) || cachedAnswer.contains(option)) {
+                            answer = option
+                            cacheHit = true
+                            Log.farm("⚠️ 缓存模糊匹配成功：$cachedAnswer → $option")
+                            break
                         }
                     }
                 }
-
             }
 
             // 缓存未命中时调用AI
             if (!cacheHit) {
-                Log.record(TAG, "缓存未命中，尝试使用AI答题：" + title);
-                answer = AnswerAI.getAnswer(title, JsonUtil.jsonArrayToList(labels), "farm");
+                Log.record(TAG, "缓存未命中，尝试使用AI答题：$title")
+                answer = AnswerAI.getAnswer(title, JsonUtil.jsonArrayToList(labels), "farm")
                 if (answer == null || answer.isEmpty()) {
-                    answer = labels.getString(0); // 默认选择第一个选项
+                    answer = labels.getString(0) // 默认选择第一个选项
                 }
             }
 
             // 提交答案
-            JSONObject joDailySubmit = new JSONObject(DadaDailyRpcCall.submit(activityId, answer, questionId));
-            Status.setFlagToday(ANSWERED_FLAG);
+            val joDailySubmit = JSONObject(DadaDailyRpcCall.submit(activityId, answer, questionId))
+            Status.setFlagToday(ANSWERED_FLAG)
             if (ResChecker.checkRes(TAG, joDailySubmit)) {
-                JSONObject extInfo = joDailySubmit.getJSONObject("extInfo");
-                boolean correct = joDailySubmit.getBoolean("correct");
-                Log.farm("饲料任务答题：" + (correct ? "正确" : "错误") + "领取饲料［" + extInfo.getString("award") + "g］");
-                JSONArray operationConfigList = joDailySubmit.getJSONArray("operationConfigList");
-                updateTomorrowAnswerCache(operationConfigList, tomorrow);
-                Status.setFlagToday(CACHED_FLAG);
+                val extInfo = joDailySubmit.getJSONObject("extInfo")
+                val correct = joDailySubmit.getBoolean("correct")
+                Log.farm("饲料任务答题：" + (if (correct) "正确" else "错误") + "领取饲料［" + extInfo.getString("award") + "g］")
+                val operationConfigList = joDailySubmit.getJSONArray("operationConfigList")
+                updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                Status.setFlagToday(CACHED_FLAG)
             }
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "答题出错", e);
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "答题出错", e)
         }
     }
 
@@ -1178,31 +1202,30 @@ public class AntFarm extends ModelTask {
      * @param operationConfigList 操作配置列表
      * @param date                日期字符串，格式 "yyyy-MM-dd"
      */
-    private void updateTomorrowAnswerCache(JSONArray operationConfigList, String date) {
+    private fun updateTomorrowAnswerCache(operationConfigList: JSONArray, date: String?) {
         try {
-            Log.runtime(TAG, "updateTomorrowAnswerCache 开始更新缓存");
-            Map<String, String> farmAnswerCache = DataStore.INSTANCE.getOrCreate(FARM_ANSWER_CACHE_KEY, new TypeReference<Map<String, String>>() {
-            });
-            for (int j = 0; j < operationConfigList.length(); j++) {
-                JSONObject operationConfig = operationConfigList.getJSONObject(j);
-                String type = operationConfig.getString("type");
-                if ("PREVIEW_QUESTION".equals(type)) {
-                    String previewTitle = operationConfig.getString("title") + "|" + date;
-                    JSONArray actionTitle = new JSONArray(operationConfig.getString("actionTitle"));
-                    for (int k = 0; k < actionTitle.length(); k++) {
-                        JSONObject joActionTitle = actionTitle.getJSONObject(k);
-                        boolean isCorrect = joActionTitle.getBoolean("correct");
+            Log.runtime(TAG, "updateTomorrowAnswerCache 开始更新缓存")
+            val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY)
+            for (j in 0..<operationConfigList.length()) {
+                val operationConfig = operationConfigList.getJSONObject(j)
+                val type = operationConfig.getString("type")
+                if ("PREVIEW_QUESTION" == type) {
+                    val previewTitle = operationConfig.getString("title") + "|" + date
+                    val actionTitle = JSONArray(operationConfig.getString("actionTitle"))
+                    for (k in 0..<actionTitle.length()) {
+                        val joActionTitle = actionTitle.getJSONObject(k)
+                        val isCorrect = joActionTitle.getBoolean("correct")
                         if (isCorrect) {
-                            String nextAnswer = joActionTitle.getString("title");
-                            farmAnswerCache.put(previewTitle, nextAnswer); // 缓存下一个问题的答案
+                            val nextAnswer = joActionTitle.getString("title")
+                            farmAnswerCache.put(previewTitle, nextAnswer) // 缓存下一个问题的答案
                         }
                     }
                 }
             }
-            DataStore.INSTANCE.put(FARM_ANSWER_CACHE_KEY, farmAnswerCache);
-            Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕");
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e);
+            put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
+            Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e)
         }
     }
 
@@ -1210,34 +1233,34 @@ public class AntFarm extends ModelTask {
     /**
      * 清理缓存超过7天的B答案
      */
-    private void cleanOldAnswers(Map<String, String> farmAnswerCache, String today) {
+    private fun cleanOldAnswers(farmAnswerCache: MutableMap<String, String>?, today: String?) {
         try {
-            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存");
-            if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return;
+            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
+            if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return
             // 将今天日期转为数字格式：20250405
-            int todayInt = convertDateToInt(today); // 如 "2025-04-05" → 20250405
+            val todayInt = convertDateToInt(today) // 如 "2025-04-05" → 20250405
             // 设置保留天数（例如7天）
-            int daysToKeep = 7;
-            Map<String, String> cleanedMap = new HashMap<>();
-            for (Map.Entry<String, String> entry : farmAnswerCache.entrySet()) {
-                String key = entry.getKey();
+            val daysToKeep = 7
+            val cleanedMap: MutableMap<String?, String?> = HashMap()
+            for (entry in farmAnswerCache.entries) {
+                val key: String = entry.key
                 if (key.contains("|")) {
-                    String[] parts = key.split("\\|", 2);
-                    if (parts.length == 2) {
-                        String dateStr = parts[1];//获取日期部分 20
-                        int dateInt = convertDateToInt(dateStr);
-                        if (dateInt == -1) continue;
+                    val parts: Array<String?> = key.split("\\|".toRegex(), limit = 2).toTypedArray()
+                    if (parts.size == 2) {
+                        val dateStr = parts[1] //获取日期部分 20
+                        val dateInt = convertDateToInt(dateStr)
+                        if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
-                            cleanedMap.put(entry.getKey(), entry.getValue());//保存7天内的答案
-                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0]);
+                            cleanedMap.put(entry.key, entry.value) //保存7天内的答案
+                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
                         }
                     }
                 }
             }
-            DataStore.INSTANCE.put(FARM_ANSWER_CACHE_KEY, cleanedMap);
-            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕");
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "cleanOldAnswers error:", e);
+            put(FARM_ANSWER_CACHE_KEY, cleanedMap)
+            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "cleanOldAnswers error:", e)
         }
     }
 
@@ -1247,69 +1270,65 @@ public class AntFarm extends ModelTask {
      * @param dateStr 日期字符串，格式 "yyyy-MM-dd"
      * @return 日期数字格式，如 "2025-04-05" → 20250405
      */
-    private int convertDateToInt(String dateStr) {
-        Log.runtime(TAG, "convertDateToInt 开始转换日期：" + dateStr);
-        if (dateStr == null || dateStr.length() != 10 || dateStr.charAt(4) != '-' || dateStr.charAt(7) != '-') {
-            Log.error("日期格式错误：" + dateStr);
-            return -1; // 格式错误
+    private fun convertDateToInt(dateStr: String?): Int {
+        Log.runtime(TAG, "convertDateToInt 开始转换日期：$dateStr")
+        if (dateStr == null || dateStr.length != 10 || dateStr[4] != '-' || dateStr[7] != '-') {
+            Log.error("日期格式错误：$dateStr")
+            return -1 // 格式错误
         }
         try {
-            int year = Integer.parseInt(dateStr.substring(0, 4));
-            int month = Integer.parseInt(dateStr.substring(5, 7));
-            int day = Integer.parseInt(dateStr.substring(8, 10));
+            val year = dateStr.substring(0, 4).toInt()
+            val month = dateStr.substring(5, 7).toInt()
+            val day = dateStr.substring(8, 10).toInt()
             if (month < 1 || month > 12 || day < 1 || day > 31) {
-                Log.error("日期无效：" + dateStr);
-                return -1; // 日期无效
+                Log.error("日期无效：$dateStr")
+                return -1 // 日期无效
             }
-            return year * 10000 + month * 100 + day;
-        } catch (NumberFormatException e) {
-            Log.error(TAG, "日期转换失败：" + dateStr + e.getMessage());
-            return -1;
+            return year * 10000 + month * 100 + day
+        } catch (e: NumberFormatException) {
+            Log.error(TAG, "日期转换失败：" + dateStr + e.message)
+            return -1
         }
     }
 
 
-    private void recordFarmGame(GameType gameType) {
+    private fun recordFarmGame(gameType: GameType) {
         try {
             do {
                 try {
-                    JSONObject jo = new JSONObject(AntFarmRpcCall.initFarmGame(gameType.name()));
+                    var jo = JSONObject(AntFarmRpcCall.initFarmGame(gameType.name))
                     if (ResChecker.checkRes(TAG, jo)) {
                         if (jo.getJSONObject("gameAward").getBoolean("level3Get")) {
-                            return;
+                            return
                         }
                         if (jo.optInt("remainingGameCount", 1) == 0) {
-                            return;
+                            return
                         }
-                        jo = new JSONObject(AntFarmRpcCall.recordFarmGame(gameType.name()));
+                        jo = JSONObject(AntFarmRpcCall.recordFarmGame(gameType.name))
                         if (ResChecker.checkRes(TAG, jo)) {
-                            JSONArray awardInfos = jo.getJSONArray("awardInfos");
-                            StringBuilder award = new StringBuilder();
-                            for (int i = 0; i < awardInfos.length(); i++) {
-                                JSONObject awardInfo = awardInfos.getJSONObject(i);
-                                award.append(awardInfo.getString("awardName")).append("*").append(awardInfo.getInt("awardCount"));
+                            val awardInfos = jo.getJSONArray("awardInfos")
+                            val award = StringBuilder()
+                            for (i in 0..<awardInfos.length()) {
+                                val awardInfo = awardInfos.getJSONObject(i)
+                                award.append(awardInfo.getString("awardName")).append("*").append(awardInfo.getInt("awardCount"))
                             }
                             if (jo.has("receiveFoodCount")) {
-                                award.append(";肥料*").append(jo.getString("receiveFoodCount"));
+                                award.append(";肥料*").append(jo.getString("receiveFoodCount"))
                             }
-                            Log.farm("庄园游戏🎮[" + gameType.gameName() + "]#" + award);
+                            Log.farm("庄园游戏🎮[" + gameType.gameName() + "]#" + award)
                             if (jo.optInt("remainingGameCount", 0) > 0) {
-                                continue;
+                                continue
                             }
-                        } else {
-                            Log.runtime(TAG, "庄园游戏" + jo);
                         }
-                    } else {
-                        Log.runtime(TAG, "进入庄园游戏失败" + jo);
                     }
-                    break;
+                    break
                 } finally {
-                    GlobalThreadPools.sleep(2000);
+                    GlobalThreadPools.sleep(2000)
                 }
-            } while (true);
-        } catch (Throwable t) {
-            Log.runtime(TAG, "recordFarmGame err:");
-            Log.printStackTrace(TAG, t);
+            } while (true)
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "recordFarmGame err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -1319,144 +1338,142 @@ public class AntFarm extends ModelTask {
      * 添加组件，雇佣，会员签到，逛咸鱼，今日头条极速版，UC浏览器
      * 一起拿饲料，到店付款，线上支付，鲸探
      */
-    private void doFarmTasks() {
+    private fun doFarmTasks() {
         try {
             //手动屏蔽以下任务，防止死循环
-            Set<String> presetBad = new LinkedHashSet<>(List.of(
-                    "HEART_DONATION_ADVANCED_FOOD_V2",//香草芒果冰糕任务
-                    "HEART_DONATE",//爱心捐赠
-                    "SHANGOU_xiadan",//去买秋天第一杯奶茶
-                    "OFFLINE_PAY",//到店付款,线下支付
-                    "ONLINE_PAY",//在线支付
-                    "HUABEI_MAP_180"//用花呗完成一笔支付
-            ));
-            TypeReference<Set<String>> typeRef = new TypeReference<>() {
-            };
-            Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badFarmTaskSet", typeRef);
-            badTaskSet.addAll(presetBad);
-            DataStore.INSTANCE.put("badFarmTaskSet", badTaskSet);
-            JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
+            val presetBad: MutableSet<String> = linkedSetOf(
+                "HEART_DONATION_ADVANCED_FOOD_V2",  //香草芒果冰糕任务
+                "HEART_DONATE",  //爱心捐赠
+                "SHANGOU_xiadan",  //去买秋天第一杯奶茶
+                "OFFLINE_PAY",  //到店付款,线下支付
+                "ONLINE_PAY",  //在线支付
+                "HUABEI_MAP_180" //用花呗完成一笔支付
+            )
+
+            val badTaskSet = DataStore.getOrCreate<MutableSet<String>>("badFarmTaskSet")
+            badTaskSet.addAll(presetBad)
+            put("badFarmTaskSet", badTaskSet)
+            val jo = JSONObject(AntFarmRpcCall.listFarmTask())
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
-                for (int i = 0; i < farmTaskList.length(); i++) {
-                    JSONObject task = farmTaskList.getJSONObject(i);
-                    String title = task.optString("title", "未知任务");
-                    String taskStatus = task.getString("taskStatus");
-                    String bizKey = task.getString("bizKey");
-                    String taskMode = task.optString("taskMode");
+                val farmTaskList = jo.getJSONArray("farmTaskList")
+                for (i in 0..<farmTaskList.length()) {
+                    val task = farmTaskList.getJSONObject(i)
+                    val title = task.optString("title", "未知任务")
+                    val taskStatus = task.getString("taskStatus")
+                    val bizKey = task.getString("bizKey")
+                    val taskMode = task.optString("taskMode")
                     // 跳过已被屏蔽的任务
-                    if (badTaskSet.contains(bizKey)) continue;
-                    if (TaskStatus.TODO.name().equals(taskStatus)) {
+                    if (badTaskSet.contains(bizKey)) continue
+                    if (TaskStatus.TODO.name == taskStatus) {
                         if (!badTaskSet.contains(bizKey)) {
-                            if ("VIDEO_TASK".equals(bizKey)) {
-                                JSONObject taskVideoDetailjo = new JSONObject(AntFarmRpcCall.queryTabVideoUrl());
+                            if ("VIDEO_TASK" == bizKey) {
+                                val taskVideoDetailjo = JSONObject(AntFarmRpcCall.queryTabVideoUrl())
                                 if (ResChecker.checkRes(TAG, taskVideoDetailjo)) {
-                                    String videoUrl = taskVideoDetailjo.getString("videoUrl");
-                                    String contentId = videoUrl.substring(videoUrl.indexOf("&contentId=") + 11, videoUrl.indexOf("&refer"));
-                                    JSONObject videoDetailjo = new JSONObject(AntFarmRpcCall.videoDeliverModule(contentId));
+                                    val videoUrl = taskVideoDetailjo.getString("videoUrl")
+                                    val contentId = videoUrl.substring(videoUrl.indexOf("&contentId=") + 11, videoUrl.indexOf("&refer"))
+                                    val videoDetailjo = JSONObject(AntFarmRpcCall.videoDeliverModule(contentId))
                                     if (ResChecker.checkRes(TAG, videoDetailjo)) {
-                                        GlobalThreadPools.sleep(15 * 1000L);
-                                        JSONObject resultVideojo = new JSONObject(AntFarmRpcCall.videoTrigger(contentId));
+                                        GlobalThreadPools.sleep(15 * 1000L)
+                                        val resultVideojo = JSONObject(AntFarmRpcCall.videoTrigger(contentId))
                                         if (ResChecker.checkRes(TAG, resultVideojo)) {
-                                            Log.farm("庄园任务🧾[" + title + "]");
+                                            Log.farm("庄园任务🧾[$title]")
                                         }
                                     }
                                 }
-                            } else if ("ANSWER".equals(bizKey)) {
-                                answerQuestion("100"); //答题
+                            } else if ("ANSWER" == bizKey) {
+                                answerQuestion("100") //答题
                             } else {
                                 // 安全计数，避免 NPE 警告
-                                int count = farmTaskTryCount.computeIfAbsent(bizKey, k -> new AtomicInteger(0))
-                                        .incrementAndGet();
-                                JSONObject taskDetailjo = new JSONObject(AntFarmRpcCall.doFarmTask(bizKey));
+                                val count = farmTaskTryCount.computeIfAbsent(bizKey) { k: kotlin.String? -> java.util.concurrent.atomic.AtomicInteger(0) }!!
+                                    .incrementAndGet()
+                                val taskDetailjo = JSONObject(AntFarmRpcCall.doFarmTask(bizKey))
                                 if (count > 1) {
                                     // 超过 1 次视为失败任务
-                                    Log.error("庄园任务(超过1次)标记失败：" + title + "\n" + taskDetailjo);
-                                    badTaskSet.add(bizKey);
-                                    DataStore.INSTANCE.put("badFarmTaskSet", badTaskSet);
+                                    Log.error("庄园任务(超过1次)标记失败：$title\n$taskDetailjo")
+                                    badTaskSet.add(bizKey)
+                                    put("badFarmTaskSet", badTaskSet)
                                 } else {
-                                    Log.farm("庄园任务🧾[" + title + "]");
+                                    Log.farm("庄园任务🧾[$title]")
                                 }
                             }
                         }
                     }
-                    if ("ANSWER".equals(bizKey) && !Status.hasFlagToday(CACHED_FLAG)) {//单独处理答题任务
-                        answerQuestion("100"); //答题
+                    if ("ANSWER" == bizKey && !Status.hasFlagToday(CACHED_FLAG)) { //单独处理答题任务
+                        answerQuestion("100") //答题
                     }
-                    GlobalThreadPools.sleep(1000);
+                    GlobalThreadPools.sleep(1000)
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "doFarmTasks 错误:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "doFarmTasks 错误:", t)
         }
     }
 
-    private void receiveFarmAwards() {
+    private fun receiveFarmAwards() {
         try {
-            boolean doubleCheck;
+            var doubleCheck: Boolean
             do {
-                doubleCheck = false;
-                JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
+                doubleCheck = false
+                val jo = JSONObject(AntFarmRpcCall.listFarmTask())
                 if (ResChecker.checkRes(TAG, jo)) {
-                    JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
-                    JSONObject signList = jo.getJSONObject("signList");
-                    farmSign(signList);
-                    for (int i = 0; i < farmTaskList.length(); i++) {
-                        JSONObject task = farmTaskList.getJSONObject(i);
-                        String taskStatus = task.getString("taskStatus");
-                        String taskTitle = task.optString("title", "未知任务");
-                        int awardCount = task.optInt("awardCount", 0);
-                        String taskId = task.optString("taskId");
-                        if (TaskStatus.FINISHED.name().equals(taskStatus)) {
-                            if (Objects.equals(task.optString("awardType"), "ALLPURPOSE")) {
+                    val farmTaskList = jo.getJSONArray("farmTaskList")
+                    val signList = jo.getJSONObject("signList")
+                    farmSign(signList)
+                    for (i in 0..<farmTaskList.length()) {
+                        val task = farmTaskList.getJSONObject(i)
+                        val taskStatus = task.getString("taskStatus")
+                        val taskTitle = task.optString("title", "未知任务")
+                        val awardCount = task.optInt("awardCount", 0)
+                        val taskId = task.optString("taskId")
+                        if (TaskStatus.FINISHED.name == taskStatus) {
+                            if (task.optString("awardType") == "ALLPURPOSE") {
                                 if (awardCount + foodStock > foodStockLimit) {
-                                    unreceiveTaskAward++;
-                                    Log.record(TAG, taskTitle + "领取" + awardCount + "g饲料后将超过[" + foodStockLimit + "g]上限!终止领取");
-                                    break;
+                                    unreceiveTaskAward++
+                                    Log.record(TAG, taskTitle + "领取" + awardCount + "g饲料后将超过[" + foodStockLimit + "g]上限!终止领取")
+                                    break
                                 }
                             }
-                            JSONObject receiveTaskAwardjo = new JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId));
+                            val receiveTaskAwardjo = JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId))
                             if (ResChecker.checkRes(TAG, receiveTaskAwardjo)) {
-                                add2FoodStock(awardCount);
-                                Log.farm("庄园奖励🎖️[" + taskTitle + "]#" + awardCount + "g");
-                                doubleCheck = true;
-                                if (unreceiveTaskAward > 0)
-                                    unreceiveTaskAward--;
+                                add2FoodStock(awardCount)
+                                Log.farm("庄园奖励🎖️[" + taskTitle + "]#" + awardCount + "g")
+                                doubleCheck = true
+                                if (unreceiveTaskAward > 0) unreceiveTaskAward--
                             }
                         }
-                        GlobalThreadPools.sleep(1000);
+                        GlobalThreadPools.sleep(1000)
                     }
                 }
-            } while (doubleCheck);
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t);
+            } while (doubleCheck)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t)
         }
     }
 
-    private void farmSign(JSONObject signList) {
+    private fun farmSign(signList: JSONObject) {
         try {
-            String flag = "farm::sign";
-            if (Status.hasFlagToday(flag)) return;
-            JSONArray jaFarmSignList = signList.getJSONArray("signList");
-            String currentSignKey = signList.getString("currentSignKey");
-            for (int i = 0; i < jaFarmSignList.length(); i++) {
-                JSONObject jo = jaFarmSignList.getJSONObject(i);
-                String signKey = jo.getString("signKey");
-                boolean signed = jo.getBoolean("signed");
-                String awardCount = jo.getString("awardCount");
-                if (currentSignKey.equals(signKey)) {
+            val flag = "farm::sign"
+            if (Status.hasFlagToday(flag)) return
+            val jaFarmSignList = signList.getJSONArray("signList")
+            val currentSignKey = signList.getString("currentSignKey")
+            for (i in 0..<jaFarmSignList.length()) {
+                val jo = jaFarmSignList.getJSONObject(i)
+                val signKey = jo.getString("signKey")
+                val signed = jo.getBoolean("signed")
+                val awardCount = jo.getString("awardCount")
+                if (currentSignKey == signKey) {
                     if (!signed) {
-                        String signResponse = AntFarmRpcCall.sign();
+                        val signResponse = AntFarmRpcCall.sign()
                         if (ResChecker.checkRes(TAG, signResponse)) {
-                            Log.farm("庄园签到📅获得饲料" + awardCount + "g");
-                            Status.setFlagToday(flag);
+                            Log.farm("庄园签到📅获得饲料" + awardCount + "g")
+                            Status.setFlagToday(flag)
                         }
                     }
-                    return;
+                    return
                 }
             }
-        } catch (JSONException e) {
-            Log.printStackTrace(TAG, "庄园签到 JSON解析错误:", e);
+        } catch (e: JSONException) {
+            Log.printStackTrace(TAG, "庄园签到 JSON解析错误:", e)
         }
     }
 
@@ -1466,41 +1483,42 @@ public class AntFarm extends ModelTask {
      * @param farmId 庄园ID
      * @return true: 喂鸡成功，false: 喂鸡失败
      */
-    private Boolean feedAnimal(String farmId) {
+    private fun feedAnimal(farmId: String?): Boolean {
         try {
             if (foodStock < 180) {
-                Log.record(TAG, "喂鸡饲料不足");
+                Log.record(TAG, "喂鸡饲料不足")
             } else {
-                JSONObject jo = new JSONObject(AntFarmRpcCall.feedAnimal(farmId));
-                Log.farm("投喂小鸡🥣[180g]#剩余" + jo.getInt("foodStock") + "g");
-                return true;
+                val jo = JSONObject(AntFarmRpcCall.feedAnimal(farmId))
+                Log.farm("投喂小鸡🥣[180g]#剩余" + jo.getInt("foodStock") + "g")
+                return true
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "feedAnimal err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "feedAnimal err:", t)
         }
-        return false;
+        return false
     }
 
     /**
      * 加载持有道具信息
      */
-    private void listFarmTool() {
+    private fun listFarmTool() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTool());
+            val jo = JSONObject(AntFarmRpcCall.listFarmTool())
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray jaToolList = jo.getJSONArray("toolList");
-                farmTools = new FarmTool[jaToolList.length()];
-                for (int i = 0; i < jaToolList.length(); i++) {
-                    jo = jaToolList.getJSONObject(i);
-                    farmTools[i] = new FarmTool();
-                    farmTools[i].toolId = jo.optString("toolId", "");
-                    farmTools[i].toolType = ToolType.valueOf(jo.getString("toolType"));
-                    farmTools[i].toolCount = jo.getInt("toolCount");
-                    farmTools[i].toolHoldLimit = jo.optInt("toolHoldLimit", 20);
+                val jaToolList = jo.getJSONArray("toolList")
+
+                farmTools = Array(jaToolList.length()) { i ->
+                    val toolJson = jaToolList.getJSONObject(i)
+                    FarmTool().apply {
+                        toolId = toolJson.optString("toolId", "")
+                        toolType = ToolType.valueOf(toolJson.getString("toolType"))
+                        toolCount = toolJson.getInt("toolCount")
+                        toolHoldLimit = toolJson.optInt("toolHoldLimit", 20)
+                    }
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "listFarmTool err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "listFarmTool err:", t)
         }
     }
 
@@ -1509,232 +1527,222 @@ public class AntFarm extends ModelTask {
      *
      * @return true: 使用成功，false: 使用失败
      */
-    private Boolean useAccelerateTool() {
+    private fun useAccelerateTool(): Boolean {
         if (!Status.canUseAccelerateTool()) {
-            return false;
+            return false
         }
-        if (!useAccelerateToolContinue.getValue() && AnimalBuff.ACCELERATING.name().equals(ownerAnimal.animalBuff)) {
-            return false;
+        if (!useAccelerateToolContinue!!.value && AnimalBuff.ACCELERATING.name == ownerAnimal.animalBuff) {
+            return false
         }
-        syncAnimalStatus(ownerFarmId);
-        double consumeSpeed = 0d;
-        double allFoodHaveEatten = 0d;
-        long nowTime = System.currentTimeMillis() / 1000;
-        for (Animal animal : animals) {
-            if (animal.masterFarmId.equals(ownerFarmId)) {
-                consumeSpeed = animal.consumeSpeed;
+        syncAnimalStatus(ownerFarmId)
+        var consumeSpeed = 0.0
+        var allFoodHaveEatten = 0.0
+        val nowTime = System.currentTimeMillis() / 1000
+        for (animal in animals!!) {
+            if (animal.masterFarmId == ownerFarmId) {
+                consumeSpeed = animal.consumeSpeed!!
             }
-            allFoodHaveEatten += animal.foodHaveEatten;
-            allFoodHaveEatten += animal.consumeSpeed * (nowTime - (double) animal.startEatTime / 1000);
+            allFoodHaveEatten += animal.foodHaveEatten!!
+            allFoodHaveEatten += animal.consumeSpeed!! * (nowTime - animal.startEatTime!!.toDouble() / 1000)
         }
         // consumeSpeed: g/s
         // AccelerateTool: -1h = -60m = -3600s
-        boolean isUseAccelerateTool = false;
+        var isUseAccelerateTool = false
         while (180 - allFoodHaveEatten >= consumeSpeed * 3600) {
-            if ((useAccelerateToolWhenMaxEmotion.getValue() && finalScore != 100)) {
-                break;
+            if ((useAccelerateToolWhenMaxEmotion!!.value && finalScore != 100.0)) {
+                break
             }
             if (useFarmTool(ownerFarmId, ToolType.ACCELERATETOOL)) {
-                allFoodHaveEatten += consumeSpeed * 3600;
-                isUseAccelerateTool = true;
-                Status.useAccelerateTool();
-                GlobalThreadPools.sleep(1000);
+                allFoodHaveEatten += consumeSpeed * 3600
+                isUseAccelerateTool = true
+                Status.useAccelerateTool()
+                GlobalThreadPools.sleep(1000)
             } else {
-                break;
+                break
             }
-            if (!useAccelerateToolContinue.getValue()) {
-                break;
+            if (!useAccelerateToolContinue!!.value) {
+                break
             }
         }
-        return isUseAccelerateTool;
+        return isUseAccelerateTool
     }
 
-    private Boolean useFarmTool(String targetFarmId, ToolType toolType) {
+    private fun useFarmTool(targetFarmId: String?, toolType: ToolType): Boolean {
         try {
-            String s = AntFarmRpcCall.listFarmTool();
-            JSONObject jo = new JSONObject(s);
-            String memo = jo.getString("memo");
+            var s = AntFarmRpcCall.listFarmTool()
+            var jo = JSONObject(s)
+            var memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray jaToolList = jo.getJSONArray("toolList");
-                for (int i = 0; i < jaToolList.length(); i++) {
-                    jo = jaToolList.getJSONObject(i);
-                    if (toolType.name().equals(jo.getString("toolType"))) {
-                        int toolCount = jo.getInt("toolCount");
+                val jaToolList = jo.getJSONArray("toolList")
+                for (i in 0..<jaToolList.length()) {
+                    jo = jaToolList.getJSONObject(i)
+                    if (toolType.name == jo.getString("toolType")) {
+                        val toolCount = jo.getInt("toolCount")
                         if (toolCount > 0) {
-                            String toolId = "";
-                            if (jo.has("toolId"))
-                                toolId = jo.getString("toolId");
-                            s = AntFarmRpcCall.useFarmTool(targetFarmId, toolId, toolType.name());
-                            jo = new JSONObject(s);
-                            memo = jo.getString("memo");
+                            var toolId = ""
+                            if (jo.has("toolId")) toolId = jo.getString("toolId")
+                            s = AntFarmRpcCall.useFarmTool(targetFarmId, toolId, toolType.name)
+                            jo = JSONObject(s)
+                            memo = jo.getString("memo")
                             if (ResChecker.checkRes(TAG, jo)) {
-                                Log.farm("使用道具🎭[" + toolType.nickName() + "]#剩余" + (toolCount - 1) + "张");
-                                return true;
+                                Log.farm("使用道具🎭[" + toolType.nickName() + "]#剩余" + (toolCount - 1) + "张")
+                                return true
                             } else {
-                                Log.record(memo);
+                                Log.record(memo)
                             }
-                            Log.runtime(s);
+                            Log.runtime(s)
                         }
-                        break;
+                        break
                     }
                 }
-            } else {
-                Log.record(memo);
-                Log.runtime(s);
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "useFarmTool err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "useFarmTool err:")
+            Log.printStackTrace(TAG, t)
         }
-        return false;
+        return false
     }
 
-    private void feedFriend() {
+    private fun feedFriend() {
         try {
-            Map<String, Integer> feedFriendAnimalMap = feedFriendAnimalList.getValue();
-            for (Map.Entry<String, Integer> entry : feedFriendAnimalMap.entrySet()) {
-                String userId = entry.getKey();
-                if (userId.equals(UserMap.getCurrentUid()))//跳过自己
-                    continue;
-                if (!Status.canFeedFriendToday(userId, entry.getValue()))
-                    continue;
-                JSONObject jo = new JSONObject(AntFarmRpcCall.enterFarm(userId, userId));
-                GlobalThreadPools.sleep(3 * 1000L);//延迟3秒
+            val feedFriendAnimalMap = feedFriendAnimalList!!.value
+            for (entry in feedFriendAnimalMap.entries) {
+                val userId: String = entry.key!!
+                if (userId == UserMap.currentUid)  //跳过自己
+                    continue
+                if (!Status.canFeedFriendToday(userId, entry.value!!)) continue
+                val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
+                GlobalThreadPools.sleep(3 * 1000L) //延迟3秒
                 if (ResChecker.checkRes(TAG, jo)) {
-                    JSONObject subFarmVOjo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO");
-                    String friendFarmId = subFarmVOjo.getString("farmId");
-                    JSONArray jaAnimals = subFarmVOjo.getJSONArray("animals");
-                    for (int j = 0; j < jaAnimals.length(); j++) {
-                        JSONObject animalsjo = jaAnimals.getJSONObject(j);
+                    val subFarmVOjo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO")
+                    val friendFarmId = subFarmVOjo.getString("farmId")
+                    val jaAnimals = subFarmVOjo.getJSONArray("animals")
+                    for (j in 0..<jaAnimals.length()) {
+                        val animalsjo = jaAnimals.getJSONObject(j)
 
-                        String masterFarmId = animalsjo.getString("masterFarmId");
-                        if (masterFarmId.equals(friendFarmId)) { //遍历到的鸡 如果在自己的庄园
-                            JSONObject animalStatusVO = animalsjo.getJSONObject("animalStatusVO");
-                            String animalInteractStatus = animalStatusVO.getString("animalInteractStatus");//动物互动状态
-                            String animalFeedStatus = animalStatusVO.getString("animalFeedStatus");//动物饲料状态
-                            if (AnimalInteractStatus.HOME.name().equals(animalInteractStatus) && AnimalFeedStatus.HUNGRY.name().equals(animalFeedStatus)) { //状态是饥饿 并且在庄园
-                                String user = UserMap.getMaskName(userId);//喂 给我喂
+                        val masterFarmId = animalsjo.getString("masterFarmId")
+                        if (masterFarmId == friendFarmId) { //遍历到的鸡 如果在自己的庄园
+                            val animalStatusVO = animalsjo.getJSONObject("animalStatusVO")
+                            val animalInteractStatus = animalStatusVO.getString("animalInteractStatus") //动物互动状态
+                            val animalFeedStatus = animalStatusVO.getString("animalFeedStatus") //动物饲料状态
+                            if (AnimalInteractStatus.HOME.name == animalInteractStatus && AnimalFeedStatus.HUNGRY.name == animalFeedStatus) { //状态是饥饿 并且在庄园
+                                val user = UserMap.getMaskName(userId) //喂 给我喂
                                 if (foodStock < 180) {
                                     if (unreceiveTaskAward > 0) {
-                                        Log.record(TAG, "✨还有待领取的饲料");
-                                        receiveFarmAwards();//先去领个饲料
+                                        Log.record(TAG, "✨还有待领取的饲料")
+                                        receiveFarmAwards() //先去领个饲料
                                     }
                                 }
                                 //第二次检查
                                 if (foodStock >= 180) {
                                     if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                                        return;
+                                        return
                                     }
-                                    JSONObject feedFriendAnimaljo = new JSONObject(AntFarmRpcCall.feedFriendAnimal(friendFarmId));
+                                    val feedFriendAnimaljo = JSONObject(AntFarmRpcCall.feedFriendAnimal(friendFarmId))
                                     if (ResChecker.checkRes(TAG, feedFriendAnimaljo)) {
-                                        foodStock = feedFriendAnimaljo.getInt("foodStock");
-                                        Log.farm("帮喂好友🥣[" + user + "]的小鸡[180g]#剩余" + foodStock + "g");
-                                        Status.feedFriendToday(AntFarmRpcCall.farmId2UserId(friendFarmId));
+                                        foodStock = feedFriendAnimaljo.getInt("foodStock")
+                                        Log.farm("帮喂好友🥣[" + user + "]的小鸡[180g]#剩余" + foodStock + "g")
+                                        Status.feedFriendToday(AntFarmRpcCall.farmId2UserId(friendFarmId))
                                     } else {
-                                        Log.error(TAG, "😞喂[" + user + "]的鸡失败" + feedFriendAnimaljo);
-                                        Status.setFlagToday("farm::feedFriendLimit");
-                                        break;
+                                        Log.error(TAG, "😞喂[$user]的鸡失败$feedFriendAnimaljo")
+                                        Status.setFlagToday("farm::feedFriendLimit")
+                                        break
                                     }
                                 } else {
-                                    Log.record(TAG, "😞喂鸡[" + user + "]饲料不足");
+                                    Log.record(TAG, "😞喂鸡[$user]饲料不足")
                                 }
-
                             }
-                            break;
+                            break
                         }
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "feedFriendAnimal err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "feedFriendAnimal err:", t)
         }
     }
 
 
-    private void notifyFriend() {
-        if (foodStock >= foodStockLimit)
-            return;
+    private fun notifyFriend() {
+        if (foodStock >= foodStockLimit) return
         try {
-            boolean hasNext = false;
-            int pageStartSum = 0;
-            String s;
-            JSONObject jo;
+            var hasNext = false
+            var pageStartSum = 0
+            var s: String?
+            var jo: JSONObject
             do {
-                s = AntFarmRpcCall.rankingList(pageStartSum);
-                jo = new JSONObject(s);
-                String memo = jo.getString("memo");
+                s = AntFarmRpcCall.rankingList(pageStartSum)
+                jo = JSONObject(s)
+                var memo = jo.getString("memo")
                 if (ResChecker.checkRes(TAG, jo)) {
-                    hasNext = jo.getBoolean("hasNext");
-                    JSONArray jaRankingList = jo.getJSONArray("rankingList");
-                    pageStartSum += jaRankingList.length();
-                    for (int i = 0; i < jaRankingList.length(); i++) {
-                        jo = jaRankingList.getJSONObject(i);
-                        String userId = jo.getString("userId");
-                        String userName = UserMap.getMaskName(userId);
-                        boolean isNotifyFriend = notifyFriendList.getValue().contains(userId);
-                        if (notifyFriendType.getValue() == NotifyFriendType.DONT_NOTIFY) {
-                            isNotifyFriend = !isNotifyFriend;
+                    hasNext = jo.getBoolean("hasNext")
+                    val jaRankingList = jo.getJSONArray("rankingList")
+                    pageStartSum += jaRankingList.length()
+                    for (i in 0..<jaRankingList.length()) {
+                        jo = jaRankingList.getJSONObject(i)
+                        val userId = jo.getString("userId")
+                        val userName = UserMap.getMaskName(userId)
+                        var isNotifyFriend = notifyFriendList!!.value.contains(userId)
+                        if (notifyFriendType!!.value == NotifyFriendType.Companion.DONT_NOTIFY) {
+                            isNotifyFriend = !isNotifyFriend
                         }
-                        if (!isNotifyFriend || userId.equals(UserMap.getCurrentUid())) {
-                            continue;
+                        if (!isNotifyFriend || userId == UserMap.currentUid) {
+                            continue
                         }
-                        boolean starve = jo.has("actionType") && "starve_action".equals(jo.getString("actionType"));
+                        val starve = jo.has("actionType") && "starve_action" == jo.getString("actionType")
                         if (jo.getBoolean("stealingAnimal") && !starve) {
-                            s = AntFarmRpcCall.enterFarm(userId, userId);
-                            jo = new JSONObject(s);
-                            memo = jo.getString("memo");
+                            s = AntFarmRpcCall.enterFarm(userId, userId)
+                            jo = JSONObject(s)
+                            memo = jo.getString("memo")
                             if (ResChecker.checkRes(TAG, jo)) {
-                                jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO");
-                                String friendFarmId = jo.getString("farmId");
-                                JSONArray jaAnimals = jo.getJSONArray("animals");
-                                boolean notified = !notifyFriend.getValue();
-                                for (int j = 0; j < jaAnimals.length(); j++) {
-                                    jo = jaAnimals.getJSONObject(j);
-                                    String animalId = jo.getString("animalId");
-                                    String masterFarmId = jo.getString("masterFarmId");
-                                    if (!masterFarmId.equals(friendFarmId) && !masterFarmId.equals(ownerFarmId)) {
-                                        if (notified)
-                                            continue;
-                                        jo = jo.getJSONObject("animalStatusVO");
-                                        notified = notifyFriend(jo, friendFarmId, animalId, userName);
+                                jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO")
+                                val friendFarmId = jo.getString("farmId")
+                                val jaAnimals = jo.getJSONArray("animals")
+                                var notified = !notifyFriend!!.value
+                                for (j in 0..<jaAnimals.length()) {
+                                    jo = jaAnimals.getJSONObject(j)
+                                    val animalId = jo.getString("animalId")
+                                    val masterFarmId = jo.getString("masterFarmId")
+                                    if (masterFarmId != friendFarmId && masterFarmId != ownerFarmId) {
+                                        if (notified) continue
+                                        jo = jo.getJSONObject("animalStatusVO")
+                                        notified = notifyFriend(jo, friendFarmId, animalId, userName)
                                     }
                                 }
                             } else {
-                                Log.record(memo);
-                                Log.runtime(s);
+                                Log.record(memo)
+                                Log.runtime(s)
                             }
                         }
                     }
                 } else {
-                    Log.record(memo);
-                    Log.runtime(s);
+                    Log.record(memo)
+                    Log.runtime(s)
                 }
-            } while (hasNext);
-            Log.record(TAG, "饲料剩余[" + foodStock + "g]");
-        } catch (Throwable t) {
-            Log.runtime(TAG, "notifyFriend err:");
-            Log.printStackTrace(TAG, t);
+            } while (hasNext)
+            Log.record(TAG, "饲料剩余[" + foodStock + "g]")
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "notifyFriend err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private boolean notifyFriend(JSONObject joAnimalStatusVO, String friendFarmId, String animalId, String user) {
+    private fun notifyFriend(joAnimalStatusVO: JSONObject, friendFarmId: String?, animalId: String, user: String?): Boolean {
         try {
-            if (AnimalInteractStatus.STEALING.name().equals(joAnimalStatusVO.getString("animalInteractStatus")) && AnimalFeedStatus.EATING.name().equals(joAnimalStatusVO.getString("animalFeedStatus"))) {
-                JSONObject jo = new JSONObject(AntFarmRpcCall.notifyFriend(animalId, friendFarmId));
+            if (AnimalInteractStatus.STEALING.name == joAnimalStatusVO.getString("animalInteractStatus") && AnimalFeedStatus.EATING.name == joAnimalStatusVO.getString("animalFeedStatus")) {
+                val jo = JSONObject(AntFarmRpcCall.notifyFriend(animalId, friendFarmId))
                 if (ResChecker.checkRes(TAG, jo)) {
-                    double rewardCount = jo.getDouble("rewardCount");
-                    if (jo.getBoolean("refreshFoodStock"))
-                        foodStock = (int) jo.getDouble("finalFoodStock");
-                    else
-                        add2FoodStock((int) rewardCount);
-                    Log.farm("通知好友📧[" + user + "]被偷吃#奖励" + rewardCount + "g");
-                    return true;
+                    val rewardCount = jo.getDouble("rewardCount")
+                    if (jo.getBoolean("refreshFoodStock")) foodStock = jo.getDouble("finalFoodStock").toInt()
+                    else add2FoodStock(rewardCount.toInt())
+                    Log.farm("通知好友📧[" + user + "]被偷吃#奖励" + rewardCount + "g")
+                    return true
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "notifyFriend err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "notifyFriend err:", t)
         }
-        return false;
+        return false
     }
 
     /**
@@ -1742,80 +1750,86 @@ public class AntFarm extends ModelTask {
      *
      * @param jo 同步响应状态
      */
-    private void parseSyncAnimalStatusResponse(JSONObject jo) {
+    private fun parseSyncAnimalStatusResponse(jo: JSONObject) {
         try {
-            if (!jo.has("subFarmVO")) {
-                return;
+            if (!jo.has("subFarmVO")) return
+
+            // 小鸡心情
+            if (jo.has("emotionInfo")) {
+                finalScore = jo.getJSONObject("emotionInfo").getDouble("finalScore")
             }
-            if (jo.has("emotionInfo")) {//小鸡心情
-                finalScore = jo.getJSONObject("emotionInfo").getDouble("finalScore");
-            }
-            JSONObject subFarmVO = jo.getJSONObject("subFarmVO");
+
+            val subFarmVO = jo.getJSONObject("subFarmVO")
+
+            // 食物库存
             if (subFarmVO.has("foodStock")) {
-                foodStock = subFarmVO.getInt("foodStock");
+                foodStock = subFarmVO.getInt("foodStock")
             }
-            if (subFarmVO.has("manureVO")) { //粪肥 鸡屎
-                JSONArray manurePotList = subFarmVO.getJSONObject("manureVO").getJSONArray("manurePotList");
-                for (int i = 0; i < manurePotList.length(); i++) {
-                    JSONObject manurePot = manurePotList.getJSONObject(i);
-                    if (manurePot.getInt("manurePotNum") >= 100) {//粪肥数量
-                        JSONObject joManurePot = new JSONObject(AntFarmRpcCall.collectManurePot(manurePot.getString("manurePotNO")));
+
+            // 粪肥
+            if (subFarmVO.has("manureVO")) {
+                val manurePotList = subFarmVO.getJSONObject("manureVO").getJSONArray("manurePotList")
+                for (i in 0 until manurePotList.length()) {
+                    val manurePot = manurePotList.getJSONObject(i)
+                    if (manurePot.getInt("manurePotNum") >= 100) {
+                        val joManurePot = JSONObject(AntFarmRpcCall.collectManurePot(manurePot.getString("manurePotNO")))
                         if (ResChecker.checkRes(TAG, joManurePot)) {
-                            int collectManurePotNum = joManurePot.getInt("collectManurePotNum");
-                            Log.farm("打扫鸡屎🧹[" + collectManurePotNum + "g]" + i + 1 + "次");
+                            val collectManurePotNum = joManurePot.getInt("collectManurePotNum")
+                            Log.farm("打扫鸡屎🧹[$collectManurePotNum g] 第${i + 1}次")
                         } else {
-                            Log.runtime(TAG, "打扫鸡屎失败: 第" + i + 1 + "次" + joManurePot);
+                            Log.runtime(TAG, "打扫鸡屎失败: 第${i + 1}次 $joManurePot")
                         }
                     }
                 }
             }
 
+            // 农场ID
+            ownerFarmId = subFarmVO.getString("farmId")
 
-            ownerFarmId = subFarmVO.getString("farmId");
+            // 农场产物
+            val farmProduce = subFarmVO.getJSONObject("farmProduce")
+            benevolenceScore = farmProduce.getDouble("benevolenceScore")
 
-            JSONObject farmProduce = subFarmVO.getJSONObject("farmProduce");//产物 -🥚
-            benevolenceScore = farmProduce.getDouble("benevolenceScore");//慈善评分
-
-            if (subFarmVO.has("rewardList")) {
-                JSONArray jaRewardList = subFarmVO.getJSONArray("rewardList");
-                if (jaRewardList.length() > 0) {
-                    rewardList = new RewardFriend[jaRewardList.length()];
-                    for (int i = 0; i < rewardList.length; i++) {
-                        JSONObject joRewardList = jaRewardList.getJSONObject(i);
-                        if (rewardList[i] == null)
-                            rewardList[i] = new RewardFriend();
-                        rewardList[i].consistencyKey = joRewardList.getString("consistencyKey");
-                        rewardList[i].friendId = joRewardList.getString("friendId");
-                        rewardList[i].time = joRewardList.getString("time");
+            // 奖励列表
+            rewardList = if (subFarmVO.has("rewardList")) {
+                val jaRewardList = subFarmVO.getJSONArray("rewardList")
+                Array(jaRewardList.length()) { i ->
+                    val joReward = jaRewardList.getJSONObject(i)
+                    RewardFriend().apply {
+                        consistencyKey = joReward.getString("consistencyKey")
+                        friendId = joReward.getString("friendId")
+                        time = joReward.getString("time")
                     }
                 }
+            } else {
+                emptyArray()
             }
 
-            JSONArray jaAnimals = subFarmVO.getJSONArray("animals");//小鸡们
-            List<Animal> animalList = new ArrayList<>();
-            for (int i = 0; i < jaAnimals.length(); i++) {
-                JSONObject animalJson = jaAnimals.getJSONObject(i);
-                Animal animal = objectMapper.readValue(animalJson.toString(), Animal.class);
-                animalList.add(animal);
-                if (animal.masterFarmId.equals(ownerFarmId)) {
-                    ownerAnimal = animal;
+            // 小鸡列表
+            val jaAnimals = subFarmVO.getJSONArray("animals")
+            animals = Array(jaAnimals.length()) { i ->
+                val animalJson = jaAnimals.getJSONObject(i)
+                val animal: Animal = objectMapper.readValue(animalJson.toString(), Animal::class.java)
+                if (animal.masterFarmId == ownerFarmId) {
+                    ownerAnimal = animal
                 }
-//                Log.record(TAG, "当前动物：" + animal.toString());
+                animal
             }
-            animals = animalList.toArray(new Animal[0]);
-        } catch (Throwable t) {
-            Log.runtime(TAG, "parseSyncAnimalStatusResponse err:");
-            Log.printStackTrace(TAG, t);
+
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "parseSyncAnimalStatusResponse err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void add2FoodStock(int i) {
-        foodStock += i;
+
+    private fun add2FoodStock(i: Int) {
+        foodStock += i
         if (foodStock > foodStockLimit) {
-            foodStock = foodStockLimit;
+            foodStock = foodStockLimit
         }
         if (foodStock < 0) {
-            foodStock = 0;
+            foodStock = 0
         }
     }
 
@@ -1823,221 +1837,216 @@ public class AntFarm extends ModelTask {
     /**
      * 收集每日食材
      */
-    private void collectDailyFoodMaterial() {
+    private fun collectDailyFoodMaterial() {
         try {
-            String userId = UserMap.getCurrentUid();
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterKitchen(userId));
+            val userId = UserMap.currentUid
+            var jo = JSONObject(AntFarmRpcCall.enterKitchen(userId))
             if (ResChecker.checkRes(TAG, jo)) {
-                boolean canCollectDailyFoodMaterial = jo.getBoolean("canCollectDailyFoodMaterial");
-                int dailyFoodMaterialAmount = jo.getInt("dailyFoodMaterialAmount");
-                int garbageAmount = jo.optInt("garbageAmount", 0);
+                val canCollectDailyFoodMaterial = jo.getBoolean("canCollectDailyFoodMaterial")
+                val dailyFoodMaterialAmount = jo.getInt("dailyFoodMaterialAmount")
+                val garbageAmount = jo.optInt("garbageAmount", 0)
                 if (jo.has("orchardFoodMaterialStatus")) {
-                    JSONObject orchardFoodMaterialStatus = jo.getJSONObject("orchardFoodMaterialStatus");
-                    if ("FINISHED".equals(orchardFoodMaterialStatus.optString("foodStatus"))) {
-                        jo = new JSONObject(AntFarmRpcCall.farmFoodMaterialCollect());
+                    val orchardFoodMaterialStatus = jo.getJSONObject("orchardFoodMaterialStatus")
+                    if ("FINISHED" == orchardFoodMaterialStatus.optString("foodStatus")) {
+                        jo = JSONObject(AntFarmRpcCall.farmFoodMaterialCollect())
                         if (ResChecker.checkRes(TAG, jo)) {
-                            Log.farm("小鸡厨房👨🏻‍🍳[领取农场食材]#" + jo.getInt("foodMaterialAddCount") + "g");
+                            Log.farm("小鸡厨房👨🏻‍🍳[领取农场食材]#" + jo.getInt("foodMaterialAddCount") + "g")
                         }
                     }
                 }
                 if (canCollectDailyFoodMaterial) {
-                    jo = new JSONObject(AntFarmRpcCall.collectDailyFoodMaterial(dailyFoodMaterialAmount));
+                    jo = JSONObject(AntFarmRpcCall.collectDailyFoodMaterial(dailyFoodMaterialAmount))
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡厨房👨🏻‍🍳[领取今日食材]#" + dailyFoodMaterialAmount + "g");
+                        Log.farm("小鸡厨房👨🏻‍🍳[领取今日食材]#" + dailyFoodMaterialAmount + "g")
                     }
                 }
                 if (garbageAmount > 0) {
-                    jo = new JSONObject(AntFarmRpcCall.collectKitchenGarbage());
+                    jo = JSONObject(AntFarmRpcCall.collectKitchenGarbage())
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡厨房👨🏻‍🍳[领取肥料]#" + jo.getInt("recievedKitchenGarbageAmount") + "g");
+                        Log.farm("小鸡厨房👨🏻‍🍳[领取肥料]#" + jo.getInt("recievedKitchenGarbageAmount") + "g")
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "收集每日食材", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "收集每日食材", t)
         }
     }
 
     /**
      * 领取爱心食材店食材
      */
-    private void collectDailyLimitedFoodMaterial() {
+    private fun collectDailyLimitedFoodMaterial() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryFoodMaterialPack());
+            var jo = JSONObject(AntFarmRpcCall.queryFoodMaterialPack())
             if (ResChecker.checkRes(TAG, jo)) {
-                boolean canCollectDailyLimitedFoodMaterial = jo.getBoolean("canCollectDailyLimitedFoodMaterial");
+                val canCollectDailyLimitedFoodMaterial = jo.getBoolean("canCollectDailyLimitedFoodMaterial")
                 if (canCollectDailyLimitedFoodMaterial) {
-                    int dailyLimitedFoodMaterialAmount = jo.getInt("dailyLimitedFoodMaterialAmount");
-                    jo = new JSONObject(AntFarmRpcCall.collectDailyLimitedFoodMaterial(dailyLimitedFoodMaterialAmount));
+                    val dailyLimitedFoodMaterialAmount = jo.getInt("dailyLimitedFoodMaterialAmount")
+                    jo = JSONObject(AntFarmRpcCall.collectDailyLimitedFoodMaterial(dailyLimitedFoodMaterialAmount))
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡厨房👨🏻‍🍳[领取爱心食材店食材]#" + dailyLimitedFoodMaterialAmount + "g");
+                        Log.farm("小鸡厨房👨🏻‍🍳[领取爱心食材店食材]#" + dailyLimitedFoodMaterialAmount + "g")
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "领取爱心食材店食材", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "领取爱心食材店食材", t)
         }
     }
 
-    private void cook() {
+    private fun cook() {
         try {
-            String userId = UserMap.getCurrentUid();
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterKitchen(userId));
-            Log.runtime(TAG, "cook userid :" + userId);
+            val userId = UserMap.currentUid
+            var jo = JSONObject(AntFarmRpcCall.enterKitchen(userId))
             if (ResChecker.checkRes(TAG, jo)) {
-                int cookTimesAllowed = jo.getInt("cookTimesAllowed");
+                val cookTimesAllowed = jo.getInt("cookTimesAllowed")
                 if (cookTimesAllowed > 0) {
-                    for (int i = 0; i < cookTimesAllowed; i++) {
-                        jo = new JSONObject(AntFarmRpcCall.cook(userId, "VILLA"));
+                    for (i in 0..<cookTimesAllowed) {
+                        jo = JSONObject(AntFarmRpcCall.cook(userId, "VILLA"))
                         if (ResChecker.checkRes(TAG, jo)) {
-                            JSONObject cuisineVO = jo.getJSONObject("cuisineVO");
-                            Log.farm("小鸡厨房👨🏻‍🍳[" + cuisineVO.getString("name") + "]制作成功");
+                            val cuisineVO = jo.getJSONObject("cuisineVO")
+                            Log.farm("小鸡厨房👨🏻‍🍳[" + cuisineVO.getString("name") + "]制作成功")
                         } else {
-                            Log.runtime(TAG, "小鸡厨房制作" + jo);
+                            Log.runtime(TAG, "小鸡厨房制作$jo")
                         }
-                        GlobalThreadPools.sleep(RandomUtil.delay());
+                        GlobalThreadPools.sleep(RandomUtil.delay().toLong())
                     }
                 }
             } else {
-                Log.runtime(TAG, "小鸡厨房制作1" + jo);
+                Log.runtime(TAG, "小鸡厨房制作1$jo")
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "cook err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "cook err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void useSpecialFood(JSONArray cuisineList) {
+    private fun useSpecialFood(cuisineList: JSONArray) {
         try {
-            JSONObject jo;
-            String cookbookId;
-            String cuisineId;
-            String name;
-            for (int i = 0; i < cuisineList.length(); i++) {
-                jo = cuisineList.getJSONObject(i);
-                if (jo.getInt("count") <= 0)
-                    continue;
-                cookbookId = jo.getString("cookbookId");
-                cuisineId = jo.getString("cuisineId");
-                name = jo.getString("name");
-                jo = new JSONObject(AntFarmRpcCall.useFarmFood(cookbookId, cuisineId));
+            var jo: JSONObject
+            var cookbookId: String?
+            var cuisineId: String?
+            var name: String?
+            for (i in 0..<cuisineList.length()) {
+                jo = cuisineList.getJSONObject(i)
+                if (jo.getInt("count") <= 0) continue
+                cookbookId = jo.getString("cookbookId")
+                cuisineId = jo.getString("cuisineId")
+                name = jo.getString("name")
+                jo = JSONObject(AntFarmRpcCall.useFarmFood(cookbookId, cuisineId))
                 if (ResChecker.checkRes(TAG, jo)) {
-                    double deltaProduce = jo.getJSONObject("foodEffect").getDouble("deltaProduce");
-                    Log.farm("使用美食🍱[" + name + "]#加速" + deltaProduce + "颗爱心鸡蛋");
+                    val deltaProduce = jo.getJSONObject("foodEffect").getDouble("deltaProduce")
+                    Log.farm("使用美食🍱[" + name + "]#加速" + deltaProduce + "颗爱心鸡蛋")
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "useFarmFood err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "useFarmFood err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private void drawLotteryPlus(JSONObject lotteryPlusInfo) {
+    private fun drawLotteryPlus(lotteryPlusInfo: JSONObject) {
         try {
-            if (!lotteryPlusInfo.has("userSevenDaysGiftsItem"))
-                return;
-            String itemId = lotteryPlusInfo.getString("itemId");
-            JSONObject userSevenDaysGiftsItem = lotteryPlusInfo.getJSONObject("userSevenDaysGiftsItem");
-            JSONArray userEverydayGiftItems = userSevenDaysGiftsItem.getJSONArray("userEverydayGiftItems");
-            for (int i = 0; i < userEverydayGiftItems.length(); i++) {
-                userSevenDaysGiftsItem = userEverydayGiftItems.getJSONObject(i);
-                if (userSevenDaysGiftsItem.getString("itemId").equals(itemId)) {
+            if (!lotteryPlusInfo.has("userSevenDaysGiftsItem")) return
+            val itemId = lotteryPlusInfo.getString("itemId")
+            var userSevenDaysGiftsItem = lotteryPlusInfo.getJSONObject("userSevenDaysGiftsItem")
+            val userEverydayGiftItems = userSevenDaysGiftsItem.getJSONArray("userEverydayGiftItems")
+            for (i in 0..<userEverydayGiftItems.length()) {
+                userSevenDaysGiftsItem = userEverydayGiftItems.getJSONObject(i)
+                if (userSevenDaysGiftsItem.getString("itemId") == itemId) {
                     if (!userSevenDaysGiftsItem.getBoolean("received")) {
-                        String singleDesc = userSevenDaysGiftsItem.getString("singleDesc");
-                        int awardCount = userSevenDaysGiftsItem.getInt("awardCount");
+                        val singleDesc = userSevenDaysGiftsItem.getString("singleDesc")
+                        val awardCount = userSevenDaysGiftsItem.getInt("awardCount")
                         if (singleDesc.contains("饲料") && awardCount + foodStock > foodStockLimit) {
-                            Log.record(TAG, "暂停领取[" + awardCount + "]g饲料，上限为[" + foodStockLimit + "]g");
-                            break;
+                            Log.record(TAG, "暂停领取[$awardCount]g饲料，上限为[$foodStockLimit]g")
+                            break
                         }
-                        userSevenDaysGiftsItem = new JSONObject(AntFarmRpcCall.drawLotteryPlus());
-                        if ("SUCCESS".equals(userSevenDaysGiftsItem.getString("memo"))) {
-                            Log.farm("惊喜礼包🎁[" + singleDesc + "*" + awardCount + "]");
+                        userSevenDaysGiftsItem = JSONObject(AntFarmRpcCall.drawLotteryPlus())
+                        if ("SUCCESS" == userSevenDaysGiftsItem.getString("memo")) {
+                            Log.farm("惊喜礼包🎁[$singleDesc*$awardCount]")
                         }
                     }
-                    break;
+                    break
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "drawLotteryPlus err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "drawLotteryPlus err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
     /**
      * 送麦子
      */
-    private void visit() {
+    private fun visit() {
         try {
-            Map<String, Integer> map = visitFriendList.getValue();
-            if (map == null || map.isEmpty()) return;
-            String currentUid = UserMap.getCurrentUid();
-            for (Map.Entry<String, Integer> entry : map.entrySet()) {
-                String userId = entry.getKey();
-                int count = entry.getValue();
+            val map = visitFriendList!!.value
+            if (map == null || map.isEmpty()) return
+            val currentUid = UserMap.currentUid
+            for (entry in map.entries) {
+                val userId: String = entry.key!!
+                val count: Int = entry.value!!
                 // 跳过自己和非法数量
-                if (userId.equals(currentUid) || count <= 0) continue;
+                if (userId == currentUid || count <= 0) continue
                 // 限制最大访问次数
-                int visitCount = Math.min(count, 3);
+                val visitCount = min(count, 3)
                 // 如果今天还可以访问
                 if (Status.canVisitFriendToday(userId, visitCount)) {
-                    int remaining = visitFriend(userId, visitCount);
+                    val remaining = visitFriend(userId, visitCount)
                     if (remaining > 0) {
-                        Status.visitFriendToday(userId, remaining);
+                        Status.visitFriendToday(userId, remaining)
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "visit err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "visit err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
 
-    private int visitFriend(String userId, int count) {
-        int visitedTimes = 0;
+    private fun visitFriend(userId: String?, count: Int): Int {
+        var visitedTimes = 0
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterFarm(userId, userId));
+            var jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject farmVO = jo.getJSONObject("farmVO");
-                foodStock = farmVO.getInt("foodStock");
-                JSONObject subFarmVO = farmVO.getJSONObject("subFarmVO");
-                if (subFarmVO.optBoolean("visitedToday", true))
-                    return 3;
-                String farmId = subFarmVO.getString("farmId");
-                for (int i = 0; i < count; i++) {
-                    if (foodStock < 10)
-                        break;
-                    jo = new JSONObject(AntFarmRpcCall.visitFriend(farmId));
+                val farmVO = jo.getJSONObject("farmVO")
+                foodStock = farmVO.getInt("foodStock")
+                val subFarmVO = farmVO.getJSONObject("subFarmVO")
+                if (subFarmVO.optBoolean("visitedToday", true)) return 3
+                val farmId = subFarmVO.getString("farmId")
+                for (i in 0..<count) {
+                    if (foodStock < 10) break
+                    jo = JSONObject(AntFarmRpcCall.visitFriend(farmId))
                     if (ResChecker.checkRes(TAG, jo)) {
-                        foodStock = jo.getInt("foodStock");
-                        Log.farm("赠送麦子🌾[" + UserMap.getMaskName(userId) + "]#" + jo.getInt("giveFoodNum") + "g");
-                        visitedTimes++;
+                        foodStock = jo.getInt("foodStock")
+                        Log.farm("赠送麦子🌾[" + UserMap.getMaskName(userId) + "]#" + jo.getInt("giveFoodNum") + "g")
+                        visitedTimes++
                         if (jo.optBoolean("isReachLimit")) {
-                            Log.record(TAG, "今日给[" + UserMap.getMaskName(userId) + "]送麦子已达上限");
-                            visitedTimes = 3;
-                            break;
+                            Log.record(TAG, "今日给[" + UserMap.getMaskName(userId) + "]送麦子已达上限")
+                            visitedTimes = 3
+                            break
                         }
                     }
-                    GlobalThreadPools.sleep(800L);
+                    GlobalThreadPools.sleep(800L)
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "visitFriend err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "visitFriend err:")
+            Log.printStackTrace(TAG, t)
         }
-        return visitedTimes;
+        return visitedTimes
     }
 
-    private void acceptGift() {
+    private fun acceptGift() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.acceptGift());
+            val jo = JSONObject(AntFarmRpcCall.acceptGift())
             if (ResChecker.checkRes(TAG, jo)) {
-                int receiveFoodNum = jo.getInt("receiveFoodNum");
-                Log.farm("收取麦子🌾[" + receiveFoodNum + "g]");
+                val receiveFoodNum = jo.getInt("receiveFoodNum")
+                Log.farm("收取麦子🌾[" + receiveFoodNum + "g]")
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "acceptGift err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "acceptGift err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -2046,53 +2055,51 @@ public class AntFarm extends ModelTask {
      *
      * @param queryDayStr 日期，格式：yyyy-MM-dd
      */
-    private void diaryTietie(String queryDayStr) {
-        String diaryDateStr;
+    private fun diaryTietie(queryDayStr: String?) {
+        val diaryDateStr: String?
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr));
+            var jo = JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr))
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject data = jo.getJSONObject("data");
-                JSONObject chickenDiary = data.getJSONObject("chickenDiary");
-                diaryDateStr = chickenDiary.getString("diaryDateStr");
+                val data = jo.getJSONObject("data")
+                val chickenDiary = data.getJSONObject("chickenDiary")
+                diaryDateStr = chickenDiary.getString("diaryDateStr")
                 if (data.has("hasTietie")) {
                     if (!data.optBoolean("hasTietie", true)) {
-                        jo = new JSONObject(AntFarmRpcCall.diaryTietie(diaryDateStr, "NEW"));
+                        jo = JSONObject(AntFarmRpcCall.diaryTietie(diaryDateStr, "NEW"))
                         if (ResChecker.checkRes(TAG, jo)) {
-                            String prizeType = jo.getString("prizeType");
-                            int prizeNum = jo.optInt("prizeNum", 0);
-                            Log.farm("[" + diaryDateStr + "]" + "贴贴小鸡💞[" + prizeType + "*" + prizeNum + "]");
+                            val prizeType = jo.getString("prizeType")
+                            val prizeNum = jo.optInt("prizeNum", 0)
+                            Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                         } else {
-                            Log.runtime(TAG, "贴贴小鸡失败:");
-                            Log.runtime(jo.getString("memo"), jo.toString());
+                            Log.runtime(TAG, "贴贴小鸡失败:")
+                            Log.runtime(jo.getString("memo"), jo.toString())
                         }
-                        if (!chickenDiary.has("statisticsList"))
-                            return;
-                        JSONArray statisticsList = chickenDiary.getJSONArray("statisticsList");
+                        if (!chickenDiary.has("statisticsList")) return
+                        val statisticsList = chickenDiary.getJSONArray("statisticsList")
                         if (statisticsList.length() > 0) {
-                            for (int i = 0; i < statisticsList.length(); i++) {
-                                JSONObject tietieStatus = statisticsList.getJSONObject(i);
-                                String tietieRoleId = tietieStatus.getString("tietieRoleId");
-                                jo = new JSONObject(AntFarmRpcCall.diaryTietie(diaryDateStr, tietieRoleId));
+                            for (i in 0..<statisticsList.length()) {
+                                val tietieStatus = statisticsList.getJSONObject(i)
+                                val tietieRoleId = tietieStatus.getString("tietieRoleId")
+                                jo = JSONObject(AntFarmRpcCall.diaryTietie(diaryDateStr, tietieRoleId))
                                 if (ResChecker.checkRes(TAG, jo)) {
-                                    String prizeType = jo.getString("prizeType");
-                                    int prizeNum = jo.optInt("prizeNum", 0);
-                                    Log.farm("[" + diaryDateStr + "]" + "贴贴小鸡💞[" + prizeType + "*" + prizeNum + "]");
+                                    val prizeType = jo.getString("prizeType")
+                                    val prizeNum = jo.optInt("prizeNum", 0)
+                                    Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                                 } else {
-                                    Log.runtime(TAG, "贴贴小鸡失败:");
-                                    Log.runtime(jo.getString("memo"), jo.toString());
+                                    Log.runtime(TAG, "贴贴小鸡失败:")
+                                    Log.runtime(jo.getString("memo"), jo.toString())
                                 }
                             }
                         }
                     }
                 }
-
             } else {
-                Log.runtime(TAG, "贴贴小鸡-获取小鸡日记详情 err:");
-                Log.runtime(jo.getString("resultDesc"), jo.toString());
+                Log.runtime(TAG, "贴贴小鸡-获取小鸡日记详情 err:")
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "queryChickenDiary err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "queryChickenDiary err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -2102,1030 +2109,685 @@ public class AntFarm extends ModelTask {
      * @param queryDayStr
      * @return
      */
-    private String collectChickenDiary(String queryDayStr) {
-        String diaryDateStr = null;
+    private fun collectChickenDiary(queryDayStr: String?): String? {
+        var diaryDateStr: String? = null
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr));
+            var jo = JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr))
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject data = jo.getJSONObject("data");
-                JSONObject chickenDiary = data.getJSONObject("chickenDiary");
-                diaryDateStr = chickenDiary.getString("diaryDateStr");
+                val data = jo.getJSONObject("data")
+                val chickenDiary = data.getJSONObject("chickenDiary")
+                diaryDateStr = chickenDiary.getString("diaryDateStr")
                 // 点赞小鸡日记
                 if (!chickenDiary.optBoolean("collectStatus", true)) {
-                    String diaryId = chickenDiary.getString("diaryId");
-                    jo = new JSONObject(AntFarmRpcCall.collectChickenDiary(diaryId));
+                    val diaryId = chickenDiary.getString("diaryId")
+                    jo = JSONObject(AntFarmRpcCall.collectChickenDiary(diaryId))
                     if (jo.optBoolean("success", true)) {
-                        Log.farm("[" + diaryDateStr + "]" + "点赞小鸡日记💞成功");
+                        Log.farm("[$diaryDateStr]点赞小鸡日记💞成功")
                     }
                 }
             } else {
-                Log.runtime(TAG, "日记点赞-获取小鸡日记详情 err:");
-                Log.runtime(jo.getString("resultDesc"), jo.toString());
+                Log.runtime(TAG, "日记点赞-获取小鸡日记详情 err:")
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "queryChickenDiary err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "queryChickenDiary err:")
+            Log.printStackTrace(TAG, t)
         }
-        return diaryDateStr;
+        return diaryDateStr
     }
 
-    private boolean queryChickenDiaryList(String queryMonthStr, Function<String, String> fun) {
-        boolean hasPreviousMore = false;
+    private fun queryChickenDiaryList(
+        queryMonthStr: String?,
+        action: (String) -> String // ✅ 使用 Kotlin 函数类型
+    ): Boolean {
+        var hasPreviousMore = false
         try {
-            JSONObject jo = null;
-            if (StringUtil.isEmpty(queryMonthStr)) {
-                jo = new JSONObject(AntFarmRpcCall.queryChickenDiaryList());
+            val jo = if (StringUtil.isEmpty(queryMonthStr)) {
+                JSONObject(AntFarmRpcCall.queryChickenDiaryList())
             } else {
-                jo = new JSONObject(AntFarmRpcCall.queryChickenDiaryList(queryMonthStr));
+                JSONObject(AntFarmRpcCall.queryChickenDiaryList(queryMonthStr))
             }
+
             if (ResChecker.checkRes(TAG, jo)) {
-                jo = jo.getJSONObject("data");
-                hasPreviousMore = jo.optBoolean("hasPreviousMore", false);
-                JSONArray chickenDiaryBriefList = jo.optJSONArray("chickenDiaryBriefList");
+                val data = jo.getJSONObject("data")
+                hasPreviousMore = data.optBoolean("hasPreviousMore", false)
+                val chickenDiaryBriefList = data.optJSONArray("chickenDiaryBriefList")
+
                 if (chickenDiaryBriefList != null && chickenDiaryBriefList.length() > 0) {
-                    for (int i = chickenDiaryBriefList.length() - 1; i >= 0; i--) {
-                        jo = chickenDiaryBriefList.getJSONObject(i);
-                        if (!jo.optBoolean("read", true) ||
-                                !jo.optBoolean("collectStatus")) {
-                            String dateStr = jo.getString("dateStr");
-                            fun.apply(dateStr);
-                            GlobalThreadPools.sleep(300);
+                    for (i in chickenDiaryBriefList.length() - 1 downTo 0) {
+                        val item = chickenDiaryBriefList.getJSONObject(i)
+                        if (!item.optBoolean("read", true) || !item.optBoolean("collectStatus")) {
+                            val dateStr = item.getString("dateStr")
+                            action(dateStr) // ✅ 直接调用
+                            GlobalThreadPools.sleep(300)
                         }
                     }
                 }
             } else {
-                Log.runtime(jo.getString("resultDesc"), jo.toString());
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
-        } catch (Throwable t) {
-            hasPreviousMore = false;
-            Log.runtime(TAG, "queryChickenDiaryList err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            hasPreviousMore = false
+            Log.runtime(TAG, "queryChickenDiaryList err:")
+            Log.printStackTrace(TAG, t)
         }
-        return hasPreviousMore;
+        return hasPreviousMore
     }
 
-    private void doChickenDiary() {
 
-        if (diaryTietie.getValue()) { // 贴贴小鸡
-            diaryTietie("");
+    private fun doChickenDiary() {
+        if (diaryTietie!!.value) { // 贴贴小鸡
+            diaryTietie("")
         }
 
         // 小鸡日记点赞
-        String dateStr = null;
-        YearMonth yearMonth = YearMonth.now();
-        boolean previous = false;
+        var dateStr: String? = null
+        var yearMonth = YearMonth.now()
+        var previous = false
         try {
-            if (collectChickenDiary.getValue() >= collectChickenDiaryType.ONCE) {
-                GlobalThreadPools.sleep(300);
-                dateStr = collectChickenDiary("");
+            if (collectChickenDiary!!.value >= CollectChickenDiaryType.Companion.ONCE) {
+                GlobalThreadPools.sleep(300)
+                dateStr = collectChickenDiary("")
             }
-            if (collectChickenDiary.getValue() >= collectChickenDiaryType.MONTH) {
+            if (collectChickenDiary!!.value >= CollectChickenDiaryType.Companion.MONTH) {
                 if (dateStr == null) {
-                    Log.error(TAG, "小鸡日记点赞-dateStr为空，使用当前日期");
+                    Log.error(TAG, "小鸡日记点赞-dateStr为空，使用当前日期")
                 } else {
-                    yearMonth = YearMonth.from(LocalDate.parse(dateStr));
+                    yearMonth = YearMonth.from(LocalDate.parse(dateStr))
                 }
-                GlobalThreadPools.sleep(300);
-                previous = queryChickenDiaryList(yearMonth.toString(), this::collectChickenDiary);
+                GlobalThreadPools.sleep(300)
+                previous = queryChickenDiaryList(yearMonth.toString()) { dateStr ->
+                    collectChickenDiary(dateStr).toString()
+                }
             }
-            if (collectChickenDiary.getValue() >= collectChickenDiaryType.ALL) {
+            if (collectChickenDiary!!.value >= CollectChickenDiaryType.Companion.ALL) {
                 while (previous) {
-                    GlobalThreadPools.sleep(300);
-                    yearMonth = yearMonth.minusMonths(1);
-                    previous = queryChickenDiaryList(yearMonth.toString(), this::collectChickenDiary);
+                    GlobalThreadPools.sleep(300)
+                    yearMonth = yearMonth.minusMonths(1)
+                    previous = queryChickenDiaryList(yearMonth.toString()) { dateStr ->
+                        collectChickenDiary(dateStr).toString()
+                    }
                 }
             }
-        } catch (Exception e) {
-            Log.runtime(TAG, "doChickenDiary err:");
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.runtime(TAG, "doChickenDiary err:")
+            Log.printStackTrace(TAG, e)
         }
     }
 
-    private void visitAnimal() {
+    private fun visitAnimal() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.visitAnimal());
+            var jo = JSONObject(AntFarmRpcCall.visitAnimal())
             if (ResChecker.checkRes(TAG, jo)) {
-                if (!jo.has("talkConfigs"))
-                    return;
-                JSONArray talkConfigs = jo.getJSONArray("talkConfigs");
-                JSONArray talkNodes = jo.getJSONArray("talkNodes");
-                JSONObject data = talkConfigs.getJSONObject(0);
-                String farmId = data.getString("farmId");
-                jo = new JSONObject(AntFarmRpcCall.feedFriendAnimalVisit(farmId));
+                if (!jo.has("talkConfigs")) return
+                val talkConfigs = jo.getJSONArray("talkConfigs")
+                val talkNodes = jo.getJSONArray("talkNodes")
+                val data = talkConfigs.getJSONObject(0)
+                val farmId = data.getString("farmId")
+                jo = JSONObject(AntFarmRpcCall.feedFriendAnimalVisit(farmId))
                 if (ResChecker.checkRes(TAG, jo)) {
-                    for (int i = 0; i < talkNodes.length(); i++) {
-                        jo = talkNodes.getJSONObject(i);
-                        if (!"FEED".equals(jo.getString("type")))
-                            continue;
-                        String consistencyKey = jo.getString("consistencyKey");
-                        jo = new JSONObject(AntFarmRpcCall.visitAnimalSendPrize(consistencyKey));
+                    for (i in 0..<talkNodes.length()) {
+                        jo = talkNodes.getJSONObject(i)
+                        if ("FEED" != jo.getString("type")) continue
+                        val consistencyKey = jo.getString("consistencyKey")
+                        jo = JSONObject(AntFarmRpcCall.visitAnimalSendPrize(consistencyKey))
                         if (ResChecker.checkRes(TAG, jo)) {
-                            String prizeName = jo.getString("prizeName");
-                            Log.farm("小鸡到访💞[" + prizeName + "]");
+                            val prizeName = jo.getString("prizeName")
+                            Log.farm("小鸡到访💞[$prizeName]")
                         } else {
-                            Log.runtime(jo.getString("memo"), jo.toString());
+                            Log.runtime(jo.getString("memo"), jo.toString())
                         }
                     }
                 } else {
-                    Log.runtime(jo.getString("memo"), jo.toString());
+                    Log.runtime(jo.getString("memo"), jo.toString())
                 }
             } else {
-                Log.runtime(jo.getString("resultDesc"), jo.toString());
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "visitAnimal err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "visitAnimal err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
     /* 雇佣好友小鸡 */
-    private void hireAnimal() {
-        JSONArray animals = null;
+    private fun hireAnimal() {
+        var animals: JSONArray? = null
         try {
-            JSONObject jsonObject = enterFarm();
+            val jsonObject = enterFarm()
             if (jsonObject == null) {
-                return;
+                return
             }
-            if ("SUCCESS".equals(jsonObject.getString("memo"))) {
-                JSONObject farmVO = jsonObject.getJSONObject("farmVO");
-                JSONObject subFarmVO = farmVO.getJSONObject("subFarmVO");
-                animals = subFarmVO.getJSONArray("animals");
+            if ("SUCCESS" == jsonObject.getString("memo")) {
+                val farmVO = jsonObject.getJSONObject("farmVO")
+                val subFarmVO = farmVO.getJSONObject("subFarmVO")
+                animals = subFarmVO.getJSONArray("animals")
             } else {
-                Log.record(jsonObject.getString("memo"));
+                Log.record(jsonObject.getString("memo"))
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "getAnimalCount err:");
-            Log.printStackTrace(TAG, t);
-            return;
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "getAnimalCount err:")
+            Log.printStackTrace(TAG, t)
+            return
         }
         if (animals == null) {
-            return;
+            return
         }
         try {
-            for (int i = 0, len = animals.length(); i < len; i++) {
-                JSONObject joo = animals.getJSONObject(i);
-                if (Objects.equals(joo.getString("subAnimalType"), "WORK")) {
-                    String taskId = "HIRE|" + joo.getString("animalId");
-                    long beHiredEndTime = joo.getLong("beHiredEndTime");
+            var i = 0
+            val len = animals.length()
+            while (i < len) {
+                val joo = animals.getJSONObject(i)
+                if (joo.getString("subAnimalType") == "WORK") {
+                    val taskId = "HIRE|" + joo.getString("animalId")
+                    val beHiredEndTime = joo.getLong("beHiredEndTime")
                     if (!hasChildTask(taskId)) {
-                        addChildTask(new ChildModelTask(taskId, "HIRE", () -> {
-                            if (hireAnimal.getValue()) {
-                                hireAnimal();
+                        addChildTask(ChildModelTask(taskId, "HIRE", Runnable {
+                            if (hireAnimal!!.value) {
+                                hireAnimal()
                             }
-                        }, beHiredEndTime));
-                        Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行");
+                        }, beHiredEndTime))
+                        Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行")
                     } else {
-                        addChildTask(new ChildModelTask(taskId, "HIRE", () -> {
-                            if (hireAnimal.getValue()) {
-                                hireAnimal();
+                        addChildTask(ChildModelTask(taskId, "HIRE", Runnable {
+                            if (hireAnimal!!.value) {
+                                hireAnimal()
                             }
-                        }, beHiredEndTime));
+                        }, beHiredEndTime))
                     }
                 }
+                i++
             }
-            int animalCount = animals.length();
+            var animalCount = animals.length()
             if (animalCount >= 3) {
-                return;
+                return
             }
-            Log.farm("雇佣小鸡👷[当前可雇佣小鸡数量:" + (3 - animalCount) + "只]");
+            Log.farm("雇佣小鸡👷[当前可雇佣小鸡数量:" + (3 - animalCount) + "只]")
             if (foodStock < 50) {
-                Log.record(TAG, "饲料不足，暂不雇佣");
-                return;
+                Log.record(TAG, "饲料不足，暂不雇佣")
+                return
             }
-            Set<String> hireAnimalSet = hireAnimalList.getValue();
-            boolean hasNext;
-            int pageStartSum = 0;
-            String s;
-            JSONObject jo;
+            val hireAnimalSet = hireAnimalList!!.value
+            var hasNext: Boolean
+            var pageStartSum = 0
+            var s: String?
+            var jo: JSONObject?
             do {
-                s = AntFarmRpcCall.rankingList(pageStartSum);
-                jo = new JSONObject(s);
-                String memo = jo.getString("memo");
+                s = AntFarmRpcCall.rankingList(pageStartSum)
+                jo = JSONObject(s)
+                val memo = jo.getString("memo")
                 if (ResChecker.checkRes(TAG, jo)) {
-                    hasNext = jo.getBoolean("hasNext");
-                    JSONArray jaRankingList = jo.getJSONArray("rankingList");
-                    pageStartSum += jaRankingList.length();
-                    for (int i = 0; i < jaRankingList.length(); i++) {
-                        JSONObject joo = jaRankingList.getJSONObject(i);
-                        String userId = joo.getString("userId");
-                        boolean isHireAnimal = hireAnimalSet.contains(userId);
-                        if (hireAnimalType.getValue() == HireAnimalType.DONT_HIRE) {
-                            isHireAnimal = !isHireAnimal;
+                    hasNext = jo.getBoolean("hasNext")
+                    val jaRankingList = jo.getJSONArray("rankingList")
+                    pageStartSum += jaRankingList.length()
+                    for (i in 0..<jaRankingList.length()) {
+                        val joo = jaRankingList.getJSONObject(i)
+                        val userId = joo.getString("userId")
+                        var isHireAnimal = hireAnimalSet.contains(userId)
+                        if (hireAnimalType!!.value == HireAnimalType.Companion.DONT_HIRE) {
+                            isHireAnimal = !isHireAnimal
                         }
-                        if (!isHireAnimal || userId.equals(UserMap.getCurrentUid())) {
-                            continue;
+                        if (!isHireAnimal || userId == UserMap.currentUid) {
+                            continue
                         }
-                        String actionTypeListStr = joo.getJSONArray("actionTypeList").toString();
+                        val actionTypeListStr = joo.getJSONArray("actionTypeList").toString()
                         if (actionTypeListStr.contains("can_hire_action")) {
                             if (hireAnimalAction(userId)) {
-                                animalCount++;
-                                break;
+                                animalCount++
+                                break
                             }
                         }
                     }
                 } else {
-                    Log.record(memo);
-                    Log.runtime(s);
-                    break;
+                    Log.record(memo)
+                    Log.runtime(s)
+                    break
                 }
-            } while (hasNext && animalCount < 3);
+            } while (hasNext && animalCount < 3)
             if (animalCount < 3) {
-                Log.farm("雇佣小鸡失败，没有足够的小鸡可以雇佣");
+                Log.farm("雇佣小鸡失败，没有足够的小鸡可以雇佣")
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "hireAnimal err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "hireAnimal err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
-    private boolean hireAnimalAction(String userId) {
+    private fun hireAnimalAction(userId: String?): Boolean {
         try {
-            String s = AntFarmRpcCall.enterFarm(userId, userId);
-            JSONObject jo = new JSONObject(s);
+            val s = AntFarmRpcCall.enterFarm(userId, userId)
+            var jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject farmVO = jo.getJSONObject("farmVO");
-                JSONObject subFarmVO = farmVO.getJSONObject("subFarmVO");
-                String farmId = subFarmVO.getString("farmId");
-                JSONArray animals = subFarmVO.getJSONArray("animals");
-                for (int i = 0, len = animals.length(); i < len; i++) {
-                    JSONObject animal = animals.getJSONObject(i);
-                    if (Objects.equals(animal.getJSONObject("masterUserInfoVO").getString("userId"), userId)) {
-                        String animalId = animal.getString("animalId");
-                        jo = new JSONObject(AntFarmRpcCall.hireAnimal(farmId, animalId));
+                val farmVO = jo.getJSONObject("farmVO")
+                val subFarmVO = farmVO.getJSONObject("subFarmVO")
+                val farmId = subFarmVO.getString("farmId")
+                val animals = subFarmVO.getJSONArray("animals")
+                var i = 0
+                val len = animals.length()
+                while (i < len) {
+                    val animal = animals.getJSONObject(i)
+                    if (animal.getJSONObject("masterUserInfoVO").getString("userId") == userId) {
+                        val animalId = animal.getString("animalId")
+                        jo = JSONObject(AntFarmRpcCall.hireAnimal(farmId, animalId))
                         if (ResChecker.checkRes(TAG, jo)) {
-                            Log.farm("雇佣小鸡👷[" + UserMap.getMaskName(userId) + "] 成功");
-                            JSONArray newAnimals = jo.getJSONArray("animals");
-                            for (int ii = 0, newLen = newAnimals.length(); ii < newLen; ii++) {
-                                JSONObject joo = newAnimals.getJSONObject(ii);
-                                if (Objects.equals(joo.getString("animalId"), animalId)) {
-                                    long beHiredEndTime = joo.getLong("beHiredEndTime");
-                                    addChildTask(new ChildModelTask("HIRE|" + animalId, "HIRE", () -> {
-                                        if (hireAnimal.getValue()) {
-                                            hireAnimal();
+                            Log.farm("雇佣小鸡👷[" + UserMap.getMaskName(userId) + "] 成功")
+                            val newAnimals = jo.getJSONArray("animals")
+                            var ii = 0
+                            val newLen = newAnimals.length()
+                            while (ii < newLen) {
+                                val joo = newAnimals.getJSONObject(ii)
+                                if (joo.getString("animalId") == animalId) {
+                                    val beHiredEndTime = joo.getLong("beHiredEndTime")
+                                    addChildTask(ChildModelTask("HIRE|$animalId", "HIRE", Runnable {
+                                        if (hireAnimal!!.value) {
+                                            hireAnimal()
                                         }
-                                    }, beHiredEndTime));
-                                    Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行");
-                                    break;
+                                    }, beHiredEndTime))
+                                    Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行")
+                                    break
                                 }
+                                ii++
                             }
-                            return true;
+                            return true
                         } else {
-                            Log.record(jo.getString("memo"));
-                            Log.runtime(s);
+                            Log.record(jo.getString("memo"))
+                            Log.runtime(s)
                         }
-                        return false;
+                        return false
                     }
+                    i++
                 }
             } else {
-                Log.record(jo.getString("memo"));
+                Log.record(jo.getString("memo"))
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "hireAnimal err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "hireAnimal err:")
+            Log.printStackTrace(TAG, t)
         }
-        return false;
+        return false
     }
 
-    private void drawGameCenterAward() {
+    private fun drawGameCenterAward() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryGameList());
-            GlobalThreadPools.sleep(3000);
+            var jo = JSONObject(AntFarmRpcCall.queryGameList())
+            GlobalThreadPools.sleep(3000)
             if (jo.optBoolean("success")) {
-                JSONObject gameDrawAwardActivity = jo.getJSONObject("gameDrawAwardActivity");
-                int canUseTimes = gameDrawAwardActivity.getInt("canUseTimes");
+                val gameDrawAwardActivity = jo.getJSONObject("gameDrawAwardActivity")
+                var canUseTimes = gameDrawAwardActivity.getInt("canUseTimes")
                 while (canUseTimes > 0) {
                     try {
-                        jo = new JSONObject(AntFarmRpcCall.drawGameCenterAward());
-                        GlobalThreadPools.sleep(3000);
+                        jo = JSONObject(AntFarmRpcCall.drawGameCenterAward())
+                        GlobalThreadPools.sleep(3000)
                         if (jo.optBoolean("success")) {
-                            canUseTimes = jo.getInt("drawRightsTimes");
-                            JSONArray gameCenterDrawAwardList = jo.getJSONArray("gameCenterDrawAwardList");
-                            ArrayList<String> awards = new ArrayList<>();
-                            for (int i = 0; i < gameCenterDrawAwardList.length(); i++) {
-                                JSONObject gameCenterDrawAward = gameCenterDrawAwardList.getJSONObject(i);
-                                int awardCount = gameCenterDrawAward.getInt("awardCount");
-                                String awardName = gameCenterDrawAward.getString("awardName");
-                                awards.add(awardName + "*" + awardCount);
+                            canUseTimes = jo.getInt("drawRightsTimes")
+                            val gameCenterDrawAwardList = jo.getJSONArray("gameCenterDrawAwardList")
+                            val awards = ArrayList<String?>()
+                            for (i in 0..<gameCenterDrawAwardList.length()) {
+                                val gameCenterDrawAward = gameCenterDrawAwardList.getJSONObject(i)
+                                val awardCount = gameCenterDrawAward.getInt("awardCount")
+                                val awardName = gameCenterDrawAward.getString("awardName")
+                                awards.add("$awardName*$awardCount")
                             }
-                            Log.farm("庄园小鸡🎁[开宝箱:获得" + StringUtil.collectionJoinString(",", awards) + "]");
+                            Log.farm("庄园小鸡🎁[开宝箱:获得" + StringUtil.collectionJoinString(",", awards) + "]")
                         } else {
-                            Log.runtime(TAG, "drawGameCenterAward falsed result: " + jo);
+                            Log.runtime(TAG, "drawGameCenterAward falsed result: $jo")
                         }
-                    } catch (Throwable t) {
-                        Log.printStackTrace(TAG, t);
+                    } catch (t: Throwable) {
+                        Log.printStackTrace(TAG, t)
                     }
                 }
             } else {
-                Log.runtime(TAG, "queryGameList falsed result: " + jo);
+                Log.runtime(TAG, "queryGameList falsed result: $jo")
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "queryChickenDiaryList err:");
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "queryChickenDiaryList err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
     // 小鸡换装
-    private void listOrnaments() {
+    private fun listOrnaments() {
         try {
-            String s = AntFarmRpcCall.queryLoveCabin(UserMap.getCurrentUid());
-            JSONObject jsonObject = new JSONObject(s);
-            if ("SUCCESS".equals(jsonObject.getString("memo"))) {
-                JSONObject ownAnimal = jsonObject.getJSONObject("ownAnimal");
-                String animalId = ownAnimal.getString("animalId");
-                String farmId = ownAnimal.getString("farmId");
-                String listResult = AntFarmRpcCall.listOrnaments();
-                JSONObject jolistOrnaments = new JSONObject(listResult);
+            val jsonObject = JSONObject(AntFarmRpcCall.queryLoveCabin(UserMap.currentUid))
+            if (ResChecker.checkRes(TAG, jsonObject)) {
+                val ownAnimal = jsonObject.getJSONObject("ownAnimal")
+                val animalId = ownAnimal.getString("animalId")
+                val farmId = ownAnimal.getString("farmId")
+                val listResult = AntFarmRpcCall.listOrnaments()
+                val jolistOrnaments = JSONObject(listResult)
                 // 检查是否有 achievementOrnaments 数组
                 if (!jolistOrnaments.has("achievementOrnaments")) {
-                    return; // 数组为空，直接返回
+                    return  // 数组为空，直接返回
                 }
-                JSONArray achievementOrnaments = jolistOrnaments.getJSONArray("achievementOrnaments");
-                Random random = new Random();
-                List<String> possibleOrnaments = new ArrayList<>(); // 收集所有可保存的套装组合
-                for (int i = 0; i < achievementOrnaments.length(); i++) {
-                    JSONObject ornament = achievementOrnaments.getJSONObject(i);
+                val achievementOrnaments = jolistOrnaments.getJSONArray("achievementOrnaments")
+                val random = Random()
+                val possibleOrnaments: MutableList<String> = ArrayList() // 收集所有可保存的套装组合
+                for (i in 0..<achievementOrnaments.length()) {
+                    val ornament = achievementOrnaments.getJSONObject(i)
                     if (ornament.getBoolean("acquired")) {
-                        JSONArray sets = ornament.getJSONArray("sets");
-                        List<JSONObject> availableSets = new ArrayList<>();
+                        val sets = ornament.getJSONArray("sets")
+                        val availableSets: MutableList<JSONObject> = ArrayList()
                         // 收集所有带有 cap 和 coat 的套装组合
-                        for (int j = 0; j < sets.length(); j++) {
-                            JSONObject set = sets.getJSONObject(j);
-                            if ("cap".equals(set.getString("subType")) || "coat".equals(set.getString("subType"))) {
-                                availableSets.add(set);
+                        for (j in 0..<sets.length()) {
+                            val set = sets.getJSONObject(j)
+                            if ("cap" == set.getString("subType") || "coat" == set.getString("subType")) {
+                                availableSets.add(set)
                             }
                         }
                         // 如果有可用的帽子和外套套装组合
-                        if (availableSets.size() >= 2) {
+                        if (availableSets.size >= 2) {
                             // 将所有可保存的套装组合添加到 possibleOrnaments 列表中
-                            for (int j = 0; j < availableSets.size() - 1; j++) {
-                                JSONObject selectedCoat = availableSets.get(j);
-                                JSONObject selectedCap = availableSets.get(j + 1);
-                                String id1 = selectedCoat.getString("id"); // 外套 ID
-                                String id2 = selectedCap.getString("id"); // 帽子 ID
-                                String ornaments = id1 + "," + id2;
-                                possibleOrnaments.add(ornaments);
+                            for (j in 0..<availableSets.size - 1) {
+                                val selectedCoat = availableSets[j]
+                                val selectedCap = availableSets[j + 1]
+                                val id1 = selectedCoat.getString("id") // 外套 ID
+                                val id2 = selectedCap.getString("id") // 帽子 ID
+                                val ornaments = "$id1,$id2"
+                                possibleOrnaments.add(ornaments)
                             }
                         }
                     }
                 }
                 // 如果有可保存的套装组合，则随机选择一个进行保存
                 if (!possibleOrnaments.isEmpty()) {
-                    String ornamentsToSave = possibleOrnaments.get(random.nextInt(possibleOrnaments.size()));
-                    String saveResult = AntFarmRpcCall.saveOrnaments(animalId, farmId, ornamentsToSave);
-                    JSONObject saveResultJson = new JSONObject(saveResult);
+                    val ornamentsToSave = possibleOrnaments[random.nextInt(possibleOrnaments.size)]
+                    val saveResult = AntFarmRpcCall.saveOrnaments(animalId, farmId, ornamentsToSave)
+                    val saveResultJson = JSONObject(saveResult)
                     // 判断保存是否成功并输出日志
                     if (saveResultJson.optBoolean("success")) {
                         // 获取保存的整套服装名称
-                        String[] ornamentIds = ornamentsToSave.split(",");
-                        String wholeSetName = ""; // 整套服装名称
+                        val ornamentIds: Array<String?> = ornamentsToSave.split(",".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+                        var wholeSetName = "" // 整套服装名称
                         // 遍历 achievementOrnaments 查找对应的套装名称
-                        for (int i = 0; i < achievementOrnaments.length(); i++) {
-                            JSONObject ornament = achievementOrnaments.getJSONObject(i);
-                            JSONArray sets = ornament.getJSONArray("sets");
+                        for (i in 0..<achievementOrnaments.length()) {
+                            val ornament = achievementOrnaments.getJSONObject(i)
+                            val sets = ornament.getJSONArray("sets")
                             // 找到对应的整套服装名称
-                            if (sets.length() == 2 && sets.getJSONObject(0).getString("id").equals(ornamentIds[0])
-                                    && sets.getJSONObject(1).getString("id").equals(ornamentIds[1])) {
-                                wholeSetName = ornament.getString("name");
-                                break;
+                            if (sets.length() == 2 && sets.getJSONObject(0).getString("id") == ornamentIds[0]
+                                && sets.getJSONObject(1).getString("id") == ornamentIds[1]
+                            ) {
+                                wholeSetName = ornament.getString("name")
+                                break
                             }
                         }
                         // 输出日志
-                        Log.farm("庄园小鸡💞[换装:" + wholeSetName + "]");
-                        Status.setOrnamentToday();
-                    } else {
-                        Log.runtime(TAG, "保存时装失败，错误码： " + saveResultJson);
+                        Log.farm("庄园小鸡💞[换装:$wholeSetName]")
+                        Status.setOrnamentToday()
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "listOrnaments err: " + t.getMessage());
-            Log.printStackTrace(TAG, t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "listOrnaments err: ", t)
         }
     }
 
     // 一起拿小鸡饲料
-    private void letsGetChickenFeedTogether() {
+    private fun letsGetChickenFeedTogether() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.letsGetChickenFeedTogether());
-            if (jo.optBoolean("success")) {
-                String bizTraceId = jo.getString("bizTraceId");
-                JSONArray p2pCanInvitePersonDetailList = jo.getJSONArray("p2pCanInvitePersonDetailList");
-                int canInviteCount = 0;
-                int hasInvitedCount = 0;
-                List<String> userIdList = new ArrayList<>(); // 保存 userId
-                for (int i = 0; i < p2pCanInvitePersonDetailList.length(); i++) {
-                    JSONObject personDetail = p2pCanInvitePersonDetailList.getJSONObject(i);
-                    String inviteStatus = personDetail.getString("inviteStatus");
-                    String userId = personDetail.getString("userId");
-                    if (inviteStatus.equals("CAN_INVITE")) {
-                        userIdList.add(userId);
-                        canInviteCount++;
-                    } else if (inviteStatus.equals("HAS_INVITED")) {
-                        hasInvitedCount++;
+            var jo = JSONObject(AntFarmRpcCall.letsGetChickenFeedTogether())
+            if (ResChecker.checkRes(TAG, jo)) {
+                val bizTraceId = jo.getString("bizTraceId")
+                val p2pCanInvitePersonDetailList = jo.getJSONArray("p2pCanInvitePersonDetailList")
+                var canInviteCount = 0
+                var hasInvitedCount = 0
+                val userIdList: MutableList<String?> = ArrayList<String?>() // 保存 userId
+                for (i in 0..<p2pCanInvitePersonDetailList.length()) {
+                    val personDetail = p2pCanInvitePersonDetailList.getJSONObject(i)
+                    val inviteStatus = personDetail.getString("inviteStatus")
+                    val userId = personDetail.getString("userId")
+                    if (inviteStatus == "CAN_INVITE") {
+                        userIdList.add(userId)
+                        canInviteCount++
+                    } else if (inviteStatus == "HAS_INVITED") {
+                        hasInvitedCount++
                     }
                 }
-                int invitedToday = hasInvitedCount;
-                int remainingInvites = 5 - invitedToday;
-                int invitesToSend = Math.min(canInviteCount, remainingInvites);
+                val invitedToday = hasInvitedCount
+                val remainingInvites = 5 - invitedToday
+                var invitesToSend = min(canInviteCount, remainingInvites)
                 if (invitesToSend == 0) {
-                    return;
+                    return
                 }
-                Set<String> getFeedSet = getFeedlList.getValue();
-                if (getFeedType.getValue() == GetFeedType.GIVE) {
-                    for (String userId : userIdList) {
+                val getFeedSet = getFeedlList!!.value
+                if (getFeedType!!.value == GetFeedType.Companion.GIVE) {
+                    for (userId in userIdList) {
                         if (invitesToSend <= 0) {
 //                            Log.record(TAG,"已达到最大邀请次数限制，停止发送邀请。");
-                            break;
+                            break
                         }
                         if (getFeedSet.contains(userId)) {
-                            jo = new JSONObject(AntFarmRpcCall.giftOfFeed(bizTraceId, userId));
+                            jo = JSONObject(AntFarmRpcCall.giftOfFeed(bizTraceId, userId))
                             if (jo.optBoolean("success")) {
-                                Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]");
-                                invitesToSend--; // 每成功发送一次邀请，减少一次邀请次数
-                            } else {
-                                Log.record(TAG, "邀请失败：" + jo);
-                                break;
+                                Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]")
+                                invitesToSend-- // 每成功发送一次邀请，减少一次邀请次数
                             }
                         }
                     }
                 } else {
-                    Random random = new Random();
-                    for (int j = 0; j < invitesToSend; j++) {
-                        int randomIndex = random.nextInt(userIdList.size());
-                        String userId = userIdList.get(randomIndex);
-                        jo = new JSONObject(AntFarmRpcCall.giftOfFeed(bizTraceId, userId));
+                    val random = Random()
+                    for (j in 0..<invitesToSend) {
+                        val randomIndex = random.nextInt(userIdList.size)
+                        val userId = userIdList[randomIndex]
+                        jo = JSONObject(AntFarmRpcCall.giftOfFeed(bizTraceId, userId))
                         if (jo.optBoolean("success")) {
-                            Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]");
-                        } else {
-                            Log.record(TAG, "邀请失败：" + jo);
-                            break;
+                            Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]")
                         }
-                        userIdList.remove(randomIndex);
+                        userIdList.removeAt(randomIndex)
                     }
                 }
             }
-        } catch (JSONException e) {
-            Log.runtime(TAG, "letsGetChickenFeedTogether err:");
-            Log.printStackTrace(e);
+        } catch (e: JSONException) {
+            Log.printStackTrace(TAG, "letsGetChickenFeedTogether err:", e)
         }
     }
 
-    public interface DonationCount {
-        int ONE = 0;
-        int ALL = 1;
-        String[] nickNames = {"随机一次", "随机多次"};
+    interface DonationCount {
+        companion object {
+            const val ONE: Int = 0
+            const val ALL: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("随机一次", "随机多次")
+        }
     }
 
-    public interface RecallAnimalType {
-        int ALWAYS = 0;
-        int WHEN_THIEF = 1;
-        int WHEN_HUNGRY = 2;
-        int NEVER = 3;
-        String[] nickNames = {"始终召回", "偷吃召回", "饥饿召回", "暂不召回"};
+    interface RecallAnimalType {
+        companion object {
+            const val ALWAYS: Int = 0
+            const val WHEN_THIEF: Int = 1
+            const val WHEN_HUNGRY: Int = 2
+            const val NEVER: Int = 3
+            val nickNames: Array<String?> = arrayOf<String?>("始终召回", "偷吃召回", "饥饿召回", "暂不召回")
+        }
     }
 
-    public interface SendBackAnimalWay {
-        int HIT = 0;
-        int NORMAL = 1;
-        String[] nickNames = {"攻击", "常规"};
+    interface SendBackAnimalWay {
+        companion object {
+            const val HIT: Int = 0
+            const val NORMAL: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("攻击", "常规")
+        }
     }
 
-    public interface SendBackAnimalType {
-        int BACK = 0;
-        int NOT_BACK = 1;
-        String[] nickNames = {"选中遣返", "选中不遣返"};
+    interface SendBackAnimalType {
+        companion object {
+            const val BACK: Int = 0
+            const val NOT_BACK: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("选中遣返", "选中不遣返")
+        }
     }
 
-    public interface collectChickenDiaryType {
-        int CLOSE = 0;
-        int ONCE = 0;
-        int MONTH = 1;
-        int ALL = 2;
-        String[] nickNames = {"不开启", "一次", "当月", "所有"};
+    interface CollectChickenDiaryType {
+        companion object {
+            const val CLOSE: Int = 0
+            const val ONCE: Int = 0
+            const val MONTH: Int = 1
+            const val ALL: Int = 2
+            val nickNames: Array<String?> = arrayOf<String?>("不开启", "一次", "当月", "所有")
+        }
     }
 
-    public enum AnimalBuff {//小鸡buff
+    enum class AnimalBuff {
+        //小鸡buff
         ACCELERATING, INJURED, NONE
     }
 
-    public enum AnimalFeedStatus {
+    enum class AnimalFeedStatus {
         HUNGRY, EATING, SLEEPY
     }
 
-    public enum AnimalInteractStatus { //小鸡关互动状态
+    enum class AnimalInteractStatus {
+        //小鸡关互动状态
         HOME, GOTOSTEAL, STEALING
     }
 
-    public enum SubAnimalType {
+    enum class SubAnimalType {
         NORMAL, GUEST, PIRATE, WORK
     }
 
-    public enum ToolType {
+    enum class ToolType {
         STEALTOOL, ACCELERATETOOL, SHARETOOL, FENCETOOL, NEWEGGTOOL, DOLLTOOL, ORDINARY_ORNAMENT_TOOL, ADVANCE_ORNAMENT_TOOL, BIG_EATER_TOOL, RARE_ORNAMENT_TOOL;
 
-        public static final CharSequence[] nickNames = {"蹭饭卡", "加速卡", "救济卡", "篱笆卡", "新蛋卡", "公仔补签卡", "普通装扮补签卡", "高级装扮补签卡", "加饭卡", "稀有装扮补签卡"};
+        fun nickName(): CharSequence? {
+            return nickNames[ordinal]
+        }
 
-        public CharSequence nickName() {
-            return nickNames[ordinal()];
+        companion object {
+            val nickNames: Array<CharSequence?> =
+                arrayOf<CharSequence?>("蹭饭卡", "加速卡", "救济卡", "篱笆卡", "新蛋卡", "公仔补签卡", "普通装扮补签卡", "高级装扮补签卡", "加饭卡", "稀有装扮补签卡")
         }
     }
 
-    public enum GameType {
-        starGame, jumpGame, flyGame, hitGame;
-        public static final CharSequence[] gameNames = {"星星球", "登山赛", "飞行赛", "欢乐揍小鸡"};
+    enum class GameType {
+        StarGame, JumpGame, FlyGame, HitGame;
 
-        public CharSequence gameName() {
-            return gameNames[ordinal()];
+        fun gameName(): CharSequence? {
+            return gameNames[ordinal]
+        }
+
+        companion object {
+            val gameNames: Array<CharSequence?> = arrayOf<CharSequence?>("星星球", "登山赛", "飞行赛", "欢乐揍小鸡")
         }
     }
 
 
     @ToString
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class Animal {
+    private class Animal {
         @JsonProperty("animalId")
-        public String animalId;
+        var animalId: String? = null
 
         @JsonProperty("currentFarmId")
-        public String currentFarmId;
+        var currentFarmId: String? = null
 
         @JsonProperty("masterFarmId")
-        public String masterFarmId;
+        var masterFarmId: String? = null
 
         @JsonProperty("animalBuff")
-        public String animalBuff;
+        var animalBuff: String? = null
 
         @JsonProperty("subAnimalType")
-        public String subAnimalType;
+        var subAnimalType: String? = null
 
         @JsonProperty("currentFarmMasterUserId")
-        public String currentFarmMasterUserId;
+        var currentFarmMasterUserId: String? = null
 
-        public String animalFeedStatus;
+        var animalFeedStatus: String? = null
 
-        public String animalInteractStatus;
+        var animalInteractStatus: String? = null
 
         @JsonProperty("locationType")
-        public String locationType;
+        var locationType: String? = null
 
         @JsonProperty("startEatTime")
-        public Long startEatTime;
+        var startEatTime: Long? = null
 
         @JsonProperty("consumeSpeed")
-        public Double consumeSpeed;
+        var consumeSpeed: Double? = null
 
         @JsonProperty("foodHaveEatten")
-        public Double foodHaveEatten;
+        var foodHaveEatten: Double? = null
 
-        @JsonProperty("animalStatusVO")
-        private void unmarshalAnimalStatusVO(Map<String, Object> map) {
-            if (map != null) {
-                this.animalFeedStatus = (String) map.get("animalFeedStatus");
-                this.animalInteractStatus = (String) map.get("animalInteractStatus");
-            }
+    }
+
+    private class RewardFriend {
+        var consistencyKey: String? = null
+        var friendId: String? = null
+        var time: String? = null
+    }
+
+    private class FarmTool {
+        var toolType: ToolType? = null
+        var toolId: String? = null
+        var toolCount: Int = 0
+        var toolHoldLimit: Int = 0
+    }
+
+    @Suppress("unused")
+    interface HireAnimalType {
+        companion object {
+            const val HIRE: Int = 0
+            const val DONT_HIRE: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("选中雇佣", "选中不雇佣")
         }
     }
 
-    private static class RewardFriend {
-        public String consistencyKey, friendId, time;
+    @Suppress("unused")
+    interface GetFeedType {
+        companion object {
+            const val GIVE: Int = 0
+            const val RANDOM: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("选中赠送", "随机赠送")
+        }
     }
 
-    private static class FarmTool {
-        public ToolType toolType;
-        public String toolId;
-        public int toolCount, toolHoldLimit;
+    interface NotifyFriendType {
+        companion object {
+            const val NOTIFY: Int = 0
+            const val DONT_NOTIFY: Int = 1
+            val nickNames: Array<String?> = arrayOf<String?>("选中通知", "选中不通知")
+        }
     }
 
-    @SuppressWarnings("unused")
-    public interface HireAnimalType {
-        int HIRE = 0;
-        int DONT_HIRE = 1;
-        String[] nickNames = {"选中雇佣", "选中不雇佣"};
-    }
-
-    @SuppressWarnings("unused")
-    public interface GetFeedType {
-        int GIVE = 0;
-        int RANDOM = 1;
-        String[] nickNames = {"选中赠送", "随机赠送"};
-    }
-
-    public interface NotifyFriendType {
-        int NOTIFY = 0;
-        int DONT_NOTIFY = 1;
-        String[] nickNames = {"选中通知", "选中不通知"};
-    }
-
-    public enum PropStatus {
+    enum class PropStatus {
         REACH_USER_HOLD_LIMIT, NO_ENOUGH_POINT, REACH_LIMIT;
 
-        public static final CharSequence[] nickNames = {"达到用户持有上限", "乐园币不足", "兑换达到上限"};
+        fun nickName(): CharSequence? {
+            return nickNames[ordinal]
+        }
 
-        public CharSequence nickName() {
-            return nickNames[ordinal()];
+        companion object {
+            val nickNames: Array<CharSequence?> = arrayOf<CharSequence?>("达到用户持有上限", "乐园币不足", "兑换达到上限")
         }
     }
 
-    public void family() {
-        if (StringUtil.isEmpty(familyGroupId)) {
-            return;
-        }
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterFamily());
-            if (!ResChecker.checkRes(TAG, jo)) return;
-            familyGroupId = jo.getString("groupId");
-            int familyAwardNum = jo.getInt("familyAwardNum");
-            boolean familySignTips = jo.getBoolean("familySignTips");
-            //顶梁柱
-            JSONObject assignFamilyMemberInfo = jo.getJSONObject("assignFamilyMemberInfo");
-            //美食配置
-            JSONObject eatTogetherConfig = jo.getJSONObject("eatTogetherConfig");
-            //扭蛋
-            JSONObject familyDrawInfo = jo.getJSONObject("familyDrawInfo");
-            JSONArray familyInteractActions = jo.getJSONArray("familyInteractActions");
-            JSONArray animals = jo.getJSONArray("animals");
-            List<String> familyUserIds = new ArrayList<>();
-
-            for (int i = 0; i < animals.length(); i++) {
-                jo = animals.getJSONObject(i);
-                String userId = jo.getString("userId");
-                familyUserIds.add(userId);
-            }
-            if (familySignTips && familyOptions.getValue().contains("familySign")) {
-                AntFarmFamily.INSTANCE.familySign();
-            }
-            if (familyAwardNum > 0 && familyOptions.getValue().contains("familyClaimReward")) {
-                AntFarmFamily.INSTANCE.familyClaimRewardList();
-            }
-
-            //帮喂成员
-            if (familyOptions.getValue().contains("feedFriendAnimal")) {
-                familyFeedFriendAnimal(animals);
-            }
-            //请吃美食
-            if (familyOptions.getValue().contains("eatTogetherConfig")) {
-                familyEatTogether(eatTogetherConfig, familyInteractActions, familyUserIds);
-            }
-
-            //好友分享
-            if (familyOptions.getValue().contains("inviteFriendVisitFamily")) {
-                inviteFriendVisitFamily(familyUserIds);
-            }
-            boolean drawActivitySwitch = familyDrawInfo.getBoolean("drawActivitySwitch");
-            //扭蛋
-            if (drawActivitySwitch && familyOptions.getValue().contains("familyDrawInfo")) {
-                familyDrawTask(familyUserIds, familyDrawInfo);
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "family err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-
-    private void syncFamilyStatusIntimacy(String groupId) {
-        try {
-            String userId = UserMap.getCurrentUid();
-            JSONObject jo = new JSONObject(AntFarmRpcCall.syncFamilyStatus(groupId, "INTIMACY_VALUE", userId));
-            ResChecker.checkRes(TAG, jo);
-        } catch (Throwable t) {
-            Log.runtime(TAG, "syncFamilyStatus err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private void inviteFriendVisitFamily(List<String> friendUserIds) {
-        try {
-            if (Status.hasFlagToday("antFarm::inviteFriendVisitFamily")) {
-                return;
-            }
-            Set<String> familyValue = notInviteList.getValue();
-            if (familyValue.isEmpty()) {
-                return;
-            }
-            if (Objects.isNull(friendUserIds) || friendUserIds.isEmpty()) {
-                return;
-            }
-            JSONArray userIdArray = new JSONArray();
-            for (String u : familyValue) {
-                if (!friendUserIds.contains(u) && userIdArray.length() < 6) {
-                    userIdArray.put(u);
-                }
-                if (userIdArray.length() >= 6) {
-                    break;
-                }
-            }
-            JSONObject jo = new JSONObject(AntFarmRpcCall.inviteFriendVisitFamily(userIdArray));
-            if (Objects.equals("SUCCESS", jo.getString("memo"))) {
-                Log.farm("亲密家庭🏠提交任务[分享好友]");
-                Status.setFlagToday("antFarm::inviteFriendVisitFamily");
-                GlobalThreadPools.sleep(500);
-                syncFamilyStatusIntimacy(familyGroupId);
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "inviteFriendVisitFamily err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private void familyBatchInviteP2PTask(List<String> friendUserIds, JSONObject familyDrawInfo) {
-        try {
-            if (Status.hasFlagToday("antFarm::familyBatchInviteP2P")) {
-                return;
-            }
-            if (Objects.isNull(friendUserIds) || friendUserIds.isEmpty()) {
-                return;
-            }
-            String activityId = familyDrawInfo.optString("activityId");
-            String sceneCode = "ANTFARM_FD_VISIT_" + activityId;
-            JSONObject jo = new JSONObject(AntFarmRpcCall.familyShareP2PPanelInfo(sceneCode));
-            if (ResChecker.checkRes(TAG, jo)) {
-                JSONArray p2PFriendVOList = jo.getJSONArray("p2PFriendVOList");
-                if (Objects.isNull(p2PFriendVOList) || p2PFriendVOList.length() <= 0) {
-                    return;
-                }
-                JSONArray inviteP2PVOList = new JSONArray();
-                for (int i = 0; i < p2PFriendVOList.length(); i++) {
-                    if (inviteP2PVOList.length() < 6) {
-                        JSONObject object = new JSONObject();
-                        object.put("beInvitedUserId", p2PFriendVOList.getJSONObject(i).getString("userId"));
-                        object.put("bizTraceId", "");
-                        inviteP2PVOList.put(object);
-                    }
-                    if (inviteP2PVOList.length() >= 6) {
-                        break;
-                    }
-                }
-                jo = new JSONObject(AntFarmRpcCall.familyBatchInviteP2P(inviteP2PVOList, sceneCode));
-                if (ResChecker.checkRes(TAG, jo)) {
-                    Log.farm("亲密家庭🏠提交任务[好友串门送扭蛋]");
-                    Status.setFlagToday("antFarm::familyBatchInviteP2P");
-                    GlobalThreadPools.sleep(500);
-                }
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyBatchInviteP2PTask err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private void familyDrawTask(List<String> friendUserIds, JSONObject familyDrawInfo) {
-        try {
-            JSONArray listFarmTask = familyDrawListFarmTask();
-            if (listFarmTask == null) {
-                return;
-            }
-            for (int i = 0; i < listFarmTask.length(); i++) {
-                JSONObject jo = listFarmTask.getJSONObject(i);
-                TaskStatus taskStatus = TaskStatus.valueOf(jo.getString("taskStatus"));
-                String taskId = jo.optString("taskId");
-                String title = jo.optString("title");
-                if (taskStatus == TaskStatus.RECEIVED) {
-                    continue;
-                }
-                if (taskStatus == TaskStatus.TODO && Objects.equals(taskId, "FAMILY_DRAW_VISIT_TASK") && familyOptions.getValue().contains("batchInviteP2P")) {
-                    //分享
-                    familyBatchInviteP2PTask(friendUserIds, familyDrawInfo);
-                    continue;
-                }
-                if (taskStatus == TaskStatus.FINISHED && Objects.equals(taskId, "FAMILY_DRAW_FREE_TASK")) {
-                    //签到
-                    familyDrawSignReceiveFarmTaskAward(taskId, title);
-                    continue;
-                }
-                GlobalThreadPools.sleep(1000);
-            }
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryFamilyDrawActivity());
-            if (ResChecker.checkRes(TAG, jo)) {
-                GlobalThreadPools.sleep(1000);
-                int drawTimes = jo.optInt("familyDrawTimes");
-                //碎片个数
-                int giftNum = jo.optInt("mengliFragmentCount");
-                if (giftNum >= 20 && !Objects.isNull(giftFamilyDrawFragment.getValue())) {
-                    giftFamilyDrawFragment(giftFamilyDrawFragment.getValue(), giftNum);
-                }
-                for (int i = 0; i < drawTimes; i++) {
-                    if (!familyDraw()) {
-                        return;
-                    }
-                    GlobalThreadPools.sleep(1500);
-                }
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyDrawTask err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private void giftFamilyDrawFragment(String giftUserId, int giftNum) {
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.giftFamilyDrawFragment(giftUserId, giftNum));
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("亲密家庭🏠赠送扭蛋碎片#" + giftNum + "个#" + giftUserId);
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "giftFamilyDrawFragment err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private JSONArray familyDrawListFarmTask() {
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.familyDrawListFarmTask());
-            if (ResChecker.checkRes(TAG, jo)) {
-                return jo.getJSONArray("farmTaskList");
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyDrawListFarmTask err:");
-            Log.printStackTrace(TAG, t);
-        }
-        return null;
-    }
-
-    private Boolean familyDraw() {
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.familyDraw());
-            if (ResChecker.checkRes(TAG, jo)) {
-                JSONObject familyDrawPrize = jo.getJSONObject("familyDrawPrize");
-                String title = familyDrawPrize.optString("title");
-                String awardCount = familyDrawPrize.getString("awardCount");
-                int familyDrawTimes = jo.optInt("familyDrawTimes");
-                Log.farm("开扭蛋🎟️抽中[" + title + "]#[" + awardCount + "]");
-                return familyDrawTimes != 0;
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyDraw err:");
-            Log.printStackTrace(TAG, t);
-        }
-        return false;
-    }
-
-    private void familyEatTogether(JSONObject eatTogetherConfig, JSONArray familyInteractActions, List<String> friendUserIds) {
-        try {
-            boolean isEat = false;
-            JSONArray periodItemList = eatTogetherConfig.getJSONArray("periodItemList");
-            if (Objects.isNull(periodItemList) || periodItemList.length() <= 0) {
-                return;
-            }
-            if (!Objects.isNull(familyInteractActions) && familyInteractActions.length() > 0) {
-                for (int i = 0; i < familyInteractActions.length(); i++) {
-                    JSONObject familyInteractAction = familyInteractActions.getJSONObject(i);
-                    if ("EatTogether".equals(familyInteractAction.optString("familyInteractType"))) {
-                        return;
-                    }
-                }
-            }
-            String periodName = "";
-            Calendar currentTime = Calendar.getInstance();
-            for (int i = 0; i < periodItemList.length(); i++) {
-                JSONObject periodItem = periodItemList.getJSONObject(i);
-                int startHour = periodItem.optInt("startHour");
-                int startMinute = periodItem.optInt("startMinute");
-                int endHour = periodItem.optInt("endHour");
-                int endMinute = periodItem.optInt("endMinute");
-                Calendar startTime = Calendar.getInstance();
-                startTime.set(Calendar.HOUR_OF_DAY, startHour);
-                startTime.set(Calendar.MINUTE, startMinute);
-                Calendar endTime = Calendar.getInstance();
-                endTime.set(Calendar.HOUR_OF_DAY, endHour);
-                endTime.set(Calendar.MINUTE, endMinute);
-                if (currentTime.after(startTime) && currentTime.before(endTime)) {
-                    periodName = periodItem.optString("periodName");
-                    isEat = true;
-                    break;
-                }
-            }
-            if (!isEat) {
-                return;
-            }
-            if (Objects.isNull(friendUserIds) || friendUserIds.isEmpty()) {
-                return;
-            }
-            JSONArray array = queryRecentFarmFood(friendUserIds.size());
-            if (array == null) {
-                return;
-            }
-            JSONArray friendUserIdList = new JSONArray();
-            for (String userId : friendUserIds) {
-                friendUserIdList.put(userId);
-            }
-            JSONObject jo = new JSONObject(AntFarmRpcCall.familyEatTogether(familyGroupId, friendUserIdList, array));
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("庄园家庭🏠" + periodName + "请客#消耗美食" + friendUserIdList.length() + "份");
-                GlobalThreadPools.sleep(500);
-                syncFamilyStatusIntimacy(familyGroupId);
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyEatTogether err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private void familyDrawSignReceiveFarmTaskAward(String taskId, String title) {
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.familyDrawSignReceiveFarmTaskAward(taskId));
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("亲密家庭🏠扭蛋任务#" + title + "#奖励领取成功");
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyDrawSignReceiveFarmTaskAward err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    private JSONArray queryRecentFarmFood(int queryNum) {
-        try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryRecentFarmFood(queryNum));
-            if (!ResChecker.checkRes(TAG, jo)) {
-                return null;
-            }
-            JSONArray cuisines = jo.getJSONArray("cuisines");
-            if (Objects.isNull(cuisines) || cuisines.length() == 0) {
-                return null;
-            }
-            int count = 0;
-            for (int i = 0; i < cuisines.length(); i++) {
-                count += cuisines.getJSONObject(i).optInt("count");
-            }
-            if (count >= queryNum) {
-                return cuisines;
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "queryRecentFarmFood err:");
-            Log.printStackTrace(TAG, t);
-        }
-        return null;
-    }
-
-    private void familyFeedFriendAnimal(JSONArray animals) {
-        try {
-            for (int i = 0; i < animals.length(); i++) {
-                JSONObject animal = animals.getJSONObject(i);
-                JSONObject animalStatusVo = animal.getJSONObject("animalStatusVO");
-                if (AnimalInteractStatus.HOME.name().equals(animalStatusVo.getString("animalInteractStatus")) && AnimalFeedStatus.HUNGRY.name().equals(animalStatusVo.getString("animalFeedStatus"))) {
-                    String groupId = animal.getString("groupId");
-                    String farmId = animal.getString("farmId");
-                    String userId = animal.getString("userId");
-                    if (!UserMap.getUserIdSet().contains(userId)) {
-                        //非好友
-                        continue;
-                    }
-                    if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                        Log.runtime("今日喂鸡次数已达上限🥣");
-                        return;
-                    }
-                    JSONObject jo = new JSONObject(AntFarmRpcCall.feedFriendAnimal(farmId, groupId));
-                    if (ResChecker.checkRes(TAG, jo)) {
-                        int feedFood = foodStock - jo.getInt("foodStock");
-                        if (feedFood > 0) {
-                            add2FoodStock(-feedFood);
-                        }
-                        Log.farm("庄园家庭🏠帮喂好友🥣[" + UserMap.getMaskName(userId) + "]的小鸡[" + feedFood + "g]#剩余" + foodStock + "g");
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            Log.runtime(TAG, "familyFeedFriendAnimal err:");
-            Log.printStackTrace(TAG, t);
-        }
-    }
 
     /**
      * 点击领取活动食物
      *
      * @param gift
      */
-    private void clickForGiftV2(JSONObject gift) {
-        if (gift == null) return;
+    private fun clickForGiftV2(gift: JSONObject?) {
+        if (gift == null) return
         try {
-            JSONObject resultJson = new JSONObject(AntFarmRpcCall.clickForGiftV2(gift.getString("foodType"), gift.getInt("giftIndex")));
+            val resultJson = JSONObject(AntFarmRpcCall.clickForGiftV2(gift.getString("foodType"), gift.getInt("giftIndex")))
             if (ResChecker.checkRes(TAG, resultJson)) {
-                Log.farm("领取活动食物成功," + "已领取" + resultJson.optInt("foodCount"));
+                Log.farm("领取活动食物成功," + "已领取" + resultJson.optInt("foodCount"))
             }
-        } catch (Exception e) {
-            Log.runtime(TAG, "clickForGiftV2 err:");
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.runtime(TAG, "clickForGiftV2 err:")
+            Log.printStackTrace(TAG, e)
         }
     }
 
-    static class AntFarmFamilyOption extends MapperEntity {
-        public AntFarmFamilyOption(String i, String n) {
-            id = i;
-            name = n;
+    companion object {
+        private val TAG: String = AntFarm::class.java.getSimpleName()
+        private val objectMapper = ObjectMapper()
+
+        init {
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         }
 
-        public static List<AntFarmFamilyOption> getAntFarmFamilyOptions() {
-            List<AntFarmFamilyOption> list = new ArrayList<>();
-            list.add(new AntFarmFamilyOption("familySign", "每日签到"));
-            list.add(new AntFarmFamilyOption("eatTogetherConfig", "请吃美食"));
-            list.add(new AntFarmFamilyOption("feedFamilyAnimal", "帮喂小鸡"));
-            list.add(new AntFarmFamilyOption("deliverMsgSend", "道早安"));
-            list.add(new AntFarmFamilyOption("familyClaimReward", "领取奖励"));
-            list.add(new AntFarmFamilyOption("inviteFriendVisitFamily", "好友分享"));
-            list.add(new AntFarmFamilyOption("assignRights", "使用顶梁柱特权"));
-            list.add(new AntFarmFamilyOption("familyDrawInfo", "开扭蛋"));
-            list.add(new AntFarmFamilyOption("batchInviteP2P", "串门送扭蛋"));
-            return list;
-        }
+        private const val FARM_ANSWER_CACHE_KEY = "farmQuestionCache"
+        private const val ANSWERED_FLAG = "farmQuestion::answered" // 今日是否已答题
+        private const val CACHED_FLAG = "farmQuestion::cache" // 是否已缓存明日答案
     }
 }
