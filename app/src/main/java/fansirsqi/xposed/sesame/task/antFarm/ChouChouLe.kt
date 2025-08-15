@@ -1,60 +1,53 @@
-package fansirsqi.xposed.sesame.task.antFarm;
+package fansirsqi.xposed.sesame.task.antFarm
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.maps.UserMap
+import org.json.JSONArray
+import org.json.JSONObject
+import kotlin.math.max
 
-import java.util.ArrayList;
-import java.util.List;
-
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.maps.UserMap;
-import fansirsqi.xposed.sesame.util.ResChecker;
-
-public class ChouChouLe {
-    private static final String TAG = ChouChouLe.class.getSimpleName();
-
-    public enum TaskStatus {
+class ChouChouLe {
+    enum class TaskStatus {
         TODO, FINISHED, RECEIVED, DONATION
     }
 
     // 定义任务结构体
-    private static class TaskInfo {
-        String taskStatus;
-        String title;
-        String taskId;
-        String innerAction;
-        int rightsTimes;
-        int rightsTimesLimit;
+    private class TaskInfo {
+        var taskStatus: String? = null
+        var title: String? = null
+        var taskId: String? = null
+        var innerAction: String? = null
+        var rightsTimes: Int = 0
+        var rightsTimesLimit: Int = 0
 
-        int getRemainingTimes() {
-            return Math.max(0, rightsTimesLimit - rightsTimes);
-        }
+        val remainingTimes: Int
+            get() = max(0, rightsTimesLimit - rightsTimes)
     }
 
-    void chouchoule() {
+    fun chouchoule() {
         try {
-            String response = AntFarmRpcCall.queryLoveCabin(UserMap.getCurrentUid());
-            JSONObject jo = new JSONObject(response);
+            val response = AntFarmRpcCall.queryLoveCabin(UserMap.currentUid)
+            val jo = JSONObject(response)
             if (!ResChecker.checkRes(TAG, jo)) {
-                return;
+                return
             }
 
-            JSONObject drawMachineInfo = jo.optJSONObject("drawMachineInfo");
+            val drawMachineInfo = jo.optJSONObject("drawMachineInfo")
             if (drawMachineInfo == null) {
-                Log.error(TAG, "抽抽乐🎁[获取抽抽乐活动信息失败]");
-                return;
+                Log.error(TAG, "抽抽乐🎁[获取抽抽乐活动信息失败]")
+                return
             }
 
             if (drawMachineInfo.has("dailyDrawMachineActivityId")) {
-                doChouchoule("dailyDraw");
+                doChouchoule("dailyDraw")
             }
             if (drawMachineInfo.has("ipDrawMachineActivityId")) {
-                doChouchoule("ipDraw");
+                doChouchoule("ipDraw")
             }
-
-        } catch (Throwable t) {
-            Log.printStackTrace("chouchoule err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace("chouchoule err:", t)
         }
     }
 
@@ -63,73 +56,73 @@ public class ChouChouLe {
      *
      * @param drawType "dailyDraw" or "ipDraw" 普通装扮或者IP装扮
      */
-
-    private void doChouchoule(String drawType) {
-        boolean doubleCheck;
+    private fun doChouchoule(drawType: String) {
+        var doubleCheck: Boolean
         do {
-            doubleCheck = false;
+            doubleCheck = false
             try {
-                JSONObject jo = new JSONObject(AntFarmRpcCall.chouchouleListFarmTask(drawType));
+                val jo = JSONObject(AntFarmRpcCall.chouchouleListFarmTask(drawType))
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.error(TAG, drawType.equals("ipDraw") ? "IP抽抽乐任务列表获取失败" : "抽抽乐任务列表获取失败");
-                    continue;
+                    Log.error(TAG, if (drawType == "ipDraw") "IP抽抽乐任务列表获取失败" else "抽抽乐任务列表获取失败")
+                    continue
                 }
-                JSONArray farmTaskList = jo.getJSONArray("farmTaskList");//获取任务列表
-                List<TaskInfo> tasks = parseTasks(farmTaskList);
-                for (TaskInfo task : tasks) {
-                    GlobalThreadPools.sleep(5 * 1000L);
-                    if (TaskStatus.FINISHED.name().equals(task.taskStatus)) {
-                        if (receiveTaskAward(drawType, task.taskId)) {//领取奖励
-                            doubleCheck = true;
+                val farmTaskList = jo.getJSONArray("farmTaskList") //获取任务列表
+                val tasks = parseTasks(farmTaskList)
+                for (task in tasks) {
+                    GlobalThreadPools.sleep(5 * 1000L)
+                    if (TaskStatus.FINISHED.name == task.taskStatus) {
+                        if (receiveTaskAward(drawType, task.taskId)) { //领取奖励
+                            doubleCheck = true
                         }
-                    } else if (TaskStatus.TODO.name().equals(task.taskStatus)) {
-                        if (task.getRemainingTimes() > 0 && !"DONATION".equals(task.innerAction))  {
+                    } else if (TaskStatus.TODO.name == task.taskStatus) {
+                        if (task.remainingTimes > 0 && "DONATION" != task.innerAction) {
                             if (doChouTask(drawType, task)) {
-                                doubleCheck = true;
+                                doubleCheck = true
                             }
                         }
                     }
                 }
-            } catch (Throwable t) {
-                Log.printStackTrace("doChouchoule err:", t);
+            } catch (t: Throwable) {
+                Log.printStackTrace("doChouchoule err:", t)
             }
-        } while (doubleCheck);
+        } while (doubleCheck)
 
-        if ("ipDraw".equals(drawType)) {
-            handleIpDraw();
+        if ("ipDraw" == drawType) {
+            handleIpDraw()
         } else {
-            handleDailyDraw();
+            handleDailyDraw()
         }
     }
 
-    private List<TaskInfo> parseTasks(JSONArray array) throws Exception {
-        List<TaskInfo> list = new ArrayList<>();
-        for (int i = 0; i < array.length(); i++) {
-            JSONObject item = array.getJSONObject(i);
-            TaskInfo info = new TaskInfo();
-            info.taskStatus = item.getString("taskStatus");
-            info.title = item.getString("title");
-            info.taskId = item.getString("bizKey");
-            info.innerAction = item.optString("innerAction");
-            info.rightsTimes = item.optInt("rightsTimes", 0);
-            info.rightsTimesLimit = item.optInt("rightsTimesLimit", 0);
-            list.add(info);
+    @Throws(Exception::class)
+    private fun parseTasks(array: JSONArray): MutableList<TaskInfo> {
+        val list: MutableList<TaskInfo> = ArrayList<TaskInfo>()
+        for (i in 0..<array.length()) {
+            val item = array.getJSONObject(i)
+            val info = TaskInfo()
+            info.taskStatus = item.getString("taskStatus")
+            info.title = item.getString("title")
+            info.taskId = item.getString("bizKey")
+            info.innerAction = item.optString("innerAction")
+            info.rightsTimes = item.optInt("rightsTimes", 0)
+            info.rightsTimesLimit = item.optInt("rightsTimesLimit", 0)
+            list.add(info)
         }
-        return list;
+        return list
     }
 
-    private Boolean doChouTask(String drawType, TaskInfo task) {
+    private fun doChouTask(drawType: String, task: TaskInfo): Boolean {
         try {
-            String s = AntFarmRpcCall.chouchouleDoFarmTask(drawType, task.taskId);
-            JSONObject jo = new JSONObject(s);
+            val s = AntFarmRpcCall.chouchouleDoFarmTask(drawType, task.taskId)
+            val jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm((drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐") + "🧾️[任务: " + task.title + "]");
-                return true;
+                Log.farm((if (drawType == "ipDraw") "IP抽抽乐" else "抽抽乐") + "🧾️[任务: " + task.title + "]")
+                return true
             }
-            return false;
-        } catch (Throwable t) {
-            Log.printStackTrace("执行抽抽乐任务 err:", t);
-            return false;
+            return false
+        } catch (t: Throwable) {
+            Log.printStackTrace("执行抽抽乐任务 err:", t)
+            return false
         }
     }
 
@@ -140,75 +133,73 @@ public class ChouChouLe {
      * @param taskId   任务ID
      * @return 是否领取成功
      */
-    private boolean receiveTaskAward(String drawType, String taskId) {
+    private fun receiveTaskAward(drawType: String, taskId: String?): Boolean {
         try {
-            String s = AntFarmRpcCall.chouchouleReceiveFarmTaskAward(drawType, taskId);
-            JSONObject jo = new JSONObject(s);
-            return ResChecker.checkRes(TAG, jo);
-        } catch (Throwable t) {
-            Log.printStackTrace("receiveFarmTaskAward err:", t);
+            val s = AntFarmRpcCall.chouchouleReceiveFarmTaskAward(drawType, taskId)
+            val jo = JSONObject(s)
+            return ResChecker.checkRes(TAG, jo)
+        } catch (t: Throwable) {
+            Log.printStackTrace("receiveFarmTaskAward err:", t)
         }
-        return false;
+        return false
     }
 
     /**
      * 执行IP抽抽乐
      */
-    private void handleIpDraw() {
+    private fun handleIpDraw() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.queryDrawMachineActivity());
+            val jo = JSONObject(AntFarmRpcCall.queryDrawMachineActivity())
             if (!ResChecker.checkRes(TAG, jo)) {
-                return;
+                return
             }
 
-            JSONObject activity = jo.getJSONObject("drawMachineActivity");
-            long endTime = activity.getLong("endTime");
+            val activity = jo.getJSONObject("drawMachineActivity")
+            val endTime = activity.getLong("endTime")
             if (System.currentTimeMillis() > endTime) {
-                Log.record(TAG, "该[" + activity.optString("activityId") + "]抽奖活动已结束");
-                return;
+                Log.record(TAG, "该[" + activity.optString("activityId") + "]抽奖活动已结束")
+                return
             }
 
-            int drawTimes = jo.optInt("drawTimes", 0);
-            for (int i = 0; i < drawTimes; i++) {
-                drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachine());
-                GlobalThreadPools.sleep(5 * 1000L);
+            val drawTimes = jo.optInt("drawTimes", 0)
+            for (i in 0..<drawTimes) {
+                drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachine())
+                GlobalThreadPools.sleep(5 * 1000L)
             }
-
-        } catch (Throwable t) {
-            Log.printStackTrace("handleIpDraw err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace("handleIpDraw err:", t)
         }
     }
 
     /**
      * 执行正常抽抽乐
      */
-    private void handleDailyDraw() {
+    private fun handleDailyDraw() {
         try {
-            JSONObject jo = new JSONObject(AntFarmRpcCall.enterDrawMachine());
+            val jo = JSONObject(AntFarmRpcCall.enterDrawMachine())
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.record(TAG, "抽奖活动进入失败");
-                return;
+                Log.record(TAG, "抽奖活动进入失败")
+                return
             }
 
-            JSONObject userInfo = jo.getJSONObject("userInfo");
-            JSONObject drawActivityInfo = jo.getJSONObject("drawActivityInfo");
-            long endTime = drawActivityInfo.getLong("endTime");
+            val userInfo = jo.getJSONObject("userInfo")
+            val drawActivityInfo = jo.getJSONObject("drawActivityInfo")
+            val endTime = drawActivityInfo.getLong("endTime")
             if (System.currentTimeMillis() > endTime) {
-                Log.record(TAG, "该[" + drawActivityInfo.optString("activityId") + "]抽奖活动已结束");
-                return;
+                Log.record(TAG, "该[" + drawActivityInfo.optString("activityId") + "]抽奖活动已结束")
+                return
             }
 
-            int leftDrawTimes = userInfo.optInt("leftDrawTimes", 0);
-            String activityId = drawActivityInfo.optString("activityId");
+            val leftDrawTimes = userInfo.optInt("leftDrawTimes", 0)
+            val activityId = drawActivityInfo.optString("activityId")
 
-            for (int i = 0; i < leftDrawTimes; i++) {
-                String call = activityId.equals("null") ? AntFarmRpcCall.DrawPrize() : AntFarmRpcCall.DrawPrize(activityId);
-                drawPrize("抽抽乐", call);
-                GlobalThreadPools.sleep(5 * 1000L);
+            for (i in 0..<leftDrawTimes) {
+                val call = if (activityId == "null") AntFarmRpcCall.DrawPrize() else AntFarmRpcCall.DrawPrize(activityId)
+                drawPrize("抽抽乐", call)
+                GlobalThreadPools.sleep(5 * 1000L)
             }
-
-        } catch (Throwable t) {
-            Log.printStackTrace("handleDailyDraw err:", t);
+        } catch (t: Throwable) {
+            Log.printStackTrace("handleDailyDraw err:", t)
         }
     }
 
@@ -218,16 +209,19 @@ public class ChouChouLe {
      * @param prefix   抽奖类型
      * @param response 服务器返回的结果
      */
-    private void drawPrize(String prefix, String response) {
+    private fun drawPrize(prefix: String?, response: String) {
         try {
-            JSONObject jo = new JSONObject(response);
+            val jo = JSONObject(response)
             if (ResChecker.checkRes(TAG, jo)) {
-                String title = jo.getString("title");
-                int prizeNum = jo.optInt("prizeNum", 1);
-                Log.farm(prefix + "🎁[领取: " + title + "*" + prizeNum + "]");
+                val title = jo.getString("title")
+                val prizeNum = jo.optInt("prizeNum", 1)
+                Log.farm(prefix + "🎁[领取: " + title + "*" + prizeNum + "]")
             }
-        } catch (Exception ignored) {
+        } catch (ignored: Exception) {
         }
     }
 
+    companion object {
+        private val TAG: String = ChouChouLe::class.java.getSimpleName()
+    }
 }
