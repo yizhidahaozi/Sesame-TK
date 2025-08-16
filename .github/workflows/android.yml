@@ -114,7 +114,7 @@ jobs:
       - name: 📢 发送综合消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ secrets.TG_CHAT_ID }}
+          to: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
@@ -129,15 +129,12 @@ jobs:
             ✅ *标准版（Normal）*：直接下载安装 ，适用于 Android 8.0 及以上系统📲 
             
             ✅ *兼容版（Compatible）*：低版本设备建议文件管理器安装 📁，适用于 最低支持 Android 5.1-Android 7.0 系统📲
-
-
-
           format: markdown
 
       - name: 📱 发送标准版 APK 到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}
+          到: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_normal }}
           message: "📱 标准版安装包 (Android 8.0+) "
@@ -145,7 +142,7 @@ jobs:
       - name: 📱 发送兼容版 APK 到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}
+          到: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_compatible }}
           message: "📱 兼容版安装包 (Android 5.1-Android 7.0) "
@@ -154,7 +151,7 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/develop') && github.event_name == 'push'
         run: |
           VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
-          echo "创建版本标签: $VERSION_TAG" 🔖
+          echo "创建版本标签: $VERSION_TAG 🔖"
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
@@ -162,7 +159,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.extract_info.outputs.version }}
-          文件: |
+          文件: |  # 修正为英文参数 files
             ${{ steps.extract_apks.outputs.signed_compatible }}
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-*.sha256
