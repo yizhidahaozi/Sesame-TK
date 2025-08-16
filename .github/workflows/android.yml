@@ -24,14 +24,14 @@ jobs:
       - name: 📂 检出代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整提交历史
+          fetch-depth: 0
 
       - name: ☕ 配置 JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
-          cache: gradle  # 缓存依赖加速构建
+          cache: gradle
 
       - name: 🛠️ 配置 Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -44,12 +44,24 @@ jobs:
 
       - name: 🧰 使用 Gradle 构建
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
+        continue-on-error: false  # 构建失败立即终止
 
-      - name: 📦 定位 APK 文件并设置输出
+      - name: 📦 定位 APK 文件并验证存在性
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
           compatible_apk=$(find app/build/outputs/apk/compatible/release -name "*.apk" | head -n 1)
+          
+          # 验证APK是否存在
+          if [ -z "$normal_apk" ] || [ ! -f "$normal_apk" ]; then
+            echo "错误：未找到标准版APK"
+            exit 1
+          fi
+          if [ -z "$compatible_apk" ] || [ ! -f "$compatible_apk" ]; then
+            echo "错误：未找到兼容版APK"
+            exit 1
+          fi
+          
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
@@ -70,18 +82,29 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: 📋 提取签名后的 APK 路径（稳定版）
+      - name: 📋 提取签名后的 APK 路径
         id: extract_apks
         run: |
-          # 改用更稳定的路径提取逻辑（遍历 + 精准匹配）
+          # 使用更可靠的路径提取方法
           signed_files="${{ steps.sign_apks.outputs.signedFiles }}"
-          for file in $(echo "$signed_files" | tr ':' '\n'); do
-            if [[ "$file" == *"Normal"* && "$file" == *".apk"* ]]; then
-              echo "signed_normal=$file" >> $GITHUB_OUTPUT
-            elif [[ "$file" == *"Compatible"* && "$file" == *".apk"* ]]; then
-              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
-            fi
-          done
+          
+          # 查找标准版APK
+          signed_normal=$(echo "$signed_files" | tr ':' '\n' | grep -i "Normal" | grep -i "\.apk$" | head -n 1)
+          # 查找兼容版APK
+          signed_compatible=$(echo "$signed_files" | tr ':' '\n' | grep -i "Compatible" | grep -i "\.apk$" | head -n 1)
+          
+          # 验证签名后的APK
+          if [ -z "$signed_normal" ] || [ ! -f "$signed_normal" ]; then
+            echo "错误：未找到签名后的标准版APK"
+            exit 1
+          fi
+          if [ -z "$signed_compatible" ] || [ ! -f "$signed_compatible" ]; then
+            echo "错误：未找到签名后的兼容版APK"
+            exit 1
+          fi
+          
+          echo "signed_normal=$signed_normal" >> $GITHUB_OUTPUT
+          echo "signed_compatible=$signed_compatible" >> $GITHUB_OUTPUT
 
       - name: 📤 上传兼容版 APK
         uses: actions/upload-artifact@v4
@@ -95,14 +118,15 @@ jobs:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: ℹ️ 提取文件信息（修复版本号 + 文件名）
+      - name: ℹ️ 提取文件信息
         id: extract_info
         run: |
-          # 更健壮的版本号提取逻辑（直接从文件名截取）
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          # 用正则精准匹配版本号（避免依赖 sed 的复杂规则）
-          version=$(echo "$normal_file" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\.rc[0-9]+-beta')
+          
+          # 提取版本号（更健壮的正则表达式）
+          version=$(echo "$normal_file" | sed -E 's/^.*-(v[0-9]+\.[0-9]+\.[0-9]+\.[a-zA-Z0-9-]+)-signed\.apk$/\1/')
+          
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
@@ -112,7 +136,7 @@ jobs:
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.sha256
 
-      - name: 📢 发送综合消息到 Telegram（修复格式）
+      - name: 📢 发送综合消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TG_CHAT_ID }}
@@ -120,40 +144,37 @@ jobs:
           message: |
             🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
 
-            - 📱**标准版** : `$normal_file`
-            - 📱**兼容版** : `$compatible_file`
+            - 📱 **标准版**: `${{ steps.extract_info.outputs.normal_file }}`
+            - 📱 **兼容版**: `${{ steps.extract_info.outputs.compatible_file }}`
 
             🛠️ 安装指引:
             ✅ 标准版（Normal）: 直接安装，支持 Android 8.0+
             ✅ 兼容版（Compatible）: 文件管理器安装，支持 Android 5.1-7.0
           format: markdown
-          # 手动传递变量（避免 GitHub Actions 变量解析延迟）
-          env:
-            normal_file: ${{ steps.extract_info.outputs.normal_file }}
-            compatible_file: ${{ steps.extract_info.outputs.compatible_file }}
 
-      - name: 📱 发送标准版 APK 到 Telegram（确保文件存在）
+      - name: 📱 发送标准版 APK 到 Telegram
         if: ${{ steps.extract_apks.outputs.signed_normal != '' }}
         uses: appleboy/telegram-action@master
         with:
           到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_normal }}
-          message: "📱 标准版安装包 (Android 8.0+)"
+          message: "📱 标准版安装包 (Android 8.0+): ${{ steps.extract_info.outputs.normal_file }}"
 
-      - name: 📱 发送兼容版 APK 到 Telegram（确保文件存在）
+      - name: 📱 发送兼容版 APK 到 Telegram
         if: ${{ steps.extract_apks.outputs.signed_compatible != '' }}
         uses: appleboy/telegram-action@master
         with:
           到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_compatible }}
-          message: "📱 兼容版安装包 (Android 5.1-7.0)"
+          message: "📱 兼容版安装包 (Android 5.1-7.0): ${{ steps.extract_info.outputs.compatible_file }}"
 
       - name: 🏷️ 创建 Git 标签
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/develop')
         run: |
-          VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
+          VERSION_TAG="${{ steps.extract_info.outputs.version }}"
+          echo "创建版本标签: $VERSION_TAG"
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
