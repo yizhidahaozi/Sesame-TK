@@ -1,21 +1,22 @@
 name: 🕔 🤖 Android CI 自动化构建
 
 on:
-  # 每 10 天触发一次（UTC 时间 0 点，对应北京时间 8 点）
+  # 每10天触发 1 次（北京时间6点）
   schedule:
-    - cron: '0 0 1,11,21,31 * *'
+    - cron: '0 22 */10 * *'    # 🌞 北京时间6点构建
+
+
   push:
-    branches: ["develop"]  # 代码推送触发
+    branches: ["develop"]  # 🚀 代码推送触发
   pull_request:
-    branches: ["develop"]  # PR合并触发
+    branches: ["develop"]  # 📌 PR合并触发
   release:
-    types: [published]     # 版本发布触发
-  workflow_dispatch:       # 手动触发
+    types: [published]     # 🏷️ 版本发布触发
+  workflow_dispatch:       # 🕹️ 手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: production  # 使用环境确保敏感信息安全
 
     steps:
       - name: ⏳ 设置时区为北京时间
@@ -46,25 +47,12 @@ jobs:
 
       - name: 🧰 使用 Gradle 构建
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
-        continue-on-error: false  # 构建失败立即终止
 
-      - name: 📦 定位 APK 文件并验证存在性
+      - name: 📦 定位 APK 文件并设置输出
         id: locate_apks
         run: |
-          # 查找并验证标准版APK
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
-          if [ -z "$normal_apk" ] || [ ! -f "$normal_apk" ]; then
-            echo "错误：未找到标准版APK"
-            exit 1
-          fi
-          
-          # 查找并验证兼容版APK
           compatible_apk=$(find app/build/outputs/apk/compatible/release -name "*.apk" | head -n 1)
-          if [ -z "$compatible_apk" ] || [ ! -f "$compatible_apk" ]; then
-            echo "错误：未找到兼容版APK"
-            exit 1
-          fi
-          
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
@@ -88,103 +76,94 @@ jobs:
       - name: 📋 提取签名后的 APK 路径
         id: extract_apks
         run: |
-          signed_files="${{ steps.sign_apks.outputs.signedFiles }}"
-          
-          # 提取标准版APK路径
-          signed_normal=$(echo "$signed_files" | tr ':' '\n' | grep -i "Normal" | grep -i "\.apk$" | head -n 1)
-          if [ -z "$signed_normal" ] || [ ! -f "$signed_normal" ]; then
-            echo "错误：未找到签名后的标准版APK"
-            exit 1
-          fi
-          
-          # 提取兼容版APK路径
-          signed_compatible=$(echo "$signed_files" | tr ':' '\n' | grep -i "Compatible" | grep -i "\.apk$" | head -n 1)
-          if [ -z "$signed_compatible" ] || [ ! -f "$signed_compatible" ]; then
-            echo "错误：未找到签名后的兼容版APK"
-            exit 1
-          fi
-          
-          echo "signed_normal=$signed_normal" >> $GITHUB_OUTPUT
-          echo "signed_compatible=$signed_compatible" >> $GITHUB_OUTPUT
+          IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
+          for file in "${files[@]}"; do
+            if [[ "$file" == *Normal* ]]; then
+              echo "signed_normal=$file" >> $GITHUB_OUTPUT
+            elif [[ "$file" == *Compatible* ]]; then
+              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
+            fi
+          done
 
-      - name: 📤 上传兼容版 APK 作为工件
+      - name: 📤 上传兼容版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-compatible
           path: ${{ steps.extract_apks.outputs.signed_compatible }}
-          retention-days: 14  # 保留14天
 
-      - name: 📤 上传标准版 APK 作为工件
+      - name: 📤 上传标准版 APK
         uses: actions/upload-artifact@v4
         with:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
-          retention-days: 14  # 保留14天
 
       - name: ℹ️ 提取文件信息
         id: extract_info
         run: |
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          version=$(echo "$normal_file" | sed -E 's/^.*-(v[0-9]+\.[0-9]+\.[0-9]+\.[a-zA-Z0-9-]+)-signed\.apk$/\1/')
-          
+          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(.*)-signed\.apk/\2/')
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: 🔐 生成 APK 校验和
         run: |
-          sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.sha256
-          sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
       - name: 📢 发送综合消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ secrets.TG_CHAT_ID }}  # 使用正确的英文参数
+          to: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
 
-            - 📱 **标准版**: `${{ steps.extract_info.outputs.normal_file }}`
-            - 📱 **兼容版**: `${{ steps.extract_info.outputs.compatible_file }}`
+            - 📱**标准版** :
+            `${{ steps.extract_info.outputs.normal_file }}`
 
-            🛠️ 安装指引:
-            ✅ 标准版（Normal）: 直接安装，支持 Android 8.0+
-            ✅ 兼容版（Compatible）: 文件管理器安装，支持 Android 5.1-7.0
+            - 📱**兼容版** 📱:
+            `${{ steps.extract_info.outputs.compatible_file }}`
+
+            🛠️ 安装指引与说明:
+            ✅ *标准版（Normal）*：直接下载安装 ，适用于 Android 8.0 及以上系统📲 
+            
+            ✅ *兼容版（Compatible）*：低版本设备建议文件管理器安装 📁，适用于 最低支持 Android 5.1-Android 7.0 系统📲
+
+
+
           format: markdown
 
       - name: 📱 发送标准版 APK 到 Telegram
-        if: ${{ steps.extract_apks.outputs.signed_normal != '' }}
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}  # 使用正确的英文参数
+          到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_normal }}
-          message: "📱 标准版安装包 (Android 8.0+): ${{ steps.extract_info.outputs.normal_file }}"
+          message: "📱 标准版安装包 (Android 8.0+) "
 
       - name: 📱 发送兼容版 APK 到 Telegram
-        if: ${{ steps.extract_apks.outputs.signed_compatible != '' }}
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}  # 使用正确的英文参数
+          到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_compatible }}
-          message: "📱 兼容版安装包 (Android 5.1-7.0): ${{ steps.extract_info.outputs.compatible_file }}"
+          message: "📱 兼容版安装包 (Android 5.1-Android 7.0) "
 
-      - name: 🏷️ 创建 Git 标签
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/develop')
+      - name: 🏷️ 从版本号创建 Git 标签
+        if: startsWith(github.ref, 'refs/heads/develop') && github.event_name == 'push'
         run: |
-          VERSION_TAG="${{ steps.extract_info.outputs.version }}"
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
+          VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
+          echo "创建版本标签: $VERSION_TAG" 🔖
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
-      - name: 🎉 上传资产到 GitHub Release
+      - name: 🎉 上传资产到 GitHub 版本发布
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.extract_info.outputs.version }}
-          文件: |  # 使用正确的英文参数
+          文件: |
             ${{ steps.extract_apks.outputs.signed_compatible }}
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-*.sha256
@@ -193,13 +172,24 @@ jobs:
           append_body: true
           generate_release_notes: false
           body: |
-            ### 🛠️ 安装说明
-            1. **标准版（Normal）**  
-               - 直接安装，支持 Android 8.0 及以上系统  
-            2. **兼容版（Compatible）**  
-               - 通过文件管理器安装，支持 Android 5.1-7.0 系统  
+            ### 🛠️ 安装指引与说明:
+            1. **📱 标准版 （Normal）直接下载安装 ，适用于 (Android 8.0+) 及以上系统📲 **
+               - 直接点击安装 📲  
+
+            2. **📱 兼容版 （Compatible）适用于 最低支持 (Android 5.1~7.0) 系统📲 **
+               - 文件管理器安装 📂  
+  
+
+                🛠 10天自动打包1次，可以忽略
+                🌞 北京时间6点构建
 
 
-            ⚠️ 重要声明  
-            本安装包仅限个人学习研究，禁止商业用途和非法分发  
-            使用中出现问题需自行承担后果
+    
+            ### ⚠️ 重要声明  
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            > ~~墙内不再更新~~ 倒卖必死全家 ❗ 本安装包仅限个人研究学习，非商业用途，禁止任何形式的倒卖或非法分发
+            
+            >   出现任何问题自行承担一切后果，出现任何问题自行承担一切后果，出现任何问题自行承担一切后果
