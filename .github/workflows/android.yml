@@ -70,16 +70,16 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: 📋 提取签名后的 APK 路径（修复路径解析）
+      - name: 📋 提取签名后的 APK 路径（稳定版）
         id: extract_apks
         run: |
-          # 用换行分割签名文件路径，避免 IFS=':' 导致的解析错误
+          # 改用更稳定的路径提取逻辑（遍历 + 精准匹配）
           signed_files="${{ steps.sign_apks.outputs.signedFiles }}"
           for file in $(echo "$signed_files" | tr ':' '\n'); do
-            if [[ "$file" == *"Compatible"* ]]; then
-              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
-            elif [[ "$file" == *"Normal"* ]]; then
+            if [[ "$file" == *"Normal"* && "$file" == *".apk"* ]]; then
               echo "signed_normal=$file" >> $GITHUB_OUTPUT
+            elif [[ "$file" == *"Compatible"* && "$file" == *".apk"* ]]; then
+              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
             fi
           done
 
@@ -95,12 +95,14 @@ jobs:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: ℹ️ 提取文件信息
+      - name: ℹ️ 提取文件信息（修复版本号 + 文件名）
         id: extract_info
         run: |
+          # 更健壮的版本号提取逻辑（直接从文件名截取）
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(.*)-signed\.apk/\2/')
+          # 用正则精准匹配版本号（避免依赖 sed 的复杂规则）
+          version=$(echo "$normal_file" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\.rc[0-9]+-beta')
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
@@ -110,7 +112,7 @@ jobs:
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.sha256
 
-      - name: 📢 发送综合消息到 Telegram
+      - name: 📢 发送综合消息到 Telegram（修复格式）
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TG_CHAT_ID }}
@@ -118,15 +120,20 @@ jobs:
           message: |
             🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
 
-            - 📱**标准版** : `${{ steps.extract_info.outputs.normal_file }}`
-            - 📱**兼容版** : `${{ steps.extract_info.outputs.compatible_file }}`
+            - 📱**标准版** : `$normal_file`
+            - 📱**兼容版** : `$compatible_file`
 
             🛠️ 安装指引:
             ✅ 标准版（Normal）: 直接安装，支持 Android 8.0+
             ✅ 兼容版（Compatible）: 文件管理器安装，支持 Android 5.1-7.0
           format: markdown
+          # 手动传递变量（避免 GitHub Actions 变量解析延迟）
+          env:
+            normal_file: ${{ steps.extract_info.outputs.normal_file }}
+            compatible_file: ${{ steps.extract_info.outputs.compatible_file }}
 
-      - name: 📱 发送标准版 APK 到 Telegram
+      - name: 📱 发送标准版 APK 到 Telegram（确保文件存在）
+        if: ${{ steps.extract_apks.outputs.signed_normal != '' }}
         uses: appleboy/telegram-action@master
         with:
           到: ${{ secrets.TG_CHAT_ID }}
@@ -134,7 +141,7 @@ jobs:
           document: ${{ steps.extract_apks.outputs.signed_normal }}
           message: "📱 标准版安装包 (Android 8.0+)"
 
-      - name: 📱 发送兼容版 APK 到 Telegram（增加非空校验）
+      - name: 📱 发送兼容版 APK 到 Telegram（确保文件存在）
         if: ${{ steps.extract_apks.outputs.signed_compatible != '' }}
         uses: appleboy/telegram-action@master
         with:
