@@ -24,14 +24,14 @@ jobs:
       - name: 📂 检出代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 获取完整提交历史
 
       - name: ☕ 配置 JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
-          cache: gradle
+          cache: gradle  # 缓存依赖加速构建
 
       - name: 🛠️ 配置 Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -70,15 +70,16 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: 📋 提取签名后的 APK 路径
+      - name: 📋 提取签名后的 APK 路径（修复路径解析）
         id: extract_apks
         run: |
-          IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
-          for file in "${files[@]}"; do
-            if [[ "$file" == *Normal* ]]; then
-              echo "signed_normal=$file" >> $GITHUB_OUTPUT
-            elif [[ "$file" == *Compatible* ]]; then
+          # 用换行分割签名文件路径，避免 IFS=':' 导致的解析错误
+          signed_files="${{ steps.sign_apks.outputs.signedFiles }}"
+          for file in $(echo "$signed_files" | tr ':' '\n'); do
+            if [[ "$file" == *"Compatible"* ]]; then
               echo "signed_compatible=$file" >> $GITHUB_OUTPUT
+            elif [[ "$file" == *"Normal"* ]]; then
+              echo "signed_normal=$file" >> $GITHUB_OUTPUT
             fi
           done
 
@@ -112,7 +113,7 @@ jobs:
       - name: 📢 发送综合消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
+          to: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             🚀 *新版本 ${{ steps.extract_info.outputs.version }} 安装包构建完成!* 📦
@@ -128,15 +129,16 @@ jobs:
       - name: 📱 发送标准版 APK 到 Telegram
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
+          到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_normal }}
           message: "📱 标准版安装包 (Android 8.0+)"
 
-      - name: 📱 发送兼容版 APK 到 Telegram
+      - name: 📱 发送兼容版 APK 到 Telegram（增加非空校验）
+        if: ${{ steps.extract_apks.outputs.signed_compatible != '' }}
         uses: appleboy/telegram-action@master
         with:
-          到: ${{ secrets.TG_CHAT_ID }}  # 修正为英文参数 to
+          到: ${{ secrets.TG_CHAT_ID }}
           token: ${{ secrets.TG_BOT_TOKEN }}
           document: ${{ steps.extract_apks.outputs.signed_compatible }}
           message: "📱 兼容版安装包 (Android 5.1-7.0)"
@@ -152,7 +154,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.extract_info.outputs.version }}
-          files: |  # 修正为英文参数 files
+          文件: |
             ${{ steps.extract_apks.outputs.signed_compatible }}
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-*.sha256
