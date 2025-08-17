@@ -10,7 +10,7 @@ import java.net.URL
 
 object FansirsqiUtil {
     // 定义一言API的URL
-    private const val HITOKOTO_API_URL = "https://v1.hitokoto.cn/"
+    private const val HITOKOTO_API_URL = "https://international.v1.hitokoto.cn/"
 
     /**
      * 获取一言（挂起函数），推荐在协程中使用
