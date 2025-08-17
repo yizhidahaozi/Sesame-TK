@@ -2,56 +2,68 @@ name: Android CI 🤖
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set Timezone to Asia/Shanghai
+      - name: Set Timezone to Asia/Shanghai ⏰
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
           echo "Current time: $(date)"
 
-      - name: Checkout
+      - name: Checkout 🛎️
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK
+      - name: Get short SHA 🔍
+        id: get_sha
+        run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Set up JDK ☕
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
           cache: gradle
 
-      - name: Set up Gradle
+      - name: Set up Gradle 🔧
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
           gradle-version: wrapper
 
-      - name: Grant execute permission for gradlew
+      - name: Grant execute permission for gradlew 🔑
         run: chmod +x gradlew
 
-      - name: Build with Gradle
+      - name: Build with Gradle 🏗️
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
 
-      - name: Locate APKs and Set Outputs
+      - name: Locate APKs and Set Outputs 📱
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
           compatible_apk=$(find app/build/outputs/apk/compatible/release -name "*.apk" | head -n 1)
+          
+          if [ -z "$normal_apk" ] || [ -z "$compatible_apk" ]; then
+            echo "Error: Could not find APK files"
+            exit 1
+          fi
+          
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
-      - name: Copy APKs to staging for signing
+      - name: Copy APKs to staging for signing 📋
         run: |
           mkdir -p app/build/outputs/apk/all
           cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
           cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
 
-      - name: Sign APKs
+      - name: Sign APKs 🔏
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
@@ -62,55 +74,83 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: Extract Signed APK Paths
+      - name: Extract Signed APK Paths 📌
         id: extract_apks
         run: |
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
+          signed_normal=""
+          signed_compatible=""
+          
           for file in "${files[@]}"; do
             if [[ "$file" == *Normal* ]]; then
-              echo "signed_normal=$file" >> $GITHUB_OUTPUT
+              signed_normal="$file"
             elif [[ "$file" == *Compatible* ]]; then
-              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
+              signed_compatible="$file"
             fi
           done
+          
+          if [ -z "$signed_normal" ] || [ -z "$signed_compatible" ]; then
+            echo "Error: Could not find signed APK files"
+            exit 1
+          fi
+          
+          echo "signed_normal=$signed_normal" >> $GITHUB_OUTPUT
+          echo "signed_compatible=$signed_compatible" >> $GITHUB_OUTPUT
 
-      - name: Upload APK - Compatible
+      - name: Upload APK - Compatible 📤
         uses: actions/upload-artifact@v4
         with:
           name: apk-compatible
           path: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: Upload APK - Normal
+      - name: Upload APK - Normal 📤
         uses: actions/upload-artifact@v4
         with:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: Extract file names
+      - name: Extract file names and version 📝
         id: extract_info
         run: |
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
-          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(v[^-]+).*-signed\.apk/\2/')
+          # 提取版本号（优化正则表达式）
+          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-([0-9]+\.[0-9]+\.[0-9]+).*-signed\.apk/\2/')
+          
+          if [ -z "$version" ]; then
+            #  fallback in case regex fails
+            version="${{ github.ref_name }}"
+          fi
+          
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Generate APKS Checksum
+      - name: Generate APKS Checksum 🔍
         run: |
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      - name: Create Tag from Version
+      - name: Create Tag from Version 🏷️
         if: startsWith(github.ref, 'refs/heads/main') && github.event_name == 'push'
         run: |
           VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
           echo "Creating tag: $VERSION_TAG"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
-      - name: Post to channel
+      - name: Get commit details 📜
+        id: commit_details
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "COMMIT_MESSAGE_BODY=$(git log -1 --pretty=format:"%s%n%n%b")" >> $GITHUB_OUTPUT
+          else
+            echo "COMMIT_MESSAGE_BODY=Manual build triggered" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post to Telegram channel 📢
         if: github.ref == 'refs/heads/main'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
@@ -118,28 +158,29 @@ jobs:
           NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
           COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
           COMMIT_MESSAGE: |+
-            New push to github\!
+            New push to github! 🎉
             ```
-            ${{ github.event.head_commit.message }}
-            ```by `${{ github.event.head_commit.author.name }}`
-            See commit detail [here](${{ github.event.head_commit.url }})
+            ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
+            ```
+            by ${{ github.event.head_commit.author.name || 'GitHub Actions' }}
+            See commit detail [here](${{ github.event.head_commit.url || github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
         run: |
+          # 改进Telegram消息转义处理
           ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
-      
 
-      - name: Upload Assets to Source Release
+      - name: Upload Assets to GitHub Release 🚀
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
-          文件: |
+          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
+          files: |
             ${{ steps.extract_apks.outputs.signed_compatible }}
             ${{ steps.extract_apks.outputs.signed_normal }}
             CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
             CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          tag_name: ${{ steps.extract_info.outputs.version}}
+          tag_name: v${{ steps.extract_info.outputs.version }}
           draft: false
           append_body: true
           generate_release_notes: true
@@ -147,8 +188,9 @@ jobs:
             ## ✨What's Changed
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
-            > ## 下载说明
-              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
+            
+            ## 下载说明 📥
+            * Normal 为正常版本,适用于`Android 8.0`及以上的系统 🆕
+            * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1` 🔄
 
-            > ~~墙内不再更新~~ 倒卖必死全家
+            > ~~墙内不再更新~~ 倒卖必死全家 😊
