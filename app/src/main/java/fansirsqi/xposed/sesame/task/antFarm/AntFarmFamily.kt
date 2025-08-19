@@ -66,6 +66,10 @@ data object AntFarmFamily {
         try {
             val enterRes = JSONObject(AntFarmRpcCall.enterFamily());
             if (ResChecker.checkRes(TAG, enterRes)) {
+                if (!enterRes.has("groupId")) {
+                    Log.farm("请先开通小鸡家庭");
+                    return;
+                }
                 groupId = enterRes.getString("groupId")
                 groupName = enterRes.getString("groupName")
                 val familyAwardNum: Int = enterRes.optInt("familyAwardNum", 0)//奖励数量
@@ -370,6 +374,7 @@ data object AntFarmFamily {
                 val sceneId = resp1.getString("sceneId")
                 val sceneName = resp1.getString("sceneName")
                 val success = resp1.getBoolean("success")
+
                 val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(ariverRpcTraceId, eventId, eventName, memo, resultCode, sceneId, sceneName, success, userIds))
                 if (ResChecker.checkRes(TAG, resp2)) {
                     val deliverId = resp2.getString("deliverId")
@@ -378,7 +383,7 @@ data object AntFarmFamily {
                         val content = resp3.getString("content")
                         val resp4 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
                         if (ResChecker.checkRes(TAG, resp4)) {
-                            Log.farm("家庭任务🏠道早安: $content 🌈")
+                            Log.farm("家庭任务�道早安: $content �")
                             Status.setFlagToday("antFarm::deliverMsgSend")
                         }
                     }

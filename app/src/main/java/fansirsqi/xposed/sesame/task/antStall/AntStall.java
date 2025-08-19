@@ -30,6 +30,7 @@ import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.TimeCounter;
 /**
  * @author Constanline
  * @since 2023/08/22
@@ -147,6 +148,7 @@ public class AntStall extends ModelTask {
     @Override
     public void run() {
         try {
+            TimeCounter tc = new TimeCounter(TAG);
             Log.record(TAG,"执行开始-" + getName());
             String s = AntStallRpcCall.home();
             JSONObject jo = new JSONObject(s);
@@ -158,34 +160,47 @@ public class AntStall extends ModelTask {
                 JSONObject astReceivableCoinVO = jo.getJSONObject("astReceivableCoinVO");
                 if (astReceivableCoinVO.optBoolean("hasCoin")) {
                     settleReceivable();
+                    tc.countDebug("收金币");
                 }
                 if (stallThrowManure.getValue()) {
                     throwManure();
+                    tc.countDebug("丢肥料");
                 }
                 JSONObject seatsMap = jo.getJSONObject("seatsMap");
                 settle(seatsMap);
+                tc.countDebug("收取金币");
                 collectManure();
+                tc.countDebug("收肥料");
                 sendBack(seatsMap);
+                tc.countDebug("请走");
                 if (stallAutoClose.getValue()) {
                     closeShop();
+                    tc.countDebug("收摊");
                 }
                 if (stallAutoOpen.getValue()) {
                     openShop();
+                    tc.countDebug("摆摊");
                 }
                 if (stallAutoTask.getValue()) {
                     taskList();
+                    tc.countDebug("自动任务第一次");
                     GlobalThreadPools.sleep(500);
                     taskList();
+                    tc.countDebug("自动任务第二次");
                 }
                 assistFriend();
+                tc.countDebug("新村助力");
                 if (stallDonate.getValue() && Status.canStallDonateToday()) {
                     donate();
+                    tc.countDebug("自动捐赠");
                 }
                 if (roadmap.getValue()) {
                     roadmap();
+                    tc.countDebug("自动进入下一村");
                 }
                 if (stallAutoTicket.getValue()) {
                     pasteTicket();
+                    tc.countDebug("贴罚单");
                 }
             } else {
                 Log.record(TAG,"home err:" + " " + s);
@@ -554,19 +569,21 @@ public class AntStall extends ModelTask {
                             break;
                         case "ANTSTALL_TASK_taojinbihuanduan":
                             //进入淘宝芭芭农场
-                            String sceneCode = JsonUtil.getValueByPath(task, "bizInfo.targetUrl")
-                                    .replaceAll(".*sceneCode%3D([^&]+).*", "$1");
-                            if (sceneCode.isEmpty()) {
-                                continue;
-                            }
-                            s = AntStallRpcCall.queryCallAppSchema(sceneCode);
-                            jo = new JSONObject(s);
-                            if (!jo.optBoolean("success")) {
-                                Log.runtime(TAG, "taskList.queryCallAppSchema err:" + jo.optString("resultDesc"));
-                            }
-                            GlobalThreadPools.sleep(5000);
-                            AntStallRpcCall.home();
-                            AntStallRpcCall.taskList();
+                            //没用，暂时先不做
+//                            String sceneCode = JsonUtil.getValueByPath(task, "bizInfo.targetUrl")
+//                                    .replaceAll(".*sceneCode%3D([^&]+).*", "$1");
+//                            if (sceneCode.isEmpty()) {
+//                                continue;
+//                            }
+//                            s = AntStallRpcCall.queryCallAppSchema(sceneCode);
+//                            jo = new JSONObject(s);
+//                            if (!jo.optBoolean("success")) {
+//                                Log.runtime(TAG, "taskList.queryCallAppSchema err:" + jo.optString("resultDesc"));
+//                            }
+//                            Log.record("延时5S 芭芭农场");
+//                            GlobalThreadPools.sleep(5000);
+//                            AntStallRpcCall.home();
+//                            AntStallRpcCall.taskList();
                             break;
                         case "ANTSTALL_XLIGHT_VARIABLE_AWARD":
                             //【木兰市集】逛精选好物
@@ -582,11 +599,13 @@ public class AntStall extends ModelTask {
                             if (jsonArray == null || jsonArray.length() == 0) {
                                 continue;
                             }
-                            GlobalThreadPools.sleep(5000);
+//                            Log.record("延时5S 木兰市集");
+//                            GlobalThreadPools.sleep(5000);
                             for (int j = 0; j < jsonArray.length(); j++) {
                                 try{
                                     JSONObject jsonObject = jsonArray.getJSONObject(j);
                                     s = AntStallRpcCall.finish(pid, jsonObject);
+                                    Log.record("延时5S 木兰市集");
                                     GlobalThreadPools.sleep(5000);
                                     jo = new JSONObject(s);
                                     if (!jo.optBoolean("success")) {
@@ -726,7 +745,6 @@ public class AntStall extends ModelTask {
                 String shareId = Base64.encodeToString((uid + "-" + RandomUtil.getRandomInt(5) + "ANUTSALTML_2PA_SHARE").getBytes(), Base64.NO_WRAP);
                 String str = AntStallRpcCall.achieveBeShareP2P(shareId);
                 JSONObject jsonObject = new JSONObject(str);
-                GlobalThreadPools.sleep(5000);
                 String name = UserMap.getMaskName(uid);
                 if (!jsonObject.optBoolean("success")) {
                     String code = jsonObject.getString("code");
@@ -747,6 +765,7 @@ public class AntStall extends ModelTask {
                     continue;
                 }
                 Log.farm("新村助力🎉成功[" + name + "]");
+                GlobalThreadPools.sleep(5000);
             }
             //暂时一天只做一次
             Status.antStallAssistFriendToday();

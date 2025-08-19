@@ -243,7 +243,7 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
     }
 
-    /*青春特权道具任务状态查询🔍*/
+    /*青春特权道具任务状态查询�*/
     public static String queryTaskListV2(String firstTaskType) throws JSONException {
         JSONObject jo = new JSONObject();
         JSONObject extend = new JSONObject();
