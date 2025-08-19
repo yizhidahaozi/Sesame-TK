@@ -11,9 +11,9 @@ Please uninstall this APP within 24 hours. </font>
 </b>
 If you purchased it, please contact the seller for a refund or report the seller on the platform.
 ]]></string>
+    <string name="app_disclaimer">本APP是为了学习研究而开发，免费开源，禁止用于任何商业用途，并禁止二次修改后闭源发布。<br/>请于24小时内卸载本APP。<br/>如果您是通过购买获得，请联系卖家退款或在平台举报卖家。⚠️</string>
     <color name="color_alpha">#00000000</color>
     <color name="color_btn_down">#F0F0F0</color>
-
     <string name="hello_user">Hello User!</string>
     <string name="base_configuration">BASE CONFIGURATION</string>
     <string name="immediate_effect">Enable</string>
@@ -202,5 +202,7 @@ If you purchased it, please contact the seller for a refund or report the seller
     <string name="extended_func">扩展功能</string>
     <string name="debug_tips">Please check the results in the debug log!</string>
     <string name="clear_photo">清空光盘行动图片💿</string>
+    <string name="all_log_file">全部日志</string>
+    <string name="error_log_file">异常日志</string>
 
 </resources>
