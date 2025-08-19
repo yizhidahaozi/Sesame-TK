@@ -100,10 +100,15 @@ public class BaseModel extends Model {
     @Getter
     public static final BooleanModelField batteryPerm = new BooleanModelField("batteryPerm", "为支付宝申请后台运行权限", true);
     /**
-     * 是否记录日志
+     * 是否记录record日志
      */
     @Getter
-    public static final BooleanModelField recordLog = new BooleanModelField("recordLog", "全部 | 记录日志", true);
+    public static final BooleanModelField recordLog = new BooleanModelField("recordLog", "全部 | 记录record日志", true);
+    /**
+     * 是否记录runtime日志
+     */
+    @Getter
+    public static final BooleanModelField runtimeLog = new BooleanModelField("runtimeLog", "全部 | 记录runtime日志", false);
     /**
      * 是否显示气泡提示
      */
@@ -169,7 +174,8 @@ public class BaseModel extends Model {
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限
-        modelFields.addField(recordLog);//是否记录日志
+        modelFields.addField(recordLog);//是否记录record日志
+        modelFields.addField(runtimeLog);//是否记录runtime日志
         modelFields.addField(showToast);//是否显示气泡提示
         modelFields.addField(enableOnGoing);//是否开启状态栏禁删
         modelFields.addField(languageSimplifiedChinese);//是否只显示中文并设置时区
@@ -183,7 +189,7 @@ public class BaseModel extends Model {
      */
     public static void destroyData() {
         try {
-            Log.runtime(TAG, "🧹清理所有数据");
+            Log.runtime(TAG, "�清理所有数据");
             IdMapManager.getInstance(BeachMap.class).clear();
 //            IdMapManager.getInstance(ReserveaMap.class).clear();
 //            IdMapManager.getInstance(CooperateMap.class).clear();
@@ -200,6 +206,6 @@ public class BaseModel extends Model {
     public interface TimedTaskModel {
         int SYSTEM = 0;
         int PROGRAM = 1;
-        String[] nickNames = {"🤖系统计时", "📦程序计时"};
+        String[] nickNames = {"�系统计时", "�程序计时"};
     }
 }
