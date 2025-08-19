@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat;
 
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
+import fansirsqi.xposed.sesame.model.modelFieldExt.PriorityModelField;
 
 public class ChoiceDialog {
 
@@ -37,4 +38,23 @@ public class ChoiceDialog {
         });
         dialog.show();
     }
+
+    public static void show(Context context, CharSequence title, PriorityModelField choiceModelField) {
+        // 使用 Material3 对话框构造器
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
+                .setTitle(title)
+                .setSingleChoiceItems(choiceModelField.getExpandKey(), choiceModelField.getValue(), (p1, p2) -> choiceModelField.setObjectValue(p2))
+                .setPositiveButton(context.getString(R.string.ok), null)
+                .create();
+
+        // 设置确认按钮颜色
+        dialog.setOnShowListener((DialogInterface dialogInterface) -> {
+            Button positiveButton = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+            if (positiveButton != null) {
+                positiveButton.setTextColor(ContextCompat.getColor(context, R.color.selection_color));
+            }
+        });
+        dialog.show();
+    }
+
 }
