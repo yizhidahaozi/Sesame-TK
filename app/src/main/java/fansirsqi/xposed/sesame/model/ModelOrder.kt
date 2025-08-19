@@ -30,12 +30,13 @@ object ModelOrder {
         AncientTree::class.java,     // 古树
         AntCooperate::class.java,    // 合种
         Reserve::class.java,       // 保护地
+
         AntMember::class.java,     // 会员
         AntStall::class.java,      // 蚂蚁新村
         GreenFinance::class.java,  // 绿色经营
-      //AntBookRead::class.java,   // 读书
-      //ConsumeGold::class.java,   // 消费金
-      //OmegakoiTown::class.java,  // 小镇
+        AntBookRead::class.java,   // 读书
+        ConsumeGold::class.java,   // 消费金
+        OmegakoiTown::class.java,  // 小镇
         AnswerAI::class.java         // AI答题
     )
 
