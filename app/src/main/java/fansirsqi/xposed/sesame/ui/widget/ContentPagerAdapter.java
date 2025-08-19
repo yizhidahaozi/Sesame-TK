@@ -146,20 +146,12 @@ public class ContentPagerAdapter extends FragmentStateAdapter {
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-//            ViewGroup container = (ViewGroup) holder.itemView;
-//            container.removeAllViews();
-//            View fieldView = modelFields.get(position).getView(container.getContext());
-//            if (fieldView != null) {
-//                container.addView(fieldView);
-//            }
-
-            LinearLayout container = holder.itemView.findViewById(R.id.item_container);
+            ViewGroup container = (ViewGroup) holder.itemView;
             container.removeAllViews();
             View fieldView = modelFields.get(position).getView(container.getContext());
             if (fieldView != null) {
                 container.addView(fieldView);
             }
-
         }
 
         @Override
