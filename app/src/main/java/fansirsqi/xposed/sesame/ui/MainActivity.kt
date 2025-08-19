@@ -22,12 +22,12 @@ import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.UIConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
+import fansirsqi.xposed.sesame.entity.FriendWatch
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.net.SecureApiClient
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
@@ -334,37 +334,6 @@ class MainActivity : BaseActivity() {
             }
         }
         return super.onOptionsItemSelected(item)
-    }
-    private fun selectSettingUid() {
-        val latch = CountDownLatch(1)
-        val dialog = StringDialog.showSelectionDialog(this, "📌 请选择配置", userNameArray, { dialog1: DialogInterface, which: Int ->
-            goSettingActivity(which)
-            dialog1.dismiss()
-            latch.countDown()
-        }, "返回", { dialog1: DialogInterface ->
-            dialog1.dismiss()
-            latch.countDown()
-        })
-
-        val length = userNameArray.size
-        if (length in 1..2) {
-            // 定义超时时间（单位：毫秒）
-            val timeoutMillis: Long = 800
-            Thread {
-                try {
-                    if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
-                        runOnUiThread {
-                            if (dialog.isShowing) {
-                                goSettingActivity(length - 1)
-                                dialog.dismiss()
-                            }
-                        }
-                    }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                }
-            }.start()
-        }
     }
 
     private fun selectSettingUid() {
