@@ -6,7 +6,7 @@
 [![Telegram-Channel](https://img.shields.io/badge/Sesame--TK-nul?&logo=Telegram&label=Telegram-Channel&labelColor=fff&link=https%3A%2F%2Ft.me%2FSesame_TK_Channel)](https://t.me/Sesame_TK_Channel)  
 [![Telegram-Group](https://img.shields.io/badge/Sesame--TK-nul?&logo=Telegram&label=Telegram-Group&labelColor=fff&link=https%3A%2F%2Ft.me%2Ffansirsqi_xposed_sesame)](https://t.me/fansirsqi_xposed_sesame)
 
-> 👉懒真人版本: [Sesame](https://github.com/LazyImmortal/Sesame)
+> �懒真人版本: [Sesame](https://github.com/LazyImmortal/Sesame)
 
 ## 耻辱列表
 
@@ -15,7 +15,7 @@
 将下面的userid替换上面的xxx
 如 `星空卡券`： https://www.goofish.com/personal?userId=590917148
 
-什么时候这些主页下架了模块，我们再发布新版本😁，或者等咸鱼大佬更新，~~我们再抄~~
+什么时候这些主页下架了模块，我们再发布新版本�，或者等咸鱼大佬更新，~~我们再抄~~
 
 |    咸鱼昵称    |    userid     |         更新日期          |                                                                                                        证据 |
 | :--------: | :-----------: |:---------------------:| --------------------------------------------------------------------------------------------------------: |
