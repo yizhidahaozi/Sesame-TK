@@ -28,28 +28,24 @@ import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.UIConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
-import fansirsqi.xposed.sesame.entity.FriendWatch
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.net.SecureApiClient
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
-import fansirsqi.xposed.sesame.newui.WatermarkViewz
+import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc
 import fansirsqi.xposed.sesame.ui.widget.ListDialog
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Detector.getRandomApi
 import fansirsqi.xposed.sesame.util.Detector.getRandomEncryptData
-import fansirsqi.xposed.sesame.util.DeviceInfoCard
-import fansirsqi.xposed.sesame.util.DeviceInfoUtil
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.Dispatchers
-import fansirsqi.xposed.sesame.util.PermissionUtil
-import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CountDownLatch
@@ -61,22 +57,19 @@ import java.util.concurrent.TimeUnit
 //   那我只能说你妈死了 就当开源项目给你妈烧纸钱了
 class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
-    private var hasPermissions = false
     private var userNameArray = arrayOf("默认")
     private var userEntityArray = arrayOf<UserEntity?>(null)
     private lateinit var oneWord: TextView
+
+    private lateinit var c: SecureApiClient
+    private var userNickName: String = ""
 
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ToastUtil.init(this) // 初始化全局 Context
 
-        hasPermissions = PermissionUtil.checkOrRequestFilePermissions(this)
-        if (!hasPermissions) {
-            Toast.makeText(this, "未获取文件读写权限", Toast.LENGTH_LONG).show()
-            finish() // 如果权限未获取，终止当前 Activity
-            return
-        }
+
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
@@ -102,49 +95,69 @@ class MainActivity : BaseActivity() {
         } catch (e: Exception) {
             Log.error(TAG, "load libSesame err:" + e.message)
         }
+
         lifecycleScope.launch {
             val result = FansirsqiUtil.getOneWord()
             oneWord.text = result
         }
+        c = SecureApiClient(baseUrl = getRandomApi(0x22), signatureKey = getRandomEncryptData(0xCF))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                c.secureVerify(deviceId = verifyId, path = getRandomEncryptData(0x9e))
+            }
+            Log.runtime("verify result = $result")
+            ToastUtil.makeText("${result?.optString("message")}", Toast.LENGTH_SHORT).show()
+            when (result?.optInt("status")) {
+                208, 400, 210, 209, 300, 200, 202, 203, 204, 205 -> {
+                    ViewAppInfo.veriftag = false
+                }
+
+                101, 100 -> {
+                    ViewAppInfo.veriftag = true
+                    userNickName = result.optJSONObject("data")?.optString("user").toString()
+                    updateSubTitle(RunType.LOADED.nickName)
+                }
+            }
+
+        }
+
     }
 
     override fun onResume() {
         super.onResume()
-        if (hasPermissions) {
-            try {
-                UIConfig.load()
-            } catch (e: Exception) {
-                Log.printStackTrace(e)
-            }
-            try {
-                val userNameList: MutableList<String> = ArrayList()
-                val userEntityList: MutableList<UserEntity?> = ArrayList()
-                val configFiles = Files.CONFIG_DIR.listFiles()
-                if (configFiles != null) {
-                    for (configDir in configFiles) {
-                        if (configDir.isDirectory) {
-                            val userId = configDir.name
-                            UserMap.loadSelf(userId)
-                            val userEntity = UserMap.get(userId)
-                            val userName = if (userEntity == null) {
-                                userId
-                            } else {
-                                userEntity.showName + ": " + userEntity.account
-                            }
-                            userNameList.add(userName)
-                            userEntityList.add(userEntity)
+        try { //打开设置前需要确认设置了哪个UI
+            UIConfig.load()
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
+        }
+        try {
+            val userNameList: MutableList<String> = ArrayList()
+            val userEntityList: MutableList<UserEntity?> = ArrayList()
+            val configFiles = Files.CONFIG_DIR.listFiles()
+            if (configFiles != null) {
+                for (configDir in configFiles) {
+                    if (configDir.isDirectory) {
+                        val userId = configDir.name
+                        UserMap.loadSelf(userId)
+                        val userEntity = UserMap.get(userId)
+                        val userName = if (userEntity == null) {
+                            userId
+                        } else {
+                            userEntity.showName + ": " + userEntity.account
                         }
+                        userNameList.add(userName)
+                        userEntityList.add(userEntity)
                     }
                 }
-                userNameList.add(0, "默认")
-                userEntityList.add(0, null)
-                userNameArray = userNameList.toTypedArray()
-                userEntityArray = userEntityList.toTypedArray()
-            } catch (e: Exception) {
-                userNameArray = arrayOf("默认")
-                userEntityArray = arrayOf(null)
-                Log.printStackTrace(e)
             }
+            userNameList.add(0, "默认")
+            userEntityList.add(0, null)
+            userNameArray = userNameList.toTypedArray<String>()
+            userEntityArray = userEntityList.toTypedArray<UserEntity?>()
+        } catch (e: Exception) {
+            userNameArray = arrayOf("默认")
+            userEntityArray = arrayOf(null)
+            Log.printStackTrace(e)
         }
         updateSubTitle(RunType.LOADED.nickName)
     }
@@ -322,6 +335,37 @@ class MainActivity : BaseActivity() {
         }
         return super.onOptionsItemSelected(item)
     }
+    private fun selectSettingUid() {
+        val latch = CountDownLatch(1)
+        val dialog = StringDialog.showSelectionDialog(this, "📌 请选择配置", userNameArray, { dialog1: DialogInterface, which: Int ->
+            goSettingActivity(which)
+            dialog1.dismiss()
+            latch.countDown()
+        }, "返回", { dialog1: DialogInterface ->
+            dialog1.dismiss()
+            latch.countDown()
+        })
+
+        val length = userNameArray.size
+        if (length in 1..2) {
+            // 定义超时时间（单位：毫秒）
+            val timeoutMillis: Long = 800
+            Thread {
+                try {
+                    if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
+                        runOnUiThread {
+                            if (dialog.isShowing) {
+                                goSettingActivity(length - 1)
+                                dialog.dismiss()
+                            }
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }.start()
+        }
+    }
 
     private fun selectSettingUid() {
         val latch = CountDownLatch(1)
@@ -361,32 +405,22 @@ class MainActivity : BaseActivity() {
     }
 
     private fun showSelectionDialog(
-        title: String?,
-        options: Array<String>,
-        onItemSelected: Consumer<Int>,
-        negativeButtonText: String?,
-        onNegativeButtonClick: Runnable,
-        showDefaultOption: Boolean
+        title: String?, options: Array<String>, onItemSelected: Consumer<Int>, negativeButtonText: String?, onNegativeButtonClick: Runnable, showDefaultOption: Boolean
     ) {
         val latch = CountDownLatch(1)
-        val dialog = StringDialog.showSelectionDialog(
-            this,
-            title,
-            options,
-            { dialog1: DialogInterface, which: Int ->
-                onItemSelected.accept(which)
-                dialog1.dismiss()
-                latch.countDown()
-            },
-            negativeButtonText,
-            { dialog1: DialogInterface ->
-                onNegativeButtonClick.run()
-                dialog1.dismiss()
-                latch.countDown()
-            })
+        val dialog = StringDialog.showSelectionDialog(this, title, options, { dialog1: DialogInterface, which: Int ->
+            onItemSelected.accept(which)
+            dialog1.dismiss()
+            latch.countDown()
+        }, negativeButtonText, { dialog1: DialogInterface ->
+            onNegativeButtonClick.run()
+            dialog1.dismiss()
+            latch.countDown()
+        })
 
         val length = options.size
         if (showDefaultOption && length > 0 && length < 3) {
+            // 定义超时时间（单位：毫秒）
             val timeoutMillis: Long = 800
             Thread {
                 try {
@@ -405,7 +439,49 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun goFriendWatch(index: Int) {
+    private fun goSettingActivity(index: Int) {
+        if (Detector.loadLibrary("checker")) {
+            val userEntity = userEntityArray[index]
+            val targetActivity = UIConfig.INSTANCE.targetActivityClass
+            val intent = Intent(this, targetActivity)
+            if (userEntity != null) {
+                intent.putExtra("userId", userEntity.userId)
+                intent.putExtra("userName", userEntity.showName)
+            } else {
+                intent.putExtra("userName", userNameArray[index])
+            }
+
+            startActivity(intent)
+        } else {
+            Detector.tips(this, "缺少必要依赖！")
+        }
+    }
+
+    fun updateSubTitle(runType: String) {
+        baseTitle = ViewAppInfo.appTitle + "[" + runType + "]" + userNickName
+        Log.runtime("updateSubTitle: $baseTitle")
+        when (runType) {
+            RunType.DISABLE.nickName -> setBaseTitleTextColor(
+                ContextCompat.getColor(
+                    this, R.color.not_active_text
+                )
+            )
+
+            RunType.ACTIVE.nickName -> setBaseTitleTextColor(
+                ContextCompat.getColor(
+                    this, R.color.active_text
+                )
+            )
+
+            RunType.LOADED.nickName -> setBaseTitleTextColor(
+                ContextCompat.getColor(
+                    this, R.color.textColorPrimary
+                )
+            )
+        }
+    }
+
+     private fun goFriendWatch(index: Int) {
         val userEntity = userEntityArray[index]
         if (userEntity != null) {
             ListDialog.show(
@@ -418,33 +494,6 @@ class MainActivity : BaseActivity() {
             )
         } else {
             ToastUtil.makeText(this, "😡 别他妈选默认！！！！！！！！", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun goSettingActivity(index: Int) {
-        if (Detector.loadLibrary("checker")) {
-            val userEntity = userEntityArray[index]
-            val targetActivity = UIConfig.INSTANCE.targetActivityClass
-            val intent = Intent(this, targetActivity)
-            if (userEntity != null) {
-                intent.putExtra("userId", userEntity.userId)
-                intent.putExtra("userName", userEntity.showName)
-            } else {
-                intent.putExtra("userName", userNameArray[index])
-            }
-            startActivity(intent)
-        } else {
-            Detector.tips(this, "缺少必要依赖！")
-        }
-    }
-
-    fun updateSubTitle(runType: String) {
-        Log.runtime(TAG, "updateSubTitle$runType")
-        baseTitle = ViewAppInfo.appTitle + "[" + runType + "]"
-        when (runType) {
-            RunType.DISABLE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))
-            RunType.ACTIVE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.active_text))
-            RunType.LOADED.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.textColorPrimary))
         }
     }
 }
