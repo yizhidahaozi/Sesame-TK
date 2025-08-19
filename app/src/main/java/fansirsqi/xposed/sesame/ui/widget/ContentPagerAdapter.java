@@ -1,13 +1,10 @@
 package fansirsqi.xposed.sesame.ui.widget;
-
 import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
-
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -16,11 +13,9 @@ import androidx.lifecycle.Lifecycle;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.ModelField;
@@ -146,20 +141,12 @@ public class ContentPagerAdapter extends FragmentStateAdapter {
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-//            ViewGroup container = (ViewGroup) holder.itemView;
-//            container.removeAllViews();
-//            View fieldView = modelFields.get(position).getView(container.getContext());
-//            if (fieldView != null) {
-//                container.addView(fieldView);
-//            }
-
-            LinearLayout container = holder.itemView.findViewById(R.id.item_container);
+            ViewGroup container = (ViewGroup) holder.itemView;
             container.removeAllViews();
             View fieldView = modelFields.get(position).getView(container.getContext());
             if (fieldView != null) {
                 container.addView(fieldView);
             }
-
         }
 
         @Override

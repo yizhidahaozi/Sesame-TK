@@ -16,7 +16,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.text.HtmlCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.model.ModelField;
 import fansirsqi.xposed.sesame.util.Log;
