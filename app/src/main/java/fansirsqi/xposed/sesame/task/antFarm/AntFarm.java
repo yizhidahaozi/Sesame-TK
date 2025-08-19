@@ -722,11 +722,11 @@ public class AntFarm extends ModelTask {
         if (useBigEaterTool.getValue() && AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
             boolean result = useFarmTool(ownerFarmId, AntFarm.ToolType.BIG_EATER_TOOL);
             if (result) {
-                Log.farm("使用道具�[加饭卡]！");
+                Log.farm("使用道具🎭[加饭卡]！");
                 GlobalThreadPools.sleep(1000);
                 needReload = true;
             } else {
-                Log.record("⚠️使用道具�[加饭卡]失败，可能卡片不足或状态异常~");
+                Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~");
             }
         }
 
@@ -1353,8 +1353,11 @@ public class AntFarm extends ModelTask {
     private void doFarmTasks() {
         try {
             List<String> taskList = new ArrayList<>(List.of(
-                    "HEART_DONATION_ADVANCED_FOOD_V2",
-                    "HEART_DONATE"
+                    "HEART_DONATION_ADVANCED_FOOD_V2",//香草芒果冰糕任务
+                    "HEART_DONATE",//爱心捐赠
+                    "SHANGOU_xiadan",//去买秋天第一杯奶茶
+                    "OFFLINE_PAY",//到店付款,线下支付
+                    "ONLINE_PAY"//在线支付
             ));
             List<String> cachedList = DataCache.INSTANCE.getData("farmCompletedTaskSet", taskList);
             taskList = new ArrayList<>(new LinkedHashSet<>(cachedList)); // 去重可选
