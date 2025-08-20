@@ -102,3 +102,43 @@ public class ForestChouChouLe {
                                 GlobalThreadPools.sleep(3000L);
                                 String sginRes = AntForestRpcCall.receiveTaskAwardopengreen(source, taskSceneCode, taskType);
                                 if (ResChecker.checkRes(TAG, sginRes)) {
+                                    Log.forest("森林寻宝🧾：" + taskName);
+                                    if (rightsTimesLimit - rightsTimes > 0) {
+                                        doublecheck = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } while (doublecheck);
+
+            // ==================== 执行抽奖 ====================
+            jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source));
+            if (ResChecker.checkRes(TAG, jo)) {
+                drawScene = jo.getJSONObject("drawScene");
+                drawActivity = drawScene.getJSONObject("drawActivity");
+                activityId = drawActivity.getString("activityId");
+                sceneCode = drawActivity.getString("sceneCode");
+
+                JSONObject drawAsset = jo.getJSONObject("drawAsset");
+                int blance = drawAsset.optInt("blance", 0);
+                while (blance > 0) {
+                    jo = new JSONObject(AntForestRpcCall.drawopengreen(activityId, sceneCode, source, UserMap.getCurrentUid()));
+                    if (ResChecker.checkRes(TAG, jo)) {
+                        drawAsset = jo.getJSONObject("drawAsset");
+                        blance = drawAsset.getInt("blance");
+                        JSONObject prizeVO = jo.getJSONObject("prizeVO");
+                        String prizeName = prizeVO.getString("prizeName");
+                        int prizeNum = prizeVO.getInt("prizeNum");
+                        Log.forest("森林寻宝🎁[领取: " + prizeName + "*" + prizeNum + "]");
+                    }
+                }
+            }
+            // ==============================================
+
+        } catch (Exception e) {
+            Log.printStackTrace(e);
+        }
+    }
+}
