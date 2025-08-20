@@ -1351,81 +1351,71 @@ public class AntFarm extends ModelTask {
      * 一起拿饲料，到店付款，线上支付，鲸探
      */
     private void doFarmTasks() {
-    try {
-        // 初始化手动屏蔽的任务列表
-        List<String> presetTaskList = new ArrayList<>(List.of(
-                "HEART_DONATION_ADVANCED_FOOD_V2", // 香草芒果冰糕任务
-                "HEART_DONATE",                     // 爱心捐赠
-                "SHANGOU_xiadan",                   // 去买秋天第一杯奶茶
-                "OFFLINE_PAY",                       // 到店付款,线下支付
-                "ONLINE_PAY"                         // 在线支付
-        ));
-
-        // 获取缓存任务列表并去重
-        List<String> cachedList = DataCache.INSTANCE.getData("farmCompletedTaskSet", presetTaskList);
-        Set<String> taskSet = new LinkedHashSet<>(cachedList); // 去重，保持顺序
-        List<String> taskList = new ArrayList<>(taskSet);
-
-        // 获取农场任务列表
-        JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
-        if (!ResChecker.checkRes(TAG, jo)) return;
-
-        JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
-        for (int i = 0; i < farmTaskList.length(); i++) {
-            JSONObject task = farmTaskList.getJSONObject(i);
-            String title = task.optString("title", "未知任务");
-            String taskStatus = task.getString("taskStatus");
-            String bizKey = task.getString("bizKey");
-
-            // 跳过已完成或屏蔽的任务
-            if (taskList.contains(bizKey)) continue;
-
-            // 处理待办任务
-            if (TaskStatus.TODO.name().equals(taskStatus)) {
-                if ("VIDEO_TASK".equals(bizKey)) {
-                    JSONObject taskVideoDetailjo = new JSONObject(AntFarmRpcCall.queryTabVideoUrl());
-                    if (ResChecker.checkRes(TAG, taskVideoDetailjo)) {
-                        String videoUrl = taskVideoDetailjo.getString("videoUrl");
-                        String contentId = videoUrl.substring(videoUrl.indexOf("&contentId=") + 11, videoUrl.indexOf("&refer"));
-                        JSONObject videoDetailjo = new JSONObject(AntFarmRpcCall.videoDeliverModule(contentId));
-                        if (ResChecker.checkRes(TAG, videoDetailjo)) {
-                            Log.record("视频任务:延时15S");
-                            GlobalThreadPools.sleep(15 * 1000L);
-                            JSONObject resultVideojo = new JSONObject(AntFarmRpcCall.videoTrigger(contentId));
-                            if (ResChecker.checkRes(TAG, resultVideojo)) {
-                                Log.farm("庄园任务🧾[" + title + "]");
+        try {
+            Set<String> presetBad = new LinkedHashSet<>(List.of(
+                    "HEART_DONATION_ADVANCED_FOOD_V2",//香草芒果冰糕任务
+                    "HEART_DONATE",//爱心捐赠
+                    "SHANGOU_xiadan",//去买秋天第一杯奶茶
+                    "OFFLINE_PAY",//到店付款,线下支付
+                    "ONLINE_PAY"//在线支付
+            ));
+            TypeReference<Set<String>> typeRef = new TypeReference<>() {
+            };
+            Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badFarmTaskSet", typeRef);
+            badTaskSet.addAll(presetBad);
+            DataStore.INSTANCE.put("badFarmTaskSet", badTaskSet);
+            JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
+            if (ResChecker.checkRes(TAG, jo)) {
+                JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
+                for (int i = 0; i < farmTaskList.length(); i++) {
+                    JSONObject task = farmTaskList.getJSONObject(i);
+                    String title = task.optString("title", "未知任务");
+                    String taskStatus = task.getString("taskStatus");
+                    String bizKey = task.getString("bizKey");
+                    String taskMode = task.optString("taskMode");
+                    // 跳过已被屏蔽的任务
+                    if (badTaskSet.contains(bizKey)) continue;
+                    if (TaskStatus.TODO.name().equals(taskStatus)) {
+                        if (!badTaskSet.contains(bizKey)) {
+                            if ("VIDEO_TASK".equals(bizKey)) {
+                                JSONObject taskVideoDetailjo = new JSONObject(AntFarmRpcCall.queryTabVideoUrl());
+                                if (ResChecker.checkRes(TAG, taskVideoDetailjo)) {
+                                    String videoUrl = taskVideoDetailjo.getString("videoUrl");
+                                    String contentId = videoUrl.substring(videoUrl.indexOf("&contentId=") + 11, videoUrl.indexOf("&refer"));
+                                    JSONObject videoDetailjo = new JSONObject(AntFarmRpcCall.videoDeliverModule(contentId));
+                                    if (ResChecker.checkRes(TAG, videoDetailjo)) {
+                                        GlobalThreadPools.sleep(15 * 1000L);
+                                        JSONObject resultVideojo = new JSONObject(AntFarmRpcCall.videoTrigger(contentId));
+                                        if (ResChecker.checkRes(TAG, resultVideojo)) {
+                                            Log.farm("庄园任务🧾[" + title + "]");
+                                        }
+                                    }
+                                }
+                            } else if ("ANSWER".equals(bizKey)) {
+                                answerQuestion("100"); //答题
+                            } else {
+                                JSONObject taskDetailjo = new JSONObject(AntFarmRpcCall.doFarmTask(bizKey));
+                                if (ResChecker.checkRes(TAG, taskDetailjo)) {
+                                    Log.farm("庄园任务🧾[" + title + "]");
+                                } else {
+                                    Log.error("庄园任务失败：" + title + "\n" + taskDetailjo);
+                                    badTaskSet.add(bizKey); // 避免重复失败
+                                    DataStore.INSTANCE.put("badFarmTaskSet", badTaskSet);
+                                }
                             }
                         }
                     }
-                } else if ("ANSWER".equals(bizKey)) {
-                    answerQuestion("100"); // 答题
-                } else {
-                    JSONObject taskDetailjo = new JSONObject(AntFarmRpcCall.doFarmTask(bizKey));
-                    if (ResChecker.checkRes(TAG, taskDetailjo)) {
-                        Log.farm("庄园任务🧾[" + title + "]");
-                    } else {
-                        Log.error("庄园任务失败：" + title + "\n" + taskDetailjo);
-                        taskList.add(bizKey); // 避免重复失败
+                    if ("ANSWER".equals(bizKey) && !Status.hasFlagToday(CACHED_FLAG)) {//单独处理答题任务
+                        answerQuestion("100"); //答题
                     }
+                    GlobalThreadPools.sleep(1000);
                 }
-                GlobalThreadPools.sleep(1000); // 延时1s
             }
-
-            // 单独处理答题任务
-            if ("ANSWER".equals(bizKey) && !Status.hasFlagToday(CACHED_FLAG)) {
-                answerQuestion("100");
-                GlobalThreadPools.sleep(1000);
-            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "doFarmTasks 错误:", t);
         }
-
-        // 保存任务完成状态
-        DataCache.INSTANCE.saveData("farmCompletedTaskSet", taskList);
-
-    } catch (Throwable t) {
-        Log.printStackTrace(TAG, "doFarmTasks 错误:", t);
     }
-}
-
+	
     private void receiveFarmAwards() {
         try {
             boolean doubleCheck;
