@@ -715,10 +715,10 @@ public class AntOcean extends ModelTask {
                                     DataStore.INSTANCE.put("badOceanTaskSet", badTaskSet);
                                 } else {
                                     if (ResChecker.checkRes(TAG, joFinishTask)) {
-                                        Log.forest("海洋任务�️完成[" + taskTitle + "]");
+                                        Log.forest("海洋任务🌊完成[" + taskTitle + "]");
                                         done = true;
                                     } else {
-                                        Log.error(TAG, "海洋任务�️完成失败：" + joFinishTask);
+                                        Log.error(TAG, "海洋任务🌊完成失败：" + joFinishTask);
                                         badTaskSet.add(taskType);
                                         DataStore.INSTANCE.put("badOceanTaskSet", badTaskSet);
                                     }
