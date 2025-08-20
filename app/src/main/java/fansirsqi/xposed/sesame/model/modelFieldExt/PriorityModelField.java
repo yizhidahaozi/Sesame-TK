@@ -12,8 +12,10 @@ import androidx.core.content.ContextCompat;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.model.ModelField;
 import fansirsqi.xposed.sesame.ui.ChoiceDialog;
+
 public class PriorityModelField extends ModelField<Integer> {
     private String[] choiceArray;
+    private boolean enable = true; // 新增开关字段，默认启用
 
     public PriorityModelField(String code, String name, Integer value) {
         super(code, name, value);
@@ -22,7 +24,6 @@ public class PriorityModelField extends ModelField<Integer> {
         super(code, name, value);
         this.choiceArray = choiceArray;
     }
-
     public PriorityModelField(String code, String name, Integer value, String desc) {
         super(code, name, value, desc);
     }
@@ -38,6 +39,16 @@ public class PriorityModelField extends ModelField<Integer> {
     public String[] getExpandKey() {
         return choiceArray;
     }
+
+    // ✅ 新增方法，兼容原来调用
+    public boolean isEnable() {
+        return enable;
+    }
+
+    public void setEnable(boolean enable) {
+        this.enable = enable;
+    }
+
     @Override
     public View getView(Context context) {
         Button btn = new Button(context);
