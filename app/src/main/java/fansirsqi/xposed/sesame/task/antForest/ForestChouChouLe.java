@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.task.antForest;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -13,7 +11,6 @@ import fansirsqi.xposed.sesame.task.TaskStatus;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.ResChecker;
-import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 public class ForestChouChouLe {
@@ -28,14 +25,11 @@ public class ForestChouChouLe {
             boolean doublecheck;
             String source = "task_entry";
 
-            // ==================== 屏蔽任务集合 ====================
+            // ==================== 手动屏蔽任务集合 ====================
             Set<String> presetBad = new LinkedHashSet<>();
-            presetBad.add("FOREST_NORMAL_DRAW_SHARE");  // 邀请好友任务（可屏蔽）
-
-            TypeReference<Set<String>> typeRef = new TypeReference<Set<String>>() {};
-            Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badForestTaskSet", typeRef);
-            badTaskSet.addAll(presetBad);
-            DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);
+            presetBad.add("FOREST_NORMAL_DRAW_SHARE");  // 邀请好友任务（屏蔽）
+            // 你可以在这里继续添加更多要屏蔽的任务
+            // presetBad.add("xxx");
             // =====================================================
 
             JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source));
@@ -74,7 +68,7 @@ public class ForestChouChouLe {
                             int rightsTimesLimit = taskRights.getInt("rightsTimesLimit");
 
                             // ==================== 屏蔽逻辑 ====================
-                            if (badTaskSet.contains(taskType)) {
+                            if (presetBad.contains(taskType)) {
                                 Log.record("已屏蔽任务，跳过：" + taskName);
                                 continue;
                             }
@@ -97,13 +91,8 @@ public class ForestChouChouLe {
                                     Log.forest("森林寻宝🧾：" + taskName);
                                     doublecheck = true;
                                 } else {
-                                    // 失败计数
-                                    int count = taskTryCount.computeIfAbsent(taskType, k -> new AtomicInteger(0)).incrementAndGet();
-                                    if (count > 1) {
-                                        Log.error("任务多次失败，加入屏蔽：" + taskName);
-                                        badTaskSet.add(taskType);
-                                        DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);
-                                    }
+                                    // 失败计数（不会自动屏蔽）
+                                    taskTryCount.computeIfAbsent(taskType, k -> new AtomicInteger(0)).incrementAndGet();
                                 }
                             }
 
@@ -113,46 +102,3 @@ public class ForestChouChouLe {
                                 GlobalThreadPools.sleep(3000L);
                                 String sginRes = AntForestRpcCall.receiveTaskAwardopengreen(source, taskSceneCode, taskType);
                                 if (ResChecker.checkRes(TAG, sginRes)) {
-                                    Log.forest("森林寻宝🧾：" + taskName);
-                                    if (rightsTimesLimit - rightsTimes <= 0) {
-                                        badTaskSet.add(taskType);
-                                        DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);
-                                    } else {
-                                        doublecheck = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } while (doublecheck);
-
-            // ==================== 执行抽奖 ====================
-            jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source));
-            if (ResChecker.checkRes(TAG, jo)) {
-                drawScene = jo.getJSONObject("drawScene");
-                drawActivity = drawScene.getJSONObject("drawActivity");
-                activityId = drawActivity.getString("activityId");
-                sceneCode = drawActivity.getString("sceneCode");
-
-                JSONObject drawAsset = jo.getJSONObject("drawAsset");
-                int blance = drawAsset.optInt("blance", 0);
-                while (blance > 0) {
-                    jo = new JSONObject(AntForestRpcCall.drawopengreen(activityId, sceneCode, source, UserMap.getCurrentUid()));
-                    if (ResChecker.checkRes(TAG, jo)) {
-                        drawAsset = jo.getJSONObject("drawAsset");
-                        blance = drawAsset.getInt("blance");
-                        JSONObject prizeVO = jo.getJSONObject("prizeVO");
-                        String prizeName = prizeVO.getString("prizeName");
-                        int prizeNum = prizeVO.getInt("prizeNum");
-                        Log.forest("森林寻宝🎁[领取: " + prizeName + "*" + prizeNum + "]");
-                    }
-                }
-            }
-            // ==============================================
-
-        } catch (Exception e) {
-            Log.printStackTrace(e);
-        }
-    }
-}
