@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import de.robv.android.xposed.XposedHelpers;
-import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
@@ -1396,164 +1395,141 @@ public class AntForest extends ModelTask {
      * @param collectEnergyEntity 收能量实体
      * @param joinThread          是否加入线程
      */
-    private void collectEnergy(CollectEnergyEntity collectEnergyEntity, Boolean joinThread) {
+    private void collectEnergy(CollectEnergyEntity collectEnergyEntity, boolean joinThread) {
         if (errorWait) {
             Log.record(TAG, "异常⌛等待中...不收取能量");
             return;
         }
-        Runnable runnable =
-                () -> {
-                    try {
-                        String userId = collectEnergyEntity.getUserId();
-                        usePropBeforeCollectEnergy(userId);
-                        RpcEntity rpcEntity = collectEnergyEntity.getRpcEntity();
-                        boolean needDouble = collectEnergyEntity.getNeedDouble();
-                        boolean needRetry = collectEnergyEntity.getNeedRetry();
-                        int tryCount = collectEnergyEntity.addTryCount();
-                        int collected = 0;
-                        long startTime;
-                        synchronized (collectEnergyLockLimit) {
-                            long sleep;
-                            if (needDouble) {
-                                collectEnergyEntity.unsetNeedDouble();
-                                sleep = doubleCollectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get();
-                            } else if (needRetry) {
-                                collectEnergyEntity.unsetNeedRetry();
-                                sleep = retryIntervalInt - System.currentTimeMillis() + collectEnergyLockLimit.get();
-                            } else {
-                                sleep = collectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get();
-                            }
-                            if (sleep > 0) {
-                                GlobalThreadPools.sleep(sleep);
-                            }
-                            startTime = System.currentTimeMillis();
-                            collectEnergyLockLimit.setForce(startTime);
-                        }
-                        RequestManager.requestString(rpcEntity, 0, 0);
-                        long spendTime = System.currentTimeMillis() - startTime;
-                        if (balanceNetworkDelay.getValue()) {
-                            delayTimeMath.nextInteger((int) (spendTime / 3));
-                        }
-                        if (rpcEntity.getHasError()) {
-                            String errorCode = (String) XposedHelpers.callMethod(rpcEntity.getResponseObject(), "getString", "error");
-//                            String errorCode = rpcEntity.getErrorCode();
-                            if ("1004".equals(errorCode)) {
-                                if (BaseModel.getWaitWhenException().getValue() > 0) {
-                                    long waitTime = System.currentTimeMillis() + BaseModel.getWaitWhenException().getValue();
-                                    RuntimeInfo.getInstance().put(RuntimeInfo.RuntimeInfoKey.ForestPauseTime, waitTime);
-                                    Notify.updateStatusText("异常");
-                                    Log.record(TAG, "触发异常,等待至" + TimeUtil.getCommonDate(waitTime));
-                                    errorWait = true;
-                                    return;
-                                }
-                                GlobalThreadPools.sleep(600 + RandomUtil.delay());
-                            }
-                            if (tryCount < tryCountInt) {
-                                collectEnergyEntity.setNeedRetry();
-                                collectEnergy(collectEnergyEntity, true);
-                            }
-                            return;
-                        }
-                        JSONObject jo = new JSONObject(rpcEntity.getResponseString());
-                        String resultCode = jo.getString("resultCode");
-                        if (!"SUCCESS".equalsIgnoreCase(resultCode)) {
-                            if ("PARAM_ILLEGAL2".equals(resultCode)) {
-                                Log.record(TAG, "[" + cacheCollectedMap.get(userId) + "]" + "能量已被收取,取消重试 错误:" + jo.getString("resultDesc"));
-                                return;
-                            }
-                            Log.record(TAG, "[" + cacheCollectedMap.get(userId) + "]" + jo.getString("resultDesc"));
-                            if (tryCount < tryCountInt) {
-                                collectEnergyEntity.setNeedRetry();
-                                collectEnergy(collectEnergyEntity);
-                            }
-                            return;
-                        }
-                        JSONArray jaBubbles = jo.getJSONArray("bubbles");
-                        int jaBubbleLength = jaBubbles.length();
-                        if (jaBubbleLength > 1) {
-                            List<Long> newBubbleIdList = new ArrayList<>();
-                            for (int i = 0; i < jaBubbleLength; i++) {
-                                JSONObject bubble = jaBubbles.getJSONObject(i);
-                                if (bubble.getBoolean("canBeRobbedAgain")) {
-                                    newBubbleIdList.add(bubble.getLong("id"));
-                                }
-                                collected += bubble.getInt("collectedEnergy");
-                            }
-                            if (collected > 0) {
-                                int randomIndex = random.nextInt(emojiList.size());
-                                String randomEmoji = emojiList.get(randomIndex);
-                                String str = "一键收取️" + randomEmoji + collected + "g[" + cacheCollectedMap.get(userId) + "]#";
-                                totalCollected += collected;
-                                if (needDouble) {
-                                    Log.forest(str + "耗时[" + spendTime + "]ms[双击]");
-                                    Toast.show(str + "[双击]");
-                                } else {
-                                    Log.forest(str + "耗时[" + spendTime + "]ms");
-                                    Toast.show(str);
-                                }
-                            } else {
-                                Log.record(TAG, "一键收取❌[" + cacheCollectedMap.get(userId) + "]的能量失败" + " " + "，UserID：" + userId + "，BubbleId：" + newBubbleIdList);
-                            }
-                            if (!newBubbleIdList.isEmpty()) {
-                                collectEnergyEntity.setRpcEntity(AntForestRpcCall.batchEnergyRpcEntity("", userId, newBubbleIdList));
-                                collectEnergyEntity.setNeedDouble();
-                                collectEnergyEntity.resetTryCount();
-                                collectEnergy(collectEnergyEntity);
-                            }
-                        } else if (jaBubbleLength == 1) {
-                            JSONObject bubble = jaBubbles.getJSONObject(0);
-                            collected += bubble.getInt("collectedEnergy");
-                            if (collected > 0) {
-                                int randomIndex = random.nextInt(emojiList.size());
-                                String randomEmoji = emojiList.get(randomIndex);
-                                String str = "普通收取" + randomEmoji + collected + "g[" + cacheCollectedMap.get(userId) + "]";
-                                totalCollected += collected;
-                                if (needDouble) {
-                                    Log.forest(str + "耗时[" + spendTime + "]ms[双击]");
-                                    Toast.show(str + "[双击]");
-                                } else {
-                                    Log.forest(str + "耗时[" + spendTime + "]ms");
-                                    Toast.show(str);
-                                }
-                            } else {
-                                Log.record(TAG, "普通收取❌[" + cacheCollectedMap.get(userId) + "]的能量失败");
-                                Log.runtime(TAG, "，UserID：" + userId + "，BubbleId：" + bubble.getLong("id"));
-                            }
-                            if (bubble.getBoolean("canBeRobbedAgain")) {
-                                collectEnergyEntity.setNeedDouble();
-                                collectEnergyEntity.resetTryCount();
-                                collectEnergy(collectEnergyEntity);
-                                return;
-                            }
-                            JSONObject userHome = collectEnergyEntity.getUserHome();
-                            if (userHome == null) {
-                                return;
-                            }
-                            String bizNo = userHome.optString("bizNo");
-                            if (bizNo.isEmpty()) {
-                                return;
-                            }
-                            int returnCount = getReturnCount(collected);
-                            if (returnCount > 0) {
-                                returnFriendWater(userId, bizNo, 1, returnCount);
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.runtime(TAG, "collectEnergy err");
-                        Log.printStackTrace(e);
-                    } finally {
-                        String str_totalCollected = "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g";
-                        Notify.updateLastExecText(str_totalCollected);
-                        notifyMain();
+
+        Runnable runnable = () -> {
+            try {
+                String userId = collectEnergyEntity.getUserId();
+                usePropBeforeCollectEnergy(userId);
+                RpcEntity rpcEntity = collectEnergyEntity.getRpcEntity();
+                boolean needDouble = collectEnergyEntity.getNeedDouble();
+                boolean needRetry = collectEnergyEntity.getNeedRetry();
+                int tryCount = collectEnergyEntity.addTryCount();
+                int collected = 0;
+                long startTime;
+
+                synchronized (collectEnergyLockLimit) {
+                    long sleep;
+                    if (needDouble) {
+                        collectEnergyEntity.unsetNeedDouble();
+                        sleep = Math.max(0, doubleCollectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get());
+                    } else if (needRetry) {
+                        collectEnergyEntity.unsetNeedRetry();
+                        sleep = Math.max(0, retryIntervalInt - System.currentTimeMillis() + collectEnergyLockLimit.get());
+                    } else {
+                        sleep = Math.max(0, collectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get());
                     }
-                };
+
+                    if (sleep > 0) {
+                        GlobalThreadPools.sleep(sleep);
+                    }
+                    startTime = System.currentTimeMillis();
+                    collectEnergyLockLimit.setForce(startTime);
+                }
+
+                RequestManager.requestString(rpcEntity, 0, 0);
+                long spendTime = System.currentTimeMillis() - startTime;
+
+                if (balanceNetworkDelay.getValue()) {
+                    delayTimeMath.nextInteger((int) (spendTime / 3));
+                }
+
+                if (rpcEntity.getHasError()) {
+                    String errorCode = (String) XposedHelpers.callMethod(rpcEntity.getResponseObject(), "getString", "error");
+                    if ("1004".equals(errorCode)) {
+                        if (BaseModel.getWaitWhenException().getValue() > 0) {
+                            long waitTime = System.currentTimeMillis() + BaseModel.getWaitWhenException().getValue();
+                            RuntimeInfo.getInstance().put(RuntimeInfo.RuntimeInfoKey.ForestPauseTime, waitTime);
+                            Notify.updateStatusText("异常");
+                            Log.record(TAG, "触发异常,等待至" + TimeUtil.getCommonDate(waitTime));
+                            errorWait = true;
+                            return;
+                        }
+                        GlobalThreadPools.sleep(600 + RandomUtil.delay());
+                    }
+                    if (tryCount < tryCountInt) {
+                        collectEnergyEntity.setNeedRetry();
+                        collectEnergy(collectEnergyEntity, true);
+                    }
+                    return;
+                }
+
+                JSONObject jo = new JSONObject(rpcEntity.getResponseString());
+                String resultCode = jo.getString("resultCode");
+                if (!"SUCCESS".equalsIgnoreCase(resultCode)) {
+                    if ("PARAM_ILLEGAL2".equals(resultCode)) {
+                        Log.record(TAG, "[" + cacheCollectedMap.get(userId) + "]能量已被收取,取消重试 错误:" + jo.getString("resultDesc"));
+                        return;
+                    }
+                    Log.record(TAG, "[" + cacheCollectedMap.get(userId) + "]" + jo.getString("resultDesc"));
+                    if (tryCount < tryCountInt) {
+                        collectEnergyEntity.setNeedRetry();
+                        collectEnergy(collectEnergyEntity, true);
+                    }
+                    return;
+                }
+
+                JSONArray jaBubbles = jo.getJSONArray("bubbles");
+                List<Long> newBubbleIdList = new ArrayList<>();
+
+                for (int i = 0; i < jaBubbles.length(); i++) {
+                    JSONObject bubble = jaBubbles.getJSONObject(i);
+                    if (bubble.getBoolean("canBeRobbedAgain")) {
+                        newBubbleIdList.add(bubble.getLong("id"));
+                    }
+                    collected += bubble.getInt("collectedEnergy");
+                }
+
+                if (collected > 0) {
+                    int randomIndex = random.nextInt(emojiList.size());
+                    String randomEmoji = emojiList.get(randomIndex);
+                    String str = (jaBubbles.length() > 1 ? "一键收取" : "普通收取") + randomEmoji + collected + "g[" + cacheCollectedMap.get(userId) + "]";
+                    totalCollected += collected;
+                    if (needDouble) {
+                        Log.forest(str + "耗时[" + spendTime + "]ms[双击]");
+                        Toast.show(str + "[双击]");
+                    } else {
+                        Log.forest(str + "耗时[" + spendTime + "]ms");
+                        Toast.show(str);
+                    }
+                }
+
+                if (!newBubbleIdList.isEmpty()) {
+                    collectEnergyEntity.setRpcEntity(AntForestRpcCall.batchEnergyRpcEntity("", userId, newBubbleIdList));
+                    collectEnergyEntity.setNeedDouble();
+                    collectEnergyEntity.resetTryCount();
+                    collectEnergy(collectEnergyEntity, true); // 保证递归在同一线程执行，双击稳定
+                } else if (jaBubbles.length() == 1) {
+                    JSONObject bubble = jaBubbles.getJSONObject(0);
+                    if (bubble.getBoolean("canBeRobbedAgain")) {
+                        collectEnergyEntity.setNeedDouble();
+                        collectEnergyEntity.resetTryCount();
+                        collectEnergy(collectEnergyEntity, true);
+                    }
+                }
+
+            } catch (Exception e) {
+                Log.runtime(TAG, "collectEnergy err");
+                Log.printStackTrace(e);
+            } finally {
+                String str_totalCollected = "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g";
+                Notify.updateLastExecText(str_totalCollected);
+                notifyMain();
+            }
+        };
+
         taskCount.incrementAndGet();
         if (joinThread) {
-            runnable.run();
+            runnable.run(); // 同步执行保证双击及时
         } else {
             addChildTask(new ChildModelTask("CE|" + collectEnergyEntity.getUserId() + "|" + runnable.hashCode(), "CE", runnable));
         }
     }
+
 
     private int getReturnCount(int collected) {
         int returnCount = 0;
