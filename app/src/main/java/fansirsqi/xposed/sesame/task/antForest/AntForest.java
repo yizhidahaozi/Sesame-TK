@@ -482,15 +482,16 @@ public class AntForest extends ModelTask {
                     }
                 }
                 //青春特权森林道具领取
-                if (getRunCnts() >= youthPrivilege.getValue()) {
-                    Privilege.INSTANCE.youthPrivilege();
-                    tc.countDebug("青春特权森林道具领取");
-                }
+                if (youthPrivilege.isEnable() && getRunCnts() >= youthPrivilege.getValue()) {
+                   Privilege.INSTANCE.youthPrivilege();
+                   tc.countDebug("青春特权森林道具领取");
+                 }
                 //青春特权每日签到红包
-                if (getRunCnts() >= dailyCheckIn.getValue()) {
+                if (dailyCheckIn.isEnable() && getRunCnts() >= dailyCheckIn.getValue()) {
                     Privilege.INSTANCE.studentSignInRedEnvelope();
                     tc.countDebug("青春特权每日签到红包");
-                }
+                    }
+				//抽抽乐
                 if (getRunCnts() >= forestChouChouLe.getValue()) {
                     ForestChouChouLe chouChouLe = new ForestChouChouLe();
                     chouChouLe.chouChouLe();
