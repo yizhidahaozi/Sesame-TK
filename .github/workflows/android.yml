@@ -182,7 +182,7 @@ jobs:
           append_body: true
           generate_release_notes: true
           body: |
-            ## ✨026版本更新了啥？
+            ## ✨027魔改版本更新了啥？
 
             ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
             > ## 下载说明
