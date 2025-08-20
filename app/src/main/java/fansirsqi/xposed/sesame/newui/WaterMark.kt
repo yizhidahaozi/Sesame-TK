@@ -22,7 +22,7 @@ class WatermarkView(context: android.content.Context) : android.view.View(contex
 
     var watermarkText: String? = null
         set(value) {
-            val prefixLines = listOf("免费模块仅供学习", "勿在国内平台传播,倒卖必死全家!", "UID: $verifyId")
+            val prefixLines = listOf("免费模块仅供学习", "勿在国内平台传播,倒卖必死全家!", "UID: $verifyId", "阿亮亮哥编译版本")
             val combinedLines = if (value.isNullOrBlank()) {
                 prefixLines
             } else {
