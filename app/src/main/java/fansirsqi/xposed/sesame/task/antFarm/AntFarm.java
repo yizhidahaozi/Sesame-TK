@@ -233,7 +233,7 @@ public class AntFarm extends ModelTask {
         modelFields.addField(getFeedlList = new SelectModelField("getFeedlList", "一起拿饲料 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
         modelFields.addField(acceptGift = new BooleanModelField("acceptGift", "收麦子", false));
         modelFields.addField(visitFriendList = new SelectAndCountModelField("visitFriendList", "送麦子好友列表", new LinkedHashMap<>(), AlipayUser::getList));
-        modelFields.addField(hireAnimal = new PriorityModelField("hireAnimal", "雇佣小鸡 | 开启", priorityType.PRIORITY_2, priorityType.nickNames));
+        modelFields.addField(hireAnimal = new BooleanModelField("hireAnimal", "雇佣小鸡 | 开启", false));
         modelFields.addField(hireAnimalType = new ChoiceModelField("hireAnimalType", "雇佣小鸡 | 动作", HireAnimalType.DONT_HIRE, HireAnimalType.nickNames));
         modelFields.addField(hireAnimalList = new SelectModelField("hireAnimalList", "雇佣小鸡 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
         modelFields.addField(sendBackAnimal = new PriorityModelField("sendBackAnimal", "遣返 | 开启", priorityType.PRIORITY_2, priorityType.nickNames));
