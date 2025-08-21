@@ -57,7 +57,7 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final ListModelField.ListJoinCommaToStringModelField modelSleepTime =
-            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("0100-0540"));
+            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("0200-0201"));
 
     /**
      * 定时任务模式选择
@@ -189,7 +189,7 @@ public class BaseModel extends Model {
      */
     public static void destroyData() {
         try {
-            Log.runtime(TAG, "�清理所有数据");
+            Log.runtime(TAG, "🧹清理所有数据");
             IdMapManager.getInstance(BeachMap.class).clear();
 //            IdMapManager.getInstance(ReserveaMap.class).clear();
 //            IdMapManager.getInstance(CooperateMap.class).clear();
@@ -206,6 +206,6 @@ public class BaseModel extends Model {
     public interface TimedTaskModel {
         int SYSTEM = 0;
         int PROGRAM = 1;
-        String[] nickNames = {"�系统计时", "�程序计时"};
+        String[] nickNames = {"🤖系统计时", "📦程序计时"};
     }
 }
