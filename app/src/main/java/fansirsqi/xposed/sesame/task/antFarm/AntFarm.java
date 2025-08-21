@@ -203,7 +203,7 @@ public class AntFarm extends ModelTask {
     private ChoiceModelField collectChickenDiary;
     private PriorityModelField enableChouchoule;
     private BooleanModelField listOrnaments;
-    private PriorityModelField hireAnimal;
+    private BooleanModelField hireAnimal;
     private ChoiceModelField hireAnimalType;
     private SelectModelField hireAnimalList;
     private PriorityModelField enableDdrawGameCenterAward;
