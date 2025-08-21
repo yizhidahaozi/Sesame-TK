@@ -211,6 +211,10 @@ public class AntForestRpcCall {
     public static String vitalitySign() {
         return RequestManager.requestString("alipay.antforest.forest.h5.vitalitySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
     }
+    
+    public static String energySign() {
+    return RequestManager.requestString("alipay.antforest.forest.h5.energySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
+}
 
     public static String queryEnergyRainHome() {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryEnergyRainHome", "[{\"source\":\"senlinguangchuangrukou\",\"version\":\"" + VERSION + "\"}]");
