@@ -310,7 +310,7 @@ public class AntForest extends ModelTask {
 
         modelFields.addField(ForestMarket = new PriorityModelField("ForestMarket", "森林集市", priorityType.PRIORITY_2, priorityType.nickNames));
         modelFields.addField(youthPrivilege = new PriorityModelField("youthPrivilege", "青春特权 | 森林道具", priorityType.PRIORITY_2, priorityType.nickNames));
-        modelFields.addField(dailyCheckIn = new PriorityModelField("studentCheckIn", "青春特权 | 签到红包", priorityType.PRIORITY_2, priorityType.nickNames));
+        modelFields.addField(dailyCheckIn = new BooleanModelField("studentCheckIn", "青春特权 | 签到红包", false));
 
         modelFields.addField(ecoLife = new PriorityModelField("ecoLife", "绿色行动 | 开关", priorityType.PRIORITY_2, priorityType.nickNames));
         modelFields.addField(ecoLifeOpen = new BooleanModelField("ecoLifeOpen", "绿色任务 |  自动开通", false));
@@ -352,7 +352,7 @@ public class AntForest extends ModelTask {
     @Override
     public void boot(ClassLoader classLoader) {
         super.boot(classLoader);
-        FixedOrRangeIntervalLimit queryIntervalLimit = new FixedOrRangeIntervalLimit(queryInterval.getValue(), 200, 10000);//限制查询间隔
+        FixedOrRangeIntervalLimit queryIntervalLimit = new FixedOrRangeIntervalLimit(queryInterval.getValue(), 200, 1000);//限制查询间隔
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryFriendHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.collectEnergy", 200);
@@ -363,8 +363,8 @@ public class AntForest extends ModelTask {
         advanceTimeInt = advanceTime.getValue();
         checkIntervalInt = BaseModel.getCheckInterval().getValue();
         dontCollectMap = dontCollectList.getValue();
-        collectIntervalEntity = new FixedOrRangeIntervalLimit(collectInterval.getValue(), 200, 10000);//收取间隔
-        doubleCollectIntervalEntity = new FixedOrRangeIntervalLimit(doubleCollectInterval.getValue(), 200, 5000);//双击间隔
+        collectIntervalEntity = new FixedOrRangeIntervalLimit(collectInterval.getValue(), 200, 1500);//收取间隔
+        doubleCollectIntervalEntity = new FixedOrRangeIntervalLimit(doubleCollectInterval.getValue(), 50, 150);//双击间隔
         delayTimeMath.clear();
         AntForestRpcCall.init();
     }
