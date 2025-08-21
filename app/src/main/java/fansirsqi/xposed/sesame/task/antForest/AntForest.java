@@ -1745,38 +1745,46 @@ public class AntForest extends ModelTask {
 
 
     private int dailyTask(JSONArray forestSignVOList) {
-        try {
-            JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
-            String currentSignKey = forestSignVO.getString("currentSignKey"); // 当前签到的 key
-            JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 签到记录
+    try {
+        JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
+        String currentSignKey = forestSignVO.getString("currentSignKey"); // 今日签到 key
+        JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 签到记录
 
-            for (int i = 0; i < signRecords.length(); i++) {
-                JSONObject signRecord = signRecords.getJSONObject(i);
-                String signKey = signRecord.getString("signKey");
-                int awardCount = signRecord.optInt("awardCount", 0);
-                String awardType = signRecord.optString("awardType", "ENERGY"); // 默认 ENERGY
-                boolean signed = signRecord.optBoolean("signed", false);
+        for (int i = 0; i < signRecords.length(); i++) {
+            JSONObject signRecord = signRecords.getJSONObject(i);
+            String signKey = signRecord.getString("signKey");
+            int awardCount = signRecord.optInt("awardCount", 0);
+            String awardType = signRecord.optString("awardType", "ENERGY"); // ENERGY / VITALITY
+            boolean signed = signRecord.optBoolean("signed", false);
 
-                if (signKey.equals(currentSignKey) && !signed) {
-                    // 执行签到请求
-                    JSONObject joSign = new JSONObject(AntForestRpcCall.vitalitySign());
-                    GlobalThreadPools.sleep(300);
-
-                    if (ResChecker.checkRes(TAG, joSign)) {
-                        Log.forest("森林签到📆成功，奖励：" + awardCount + " " + awardType);
-                        return awardCount;
-                    }
-                    break;
+            // 找到今天且未签到
+            if (signKey.equals(currentSignKey) && !signed) {
+                String result;
+                if ("VITALITY".equalsIgnoreCase(awardType)) {
+                    // 调用活力值签到
+                    result = AntForestRpcCall.vitalitySign();
+                } else {
+                    // 调用能量签到
+                    result = AntForestRpcCall.energySign();
                 }
+
+                GlobalThreadPools.sleep(300);
+                JSONObject joSign = new JSONObject(result);
+
+                if (ResChecker.checkRes(TAG + " 签到失败:", joSign)) {
+                    Log.forest("森林签到📆成功，奖励：" + awardCount + " " + awardType);
+                    return awardCount;
+                }
+                break;
             }
-            return 0; // 没有签到或者已经签过
-        } catch (Exception e) {
-            Log.printStackTrace(e);
-            return 0;
         }
+        return 0; // 已签或没有签到任务
+    } catch (Exception e) {
+        Log.printStackTrace(e);
+        return 0;
     }
-
-
+}
+	
     /**
      * 森林任务:
      * 逛支付宝会员,去森林寻宝抽1t能量
