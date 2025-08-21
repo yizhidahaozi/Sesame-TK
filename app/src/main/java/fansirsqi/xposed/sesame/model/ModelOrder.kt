@@ -23,8 +23,8 @@ object ModelOrder {
         BaseModel::class.java,       // 基础设置
         AntForest::class.java,       // 森林
         AntFarm::class.java,         // 庄园
-        AntOrchard::class.java,    // 农场
         AntOcean::class.java,        // 海洋
+        AntOrchard::class.java,    // 农场
         AntStall::class.java,      // 蚂蚁新村
         AntDodo::class.java,       // 神奇物种
         AntCooperate::class.java,    // 合种
