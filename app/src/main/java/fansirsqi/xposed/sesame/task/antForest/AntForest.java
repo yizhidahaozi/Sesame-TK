@@ -486,10 +486,9 @@ public class AntForest extends ModelTask {
                    tc.countDebug("青春特权森林道具领取");
                  }
                 //青春特权每日签到红包
-                if (dailyCheckIn.isEnable() && getRunCnts() >= dailyCheckIn.getValue()) {
+                if (dailyCheckIn.getValue()) {
                     Privilege.INSTANCE.studentSignInRedEnvelope();
-                    tc.countDebug("青春特权每日签到红包");
-                    }
+                }
 				//抽抽乐
                 if (getRunCnts() >= forestChouChouLe.getValue()) {
                     ForestChouChouLe chouChouLe = new ForestChouChouLe();
