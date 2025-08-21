@@ -237,7 +237,7 @@ public class AntDodo extends ModelTask {
                                     AntDodoRpcCall.receiveTaskAward(sceneCode, taskType)); // 领取奖励请求
                             if (joAward.optBoolean("success")) {
                                 doubleCheck = true;
-                                Log.forest("任务奖励�️[" + taskTitle + "]#" + awardCount + "个");
+                                Log.forest("任务奖励🎖️[" + taskTitle + "]#" + awardCount + "个");
                             } else {
                                 Log.record(TAG,"领取失败，" + response); // 记录领取失败信息
                             }
@@ -250,7 +250,7 @@ public class AntDodo extends ModelTask {
                                 JSONObject joFinishTask = new JSONObject(
                                         AntDodoRpcCall.finishTask(sceneCode, taskType)); // 完成任务请求
                                 if (joFinishTask.optBoolean("success")) {
-                                    Log.forest("物种任务�️[" + taskTitle + "]");
+                                    Log.forest("物种任务🧾️[" + taskTitle + "]");
                                     doubleCheck = true;
                                 } else {
                                     Log.record(TAG,"完成任务失败，" + taskTitle); // 记录完成任务失败信息
