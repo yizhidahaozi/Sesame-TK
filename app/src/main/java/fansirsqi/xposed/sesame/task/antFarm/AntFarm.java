@@ -1498,7 +1498,7 @@ public class AntFarm extends ModelTask {
                 Log.record(TAG, "喂鸡饲料不足");
             } else {
                 JSONObject jo = new JSONObject(AntFarmRpcCall.feedAnimal(farmId));
-                Log.farm("投喂小鸡�[180g]#剩余" + jo.getInt("foodStock") + "g");
+                Log.farm("投喂小鸡🥣[180g]#剩余" + jo.getInt("foodStock") + "g");
                 return true;
             }
         } catch (Throwable t) {
