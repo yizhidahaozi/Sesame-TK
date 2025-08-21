@@ -164,7 +164,7 @@ public class AntForest extends ModelTask {
     private PriorityModelField combineAnimalPiece;
     private PriorityModelField consumeAnimalProp;
     private SelectModelField whoYouWantToGiveTo;
-    private PriorityModelField dailyCheckIn;//青春特权签到
+    private BooleanModelField dailyCheckIn;//青春特权签到
     private ChoiceModelField bubbleBoostCard;//加速卡
     private PriorityModelField youthPrivilege;//青春特权 森林道具
     public static SelectModelField ecoLifeOption;
