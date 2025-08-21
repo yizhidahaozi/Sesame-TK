@@ -74,6 +74,19 @@ public class ForestChouChouLe {
                             }
                             // ==============================================
 
+                            // ==================== 活力值兑换任务 ====================
+                            if (taskType.equals("NORMAL_DRAW_EXCHANGE_VITALITY") && taskStatus.equals(TaskStatus.TODO.name())) {
+                                String sginRes = AntForestRpcCall.exchangeTimesFromTaskopengreen(
+                                        activityId, sceneCode, source, taskSceneCode, taskType
+                                );
+                                if (ResChecker.checkRes(TAG + " 森林寻宝活力值兑换失败:", sginRes)) {
+                                    Log.forest("森林寻宝🧾：" + taskName);
+                                    doublecheck = true;
+                                }
+                                continue; // 防止进入下面的 FOREST_NORMAL_DRAW 分支
+                            }
+                            // =====================================================
+
                             // 统一处理 FOREST_NORMAL_DRAW 开头任务
                             if (taskType.startsWith("FOREST_NORMAL_DRAW") && taskStatus.equals(TaskStatus.TODO.name())) {
                                 Log.record("任务延时30S模拟：" + taskName);
