@@ -393,9 +393,8 @@ public class AntFarm extends ModelTask {
             }
 
             // 雇佣小鸡
-            if (getRunCnts() >= hireAnimal.getValue()) {
+            if (hireAnimal.getValue()) {
                 hireAnimal();
-                tc.countDebug("雇佣小鸡");
             }
             if (getRunCnts() >= getFeed.getValue()) {
                 letsGetChickenFeedTogether();
