@@ -999,33 +999,58 @@ public class AntForest extends ModelTask {
      * @param waitingBubbles   等待成熟的能量球ID列表
      * @throws JSONException JSON解析异常
      */
-
     private void extractBubbleInfo(JSONObject userHomeObj, long serverTime, List<Long> availableBubbles, List<Pair<Long, Long>> waitingBubbles, String userId) throws JSONException {
-        if (!userHomeObj.has("bubbles")) return;
-        JSONArray jaBubbles = userHomeObj.getJSONArray("bubbles");
-        if (jaBubbles.length() == 0) return;
-        int checkInterval = checkIntervalInt + checkIntervalInt / 2;
-        for (int i = 0; i < jaBubbles.length(); i++) {
-            JSONObject bubble = jaBubbles.getJSONObject(i);
-            long bubbleId = bubble.getLong("id");
-            long produceTime = bubble.getLong("produceTime");//成熟时间
-            String statusStr = bubble.getString("collectStatus");
-            CollectStatus status = CollectStatus.valueOf(statusStr);
-            switch (status) {
-                case AVAILABLE:
-                    availableBubbles.add(bubbleId);
-                    break;
-                case WAITING://此处适合增加加速卡的处理，但是需要注意 需要 userid==selfId
-                    if (checkInterval > produceTime - serverTime) {
-                        waitingBubbles.add(new Pair<>(bubbleId, produceTime));
-                    } else {
-                        Log.runtime(TAG, "用户[" + UserMap.getMaskName(userId) + "]能量id: [" + bubbleId + "]成熟时间: " + TimeUtil.getCommonDate(produceTime));
-                    }
-                    break;
-            }
-        }
+    if (!userHomeObj.has("bubbles")) return;
+    JSONArray jaBubbles = userHomeObj.getJSONArray("bubbles");
+    if (jaBubbles.length() == 0) return;
+    int checkInterval = checkIntervalInt + checkIntervalInt / 2;
 
+    for (int i = 0; i < jaBubbles.length(); i++) {
+        JSONObject bubble = jaBubbles.getJSONObject(i);
+        long bubbleId = bubble.getLong("id");
+        long produceTime = bubble.getLong("produceTime"); // 成熟时间
+        String statusStr = bubble.getString("collectStatus");
+        CollectStatus status = CollectStatus.valueOf(statusStr);
+
+        switch (status) {
+            case AVAILABLE:
+                availableBubbles.add(bubbleId);
+                break;
+            case WAITING:
+                boolean addToWaiting = false;
+
+                // 原有 checkInterval 判断
+                if (checkInterval > produceTime - serverTime) {
+                    addToWaiting = true;
+                }
+
+                // 新增 07:00~07:30 时间段判断
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(serverTime);
+                cal.set(Calendar.HOUR_OF_DAY, 7);
+                cal.set(Calendar.MINUTE, 0);
+                cal.set(Calendar.SECOND, 0);
+                cal.set(Calendar.MILLISECOND, 0);
+                long start0700 = cal.getTimeInMillis();
+
+                cal.set(Calendar.HOUR_OF_DAY, 7);
+                cal.set(Calendar.MINUTE, 30);
+                long end0730 = cal.getTimeInMillis();
+
+                if (produceTime >= start0700 && produceTime <= end0730) {
+                    addToWaiting = true;
+                }
+
+                if (addToWaiting) {
+                    waitingBubbles.add(new Pair<>(bubbleId, produceTime));
+                } else {
+                    Log.runtime(TAG, "用户[" + UserMap.getMaskName(userId) + "]能量id: [" + bubbleId + "]成熟时间: " + TimeUtil.getCommonDate(produceTime));
+                }
+                break;
+        }
     }
+}
+
 
     private record Pair<F, S>(F first, S second) {
     }
