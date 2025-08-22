@@ -1743,7 +1743,6 @@ public class AntForest extends ModelTask {
         return Vitality.VitalityExchange(spuId, skuId, "隐身卡");
     }
 
-
     private int dailyTask(JSONArray forestSignVOList) {
     try {
         JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
@@ -1759,14 +1758,12 @@ public class AntForest extends ModelTask {
 
             // 找到今天且未签到
             if (signKey.equals(currentSignKey) && !signed) {
-                String result;
-                if ("VITALITY".equalsIgnoreCase(awardType)) {
-                    // 调用活力值签到
-                    result = AntForestRpcCall.vitalitySign();
-                } else {
-                    // 调用能量签到
-                    result = AntForestRpcCall.energySign();
-                }
+                // 关键：不同类型对应不同 sceneCode
+                String sceneCode = "VITALITY".equalsIgnoreCase(awardType)
+                        ? "ANTFOREST_VITALITY_TASK_SIGN"
+                        : "ANTFOREST_ENERGY_TASK_SIGN";
+
+                String result = AntForestRpcCall.forestSign(sceneCode, currentSignKey);
 
                 GlobalThreadPools.sleep(300);
                 JSONObject joSign = new JSONObject(result);
