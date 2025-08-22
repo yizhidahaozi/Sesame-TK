@@ -207,13 +207,26 @@ public class AntForestRpcCall {
 
     /**
      * 森林签到
-     */
-    public static String vitalitySign() {
+     
+   public static String vitalitySign() {
         return RequestManager.requestString("alipay.antforest.forest.h5.vitalitySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
     }
     
     public static String energySign() {
     return RequestManager.requestString("alipay.antforest.forest.h5.energySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
+}
+ */
+    public static String forestSign(String sceneCode, String signKey) {
+    try {
+        JSONObject jo = new JSONObject();
+        jo.put("sceneCode", sceneCode);
+        jo.put("signKey", signKey);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        return RequestManager.requestString("alipay.antforest.forest.h5.sign", "[" + jo.toString() + "]");
+    } catch (Exception e) {
+        Log.printStackTrace(e);
+        return null;
+    }
 }
 
     public static String queryEnergyRainHome() {
