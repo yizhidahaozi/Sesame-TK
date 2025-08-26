@@ -206,11 +206,36 @@ public class AntForestRpcCall {
 
     /**
      * 森林签到
-     */
     public static String vitalitySign() {
         return RequestManager.requestString("alipay.antforest.forest.h5.vitalitySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
     }
+    */
+    public static String energySign(JSONObject forestSignVO) {
+        try {
+            // 从 forestSignVO 获取新接口所需参数
+            String sceneCode = forestSignVO.optString("sceneCode");
+            String signId = forestSignVO.optString("signId");
 
+            // 构造请求参数
+            JSONArray params = new JSONArray();
+            JSONObject param = new JSONObject();
+            param.put("sceneCode", sceneCode);
+            param.put("signId", signId);
+            param.put("source", "chInfo_ch_appcenter__chsub_9patch");
+            params.put(param);
+
+            // 调用新的能量签到接口
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.energySign",
+                    params.toString()
+            );
+
+        } catch (Exception e) {
+            Log.printStackTrace(e);
+            // 返回空 JSON 字符串，保证调用端不崩溃
+            return "{}";
+        }
+    }
     public static String queryEnergyRainHome() {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryEnergyRainHome", "[{\"source\":\"senlinguangchuangrukou\",\"version\":\"" + VERSION + "\"}]");
     }
