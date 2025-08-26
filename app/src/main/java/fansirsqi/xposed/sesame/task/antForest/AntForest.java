@@ -1772,39 +1772,67 @@ public class AntForest extends ModelTask {
     }
 
 
+    /**
+     * 执行当天森林签到任务
+     *
+     * @param forestSignVOList 森林签到列表
+     * @return 获得的能量，如果签到失败或已签到则返回 0
+     */
     private int dailyTask(JSONArray forestSignVOList) {
         try {
+            if (forestSignVOList == null || forestSignVOList.length() == 0) {
+                Log.forest("签到列表为空，无法执行签到");
+                return 0;
+            }
+
             JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
-            String currentSignKey = forestSignVO.getString("currentSignKey"); // 当前签到的 key
-            JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 签到记录
+            String currentSignKey = forestSignVO.getString("currentSignKey"); // 今天的签到 key
+            JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 历史签到记录
 
             for (int i = 0; i < signRecords.length(); i++) {
                 JSONObject signRecord = signRecords.getJSONObject(i);
                 String signKey = signRecord.getString("signKey");
                 int awardCount = signRecord.optInt("awardCount", 0);
 
+                // 仅处理今天未签到的情况
                 if (signKey.equals(currentSignKey) && !signRecord.getBoolean("signed")) {
-                    // 调用封装好的 RPC 接口（新接口已在内部处理）
+                    // 调用签到 RPC 接口
                     JSONObject joSign = new JSONObject(AntForestRpcCall.energySign(forestSignVO));
-                    GlobalThreadPools.sleep(300); // 等待300毫秒
+
+                    // 等待 300ms 避免请求过快
+                    GlobalThreadPools.sleep(300);
 
                     if (ResChecker.checkRes("森林签到失败:", joSign)) {
-                        Log.forest("森林签到📆成功，获得能量：" + awardCount);
-                        return awardCount;
+                        // 成功领取能量
+                        int realEnergy = awardCount;
+                        if (joSign.has("signModel")) {
+                            JSONObject signModel = joSign.optJSONObject("signModel");
+                            if (signModel != null) {
+                                JSONObject signAward = signModel.optJSONObject("signAward");
+                                if (signAward != null) {
+                                    realEnergy = signAward.optInt("count", awardCount);
+                                }
+                            }
+                        }
+
+                        Log.forest("森林签到📆成功，获得能量：" + realEnergy + "g");
+                        return realEnergy;
                     } else {
                         Log.forest("签到失败，响应内容：" + joSign.toString());
                     }
 
-                    break; // 已处理今日签到
+                    break; // 今日签到已处理
                 }
             }
 
-            return 0; // 如果没有签到，则返回 0
+            // 今天已签到或没有签到任务
+            return 0;
         } catch (Exception e) {
             Log.printStackTrace(e);
             return 0;
         }
     }
+
 
 
     /**
