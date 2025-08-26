@@ -1784,10 +1784,13 @@ public class AntForest extends ModelTask {
                 if (signKey.equals(currentSignKey) && !signRecord.getBoolean("signed")) {
                     JSONObject joSign = new JSONObject(AntForestRpcCall.vitalitySign()); // 执行签到请求
                     GlobalThreadPools.sleep(300); // 等待300毫秒
-                    if (ResChecker.checkRes(TAG + "森林签到失败:", joSign)) {
-                        Log.forest("森林签到📆成功");
+                    if (ResChecker.checkRes("森林签到失败:", joSign)) {
+                        Log.forest("森林签到📆成功，获得能量：" + awardCount);
                         return awardCount;
+                    } else {
+                        Log.forest("签到失败，响应内容：" + joSign.toString()); // 打印响应内容
                     }
+
                     break;
                 }
             }
