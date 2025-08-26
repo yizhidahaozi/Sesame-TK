@@ -430,10 +430,10 @@ public class AntForest extends ModelTask {
                     tc.countDebug("合成动物碎片");
                 }
                 //收取过期能量
-                if (expiredEnergy.getValue()) {
-                    popupTask();
-                    tc.countDebug("收取过期能量");
-                }
+      //        if (expiredEnergy.getValue()) {
+      //           popupTask();
+      //           tc.countDebug("收取过期能量");
+      //        }
                 //森林任务
                 if (getRunCnts() >= receiveForestTaskAward.getValue()) {
                     receiveTaskAward();
@@ -966,11 +966,11 @@ public class AntForest extends ModelTask {
             // 4. 检查是否有能量罩保护
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]被能量罩🛡保护着哟");
+                    Log.record(TAG, "[" + userName + "]被能量罩�保护着哟");
                     return userHomeObj;
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]开着炸弹卡💣..");
+                    Log.record(TAG, "[" + userName + "]开着炸弹卡�..");
                     return userHomeObj;
                 }
             }
@@ -1637,48 +1637,6 @@ public class AntForest extends ModelTask {
         }
     }
 
-
-    /**
-     * 弹出任务列表方法，用于处理森林任务。
-     */
-    private void popupTask() {
-        try {
-            JSONObject resData = new JSONObject(AntForestRpcCall.popupTask());
-            if (ResChecker.checkRes(TAG, resData)) {
-                JSONArray forestSignVOList = resData.optJSONArray("forestSignVOList");
-                if (forestSignVOList != null) {
-                    for (int i = 0; i < forestSignVOList.length(); i++) {
-                        JSONObject forestSignVO = forestSignVOList.getJSONObject(i);
-                        String signId = forestSignVO.getString("signId");
-                        String currentSignKey = forestSignVO.getString("currentSignKey");
-                        JSONArray signRecords = forestSignVO.getJSONArray("signRecords");
-                        for (int j = 0; j < signRecords.length(); j++) {
-                            JSONObject signRecord = signRecords.getJSONObject(j);
-                            String signKey = signRecord.getString("signKey");
-                            if (signKey.equals(currentSignKey) && !signRecord.getBoolean("signed")) {
-                                JSONObject resData2 = new JSONObject(AntForestRpcCall.antiepSign(signId, UserMap.getCurrentUid()));
-                                GlobalThreadPools.sleep(100L);
-                                if (ResChecker.checkRes(TAG, resData2)) {
-                                    Log.forest("收集过期能量💊[" + signRecord.getInt("awardCount") + "g]");
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            } else {
-                Log.record(TAG, "任务弹出失败: " + resData.getString("resultDesc"));
-                Log.runtime(resData.toString());
-            }
-        } catch (JSONException e) {
-            Log.runtime(TAG, "popupTask JSON错误:");
-            Log.printStackTrace(TAG, e);
-        } catch (Exception e) {
-            Log.runtime(TAG, "popupTask 错误:");
-            Log.printStackTrace(TAG, e);
-        }
-    }
-
     /**
      * 为好友浇水并返回浇水次数和是否可以继续浇水的状态。
      *
@@ -1780,60 +1738,31 @@ public class AntForest extends ModelTask {
      */
     private int dailyTask(JSONArray forestSignVOList) {
         try {
-            if (forestSignVOList == null || forestSignVOList.length() == 0) {
-                Log.forest("签到列表为空，无法执行签到");
-                return 0;
-            }
-
             JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
-            String currentSignKey = forestSignVO.getString("currentSignKey"); // 今天的签到 key
-            JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 历史签到记录
-
-            for (int i = 0; i < signRecords.length(); i++) {
+            String currentSignKey = forestSignVO.getString("currentSignKey"); // 当前签到的 key
+            String signId = forestSignVO.getString("signId"); // 签到ID
+            String sceneCode = forestSignVO.getString("sceneCode"); // 场景代码
+            JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 签到记录
+            for (int i = 0; i < signRecords.length(); i++) { //遍历签到记录
                 JSONObject signRecord = signRecords.getJSONObject(i);
                 String signKey = signRecord.getString("signKey");
                 int awardCount = signRecord.optInt("awardCount", 0);
-
-                // 仅处理今天未签到的情况
                 if (signKey.equals(currentSignKey) && !signRecord.getBoolean("signed")) {
-                    // 调用签到 RPC 接口
-                    JSONObject joSign = new JSONObject(AntForestRpcCall.energySign(forestSignVO));
-
-                    // 等待 300ms 避免请求过快
-                    GlobalThreadPools.sleep(300);
-
-                    if (ResChecker.checkRes("森林签到失败:", joSign)) {
-                        // 成功领取能量
-                        int realEnergy = awardCount;
-                        if (joSign.has("signModel")) {
-                            JSONObject signModel = joSign.optJSONObject("signModel");
-                            if (signModel != null) {
-                                JSONObject signAward = signModel.optJSONObject("signAward");
-                                if (signAward != null) {
-                                    realEnergy = signAward.optInt("count", awardCount);
-                                }
-                            }
-                        }
-
-                        Log.forest("森林签到📆成功，获得能量：" + realEnergy + "g");
-                        return realEnergy;
-                    } else {
-                        Log.forest("签到失败，响应内容：" + joSign.toString());
+                    JSONObject joSign = new JSONObject(AntForestRpcCall.antiepSign(signId, UserMap.getCurrentUid(), sceneCode));
+                    GlobalThreadPools.sleep(300); // 等待300毫秒
+                    if (ResChecker.checkRes(TAG + "森林签到失败:", joSign)) {
+                        Log.forest("森林签到📆成功");
+                        return awardCount;
                     }
-
-                    break; // 今日签到已处理
+                    break;
                 }
             }
-
-            // 今天已签到或没有签到任务
-            return 0;
+            return 0; // 如果没有签到，则返回 0
         } catch (Exception e) {
             Log.printStackTrace(e);
             return 0;
         }
     }
-
-
 
     /**
      * 森林任务:
