@@ -44,6 +44,9 @@ public class ForestChouChouLe {
             long startTime = drawActivity.getLong("startTime");
             long endTime = drawActivity.getLong("endTime");
 
+            int loopCount = 0;           // 循环次数计数
+            final int MAX_LOOP = 5;      // 最大循环次数，避免死循环
+
             do {
                 doublecheck = false;
                 if (System.currentTimeMillis() > startTime && System.currentTimeMillis() < endTime) {
@@ -124,7 +127,7 @@ public class ForestChouChouLe {
                         }
                     }
                 }
-            } while (doublecheck);
+            } while (doublecheck && ++loopCount < MAX_LOOP);
 
             // ==================== 执行抽奖 ====================
             jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source));
