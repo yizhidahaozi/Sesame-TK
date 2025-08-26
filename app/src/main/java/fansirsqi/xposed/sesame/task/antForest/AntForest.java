@@ -1777,29 +1777,35 @@ public class AntForest extends ModelTask {
             JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
             String currentSignKey = forestSignVO.getString("currentSignKey"); // 当前签到的 key
             JSONArray signRecords = forestSignVO.getJSONArray("signRecords"); // 签到记录
+
             for (int i = 0; i < signRecords.length(); i++) {
                 JSONObject signRecord = signRecords.getJSONObject(i);
                 String signKey = signRecord.getString("signKey");
                 int awardCount = signRecord.optInt("awardCount", 0);
+
                 if (signKey.equals(currentSignKey) && !signRecord.getBoolean("signed")) {
-                    JSONObject joSign = new JSONObject(AntForestRpcCall.vitalitySign()); // 执行签到请求
+                    // 调用封装好的 RPC 接口（新接口已在内部处理）
+                    JSONObject joSign = new JSONObject(AntForestRpcCall.energySign(forestSignVO));
                     GlobalThreadPools.sleep(300); // 等待300毫秒
+
                     if (ResChecker.checkRes("森林签到失败:", joSign)) {
                         Log.forest("森林签到📆成功，获得能量：" + awardCount);
                         return awardCount;
                     } else {
-                        Log.forest("签到失败，响应内容：" + joSign.toString()); // 打印响应内容
+                        Log.forest("签到失败，响应内容：" + joSign.toString());
                     }
 
-                    break;
+                    break; // 已处理今日签到
                 }
             }
+
             return 0; // 如果没有签到，则返回 0
         } catch (Exception e) {
             Log.printStackTrace(e);
             return 0;
         }
     }
+
 
     /**
      * 森林任务:
