@@ -13,6 +13,7 @@ import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
+import fansirsqi.xposed.sesame.util.StringUtil;
 
 /**
  * 森林 RPC 调用类
@@ -206,31 +207,9 @@ public class AntForestRpcCall {
 
     /**
      * 森林签到
+     */
     public static String vitalitySign() {
         return RequestManager.requestString("alipay.antforest.forest.h5.vitalitySign", "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
-    }
-    */
-    public static String energySign(JSONObject forestSignVO) {
-        try {
-            String sceneCode = forestSignVO.optString("sceneCode");
-            String signId = forestSignVO.optString("signId");
-
-            JSONArray params = new JSONArray();
-            JSONObject param = new JSONObject();
-            param.put("entityId", signId);        // 抓包对应 entityId
-            param.put("sceneCode", sceneCode);
-            param.put("source", "ANTFOREST");     // 与抓包一致
-            params.put(param);
-
-            return RequestManager.requestString(
-                    "alipay.antforest.forest.h5.energySign",
-                    params.toString()
-            );
-
-        } catch (Exception e) {
-            Log.printStackTrace(e);
-            return "{}";
-        }
     }
 
     public static String queryEnergyRainHome() {
@@ -264,7 +243,7 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
     }
 
-    /*青春特权道具任务状态查询�*/
+    /*青春特权道具任务状态查询🔍*/
     public static String queryTaskListV2(String firstTaskType) throws JSONException {
         JSONObject jo = new JSONObject();
         JSONObject extend = new JSONObject();
@@ -332,16 +311,16 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.popupTask", new JSONArray().put(jo).toString());
     }
 
-    public static String antiepSign(String entityId, String userId) throws JSONException {
+    public static String antiepSign(String entityId, String userId, String sceneCode) throws JSONException {
         // 构造 JSON 对象
         JSONObject jo = new JSONObject();
         jo.put("entityId", entityId);
         jo.put("requestType", "rpc");
-        jo.put("sceneCode", "ANTFOREST_ENERGY_SIGN");
+        jo.put("sceneCode", sceneCode);
         jo.put("source", "ANTFOREST");
         jo.put("userId", userId);
-        // 调用请求
-        return RequestManager.requestString("com.alipay.antiep.sign", new JSONArray().put(jo).toString());
+        String args = "[" + jo + "]";
+        return RequestManager.requestString("com.alipay.antiep.sign", args);
     }
 
     /**
