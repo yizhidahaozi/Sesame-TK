@@ -966,11 +966,11 @@ public class AntForest extends ModelTask {
             // 4. 检查是否有能量罩保护
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]被能量罩�保护着哟");
+                    Log.record(TAG, "[" + userName + "]被能量罩🛡保护着哟");
                     return userHomeObj;
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]开着炸弹卡�..");
+                    Log.record(TAG, "[" + userName + "]开着炸弹卡💣..");
                     return userHomeObj;
                 }
             }
