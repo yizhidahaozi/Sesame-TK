@@ -341,14 +341,19 @@ public class AntForest extends ModelTask {
         }
         // 判断是否处于只收能量时间段
         else if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，开始循环收取好友和PK好友能量");
+            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，开始循环收取自己、好友和PK好友的能量");
 
-            // 在只收能量时间段内，持续执行收取好友和PK好友的能量
+            // 在只收能量时间段内，持续执行收取自己的能量、好友能量和PK好友能量
             while (TaskCommon.IS_ENERGY_TIME) {
-                collectPKEnergy();  // 收取PK好友能量
+                JSONObject selfHomeObj = querySelfHome();
+                if (selfHomeObj != null) {
+                    collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");  // 收取自己的能量
+                }
                 collectFriendEnergy();  // 收取好友能量
+                collectPKEnergy();  // 收取PK好友能量
+
                 try {
-                    Thread.sleep(1000);  // 暂停1秒后继续执行
+                    Thread.sleep(10000);  // 暂停10秒后继续执行
                 } catch (InterruptedException e) {
                     Log.printStackTrace(TAG, "收能量时发生错误", e);
                     break;  // 如果发生异常，则跳出循环
@@ -397,9 +402,13 @@ public class AntForest extends ModelTask {
             checkAndUpdateCounters();
             // 检查是否已经过午夜，如果是，强制执行任务
             if (isMidnight()) {
-                Log.record(TAG, "午夜任务刷新，强制执行收取PK能量和好友能量");
-                collectPKEnergy();
+                JSONObject selfHomeObj = querySelfHome();
+                if (selfHomeObj != null) {
+                    collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");  // 收取自己的能量
+                }
                 collectFriendEnergy();
+                collectPKEnergy();
+                Log.record(TAG, "午夜任务刷新，强制执行收取PK好友能量和好友能量");
             }
             errorWait = false;
 /// lzw add begin
