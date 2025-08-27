@@ -430,10 +430,10 @@ public class AntForest extends ModelTask {
                     tc.countDebug("合成动物碎片");
                 }
                 //收取过期能量
-      //        if (expiredEnergy.getValue()) {
-      //           popupTask();
-      //           tc.countDebug("收取过期能量");
-      //        }
+                //        if (expiredEnergy.getValue()) {
+                //           popupTask();
+                //           tc.countDebug("收取过期能量");
+                //        }
                 //森林任务
                 if (getRunCnts() >= receiveForestTaskAward.getValue()) {
                     receiveTaskAward();
@@ -1045,15 +1045,24 @@ public class AntForest extends ModelTask {
         for (Pair<Long, Long> pair : waitingBubbles) {
             long bubbleId = pair.first();
             long produceTime = pair.second();
-            if (!hasChildTask(AntForest.getEnergyTimerTid(userId, bubbleId))) {
+            String tid = AntForest.getEnergyTimerTid(userId, bubbleId);
+
+            if (!hasChildTask(tid)) {
                 addChildTask(new EnergyTimerTask(userId, bubbleId, produceTime));
-                Log.record(TAG, "添加蹲点⏰[" + UserMap.getMaskName(userId) + "]在[" + TimeUtil.getCommonDate(produceTime) + "]执行");
+                Log.record(TAG,
+                        "添加蹲点⏰ -> [" + UserMap.getMaskName(userId) + "]"
+                                + " bubble=" + bubbleId
+                                + " 时间=" + TimeUtil.getCommonDate(produceTime)
+                                + " tid=" + tid);
             } else {
-                Log.record(TAG, "蹲点⏰[" + UserMap.getMaskName(userId) + "]在[" + TimeUtil.getCommonDate(produceTime) + "]已存在");
+                Log.record(TAG,
+                        "蹲点⏰已存在 -> [" + UserMap.getMaskName(userId) + "]"
+                                + " bubble=" + bubbleId
+                                + " 时间=" + TimeUtil.getCommonDate(produceTime)
+                                + " tid=" + tid);
             }
         }
     }
-
 
     /**
      * 批量或逐一收取能量
@@ -2725,15 +2734,12 @@ public class AntForest extends ModelTask {
         EnergyTimerTask(String uid, long bid, long pt) {
             // 调用父类构造方法，传入任务ID和提前执行时间
             super(AntForest.getEnergyTimerTid(uid, bid), pt - advanceTimeInt);
-            userId = uid;
-            bubbleId = bid;
-            produceTime = pt;
-            if (selfId == userId) {
-                is_self = true;
-            } else {
-                is_self = false;
-            }
+            this.userId = uid;
+            this.bubbleId = bid;
+            this.produceTime = pt;
 
+            // ✅ 用内容比较，避免 == 带来的引用比较问题
+            this.is_self = Objects.equals(selfId, uid);
         }
 
         @Override
