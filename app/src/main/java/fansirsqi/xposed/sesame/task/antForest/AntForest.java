@@ -950,7 +950,7 @@ public class AntForest extends ModelTask {
             if (!fromTag.equals("pk")) {
                 userName = UserMap.getMaskName(userId);
             } else {
-                userName = "PK榜好友" + userHomeObj.getJSONObject("userEnergy").getString("displayName");
+                userName = "PK榜好友|" + userHomeObj.getJSONObject("userEnergy").getString("displayName");
 
             }
             bizType = "GREEN";
