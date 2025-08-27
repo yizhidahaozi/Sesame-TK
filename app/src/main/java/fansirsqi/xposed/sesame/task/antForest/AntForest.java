@@ -1893,8 +1893,7 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, t); // 打印异常栈
         }
     }
-
-
+    
     private void usePropBeforeCollectEnergy(String userId) {
         try {
             if (Objects.equals(selfId, userId)) {
@@ -1904,35 +1903,22 @@ public class AntForest extends ModelTask {
             boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE) && doubleEndTime < System.currentTimeMillis();
             boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE) && robExpandCardEndTime < System.currentTimeMillis();
             boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE) && stealthEndTime < System.currentTimeMillis();
+
+            // 保护罩剩余时间低于 23 小时则使用
+            boolean needShield =
+                    !shieldCard.getValue().equals(applyPropType.CLOSE) &&
+                            energyBombCardType.getValue().equals(applyPropType.CLOSE) &&
+                            ((shieldEndTime - System.currentTimeMillis()) < 23 * 60 * 60 * 1000L); // 23小时内使用
+
+            // 炸弹卡剩余时间低于 3 天则使用
+            boolean needEnergyBombCard =
+                    !energyBombCardType.getValue().equals(applyPropType.CLOSE) &&
+                            shieldCard.getValue().equals(applyPropType.CLOSE) &&
+                            ((energyBombCardEndTime - System.currentTimeMillis()) < 3 * 24 * 60 * 60 * 1000L); // 3天内使用
+
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
-            // ==== 修改后的规则 ====
-            boolean needShield = false;
-            boolean needEnergyBombCard = false;
-
-            long nowMillis = System.currentTimeMillis();
-
-            // 保护罩剩余倒计时低于 23 小时则使用
-            if (!shieldCard.getValue().equals(applyPropType.CLOSE) &&
-                    energyBombCardType.getValue().equals(applyPropType.CLOSE) &&
-                    (shieldEndTime - nowMillis) < 23 * 60 * 60 * 1000L) {
-                needShield = true;
-            }
-
-            // 炸弹卡剩余天数低于3天则使用
-            if (!energyBombCardType.getValue().equals(applyPropType.CLOSE) &&
-                    shieldCard.getValue().equals(applyPropType.CLOSE)) {
-
-                long remainingTime = energyBombCardEndTime - nowMillis;
-                long remainingDays = remainingTime / (1000L * 60 * 60 * 24);
-
-                if (remainingDays < 3) {
-                    needEnergyBombCard = true;
-                }
-            }
-            // ==== 修改结束 ====
-
-            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
+            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
                     if (needDouble) useDoubleCard(bagObject);
@@ -1944,7 +1930,7 @@ public class AntForest extends ModelTask {
                         useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
                     }
 
-                    // 互斥逻辑：保护罩优先，如果保护罩不使用才使用炸弹卡
+                    // 互斥逻辑：如果两个开关都打开，则优先使用保护罩|不会使用炸弹卡
                     if (needShield) {
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
@@ -1953,6 +1939,7 @@ public class AntForest extends ModelTask {
                 }
             }
         } catch (Exception e) {
+            // 打印异常信息
             Log.printStackTrace(e);
         }
     }
