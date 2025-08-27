@@ -951,18 +951,22 @@ public class AntForest extends ModelTask {
                 userName = UserMap.getMaskName(userId);
             } else {
                 userName = "PK榜好友|" + userHomeObj.getJSONObject("userEnergy").getString("displayName");
-
             }
             bizType = "GREEN";
+
             if (cacheCollectedMap.containsKey(userId)) {
                 Log.runtime(TAG, userName + "已缓存，跳过");
                 return userHomeObj;
             } //该次已缓存，标记为已收取
+
             Log.record(TAG, "进入[" + userName + "]的蚂蚁森林");
+
             // 3. 判断是否允许收取能量
             if ((collectEnergy.getValue() <= 0) || dontCollectMap.contains(userId)) {
+                Log.debug(TAG, "[" + userName + "] 不允许收取能量，跳过");
                 return userHomeObj;
             }
+
             // 4. 检查是否有能量罩保护
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
@@ -974,12 +978,23 @@ public class AntForest extends ModelTask {
                     return userHomeObj;
                 }
             }
+
             // 5. 获取所有可收集的能量球
             List<Long> availableBubbles = new ArrayList<>();
             List<Pair<Long, Long>> waitingBubbles = new ArrayList<>();
             extractBubbleInfo(userHomeObj, serverTime, availableBubbles, waitingBubbles, userId);
+
+            // 打印调试信息
+            Log.debug(TAG, "[" + userName + "] availableBubbles数量=" + availableBubbles.size());
+            Log.debug(TAG, "[" + userName + "] waitingBubbles数量=" + waitingBubbles.size());
+            for (Pair<Long, Long> pair : waitingBubbles) {
+                Log.debug(TAG, "等待成熟的能量球: bubbleId=" + pair.first()
+                        + " produceTime=" + TimeUtil.getCommonDate(pair.second()));
+            }
+
             // 6. 收集可直接收取的能量
             collectAvailableEnergy(userId, userHomeObj, availableBubbles, bizType);
+
             // 7. 添加蹲点任务（等待成熟）
             scheduleWaitingBubbles(userId, waitingBubbles);
 
@@ -993,6 +1008,7 @@ public class AntForest extends ModelTask {
             return null;
         }
     }
+
 
 
     /**
