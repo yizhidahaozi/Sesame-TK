@@ -323,7 +323,7 @@ public class AntForest extends ModelTask {
         modelFields.addField(advanceTime = new IntegerModelField("advanceTime", "提前时间(毫秒)", 0, Integer.MIN_VALUE, 500));
         modelFields.addField(tryCount = new IntegerModelField("tryCount", "尝试收取(次数)", 1, 0, 5));
         modelFields.addField(retryInterval = new IntegerModelField("retryInterval", "重试间隔(毫秒)", 1200, 0, 10000));
-        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容", false));
+        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容(调试功能，普通用户不建议打开)", false));
         return modelFields;
     }
 
