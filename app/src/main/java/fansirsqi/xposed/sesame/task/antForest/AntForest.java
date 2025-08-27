@@ -323,20 +323,40 @@ public class AntForest extends ModelTask {
         modelFields.addField(advanceTime = new IntegerModelField("advanceTime", "提前时间(毫秒)", 0, Integer.MIN_VALUE, 500));
         modelFields.addField(tryCount = new IntegerModelField("tryCount", "尝试收取(次数)", 1, 0, 5));
         modelFields.addField(retryInterval = new IntegerModelField("retryInterval", "重试间隔(毫秒)", 1200, 0, 10000));
-        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容(调试功能，普通用户不建议打开)", false));
+        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容", false));
         return modelFields;
     }
 
     @Override
     public Boolean check() {
+        // 判断是否处于异常等待状态
         if (RuntimeInfo.getInstance().getLong(RuntimeInfo.RuntimeInfoKey.ForestPauseTime) > System.currentTimeMillis()) {
             Log.record(getName() + "任务-异常等待中，暂不执行检测！");
-            return false;
-        } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
+            return false;  // 暂时不执行任务
+        }
+        // 判断是否处于模块休眠时间
+        else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
             Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
-            return false;
+            return false;  // 停止执行任务
+        }
+        // 判断是否处于只收能量时间段
+        else if (TaskCommon.IS_ENERGY_TIME) {
+            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，开始循环收取好友和PK好友能量");
+
+            // 在只收能量时间段内，持续执行收取好友和PK好友的能量
+            while (TaskCommon.IS_ENERGY_TIME) {
+                collectPKEnergy();  // 收取PK好友能量
+                collectFriendEnergy();  // 收取好友能量
+                try {
+                    Thread.sleep(1000);  // 暂停1秒后继续执行
+                } catch (InterruptedException e) {
+                    Log.printStackTrace(TAG, "收能量时发生错误", e);
+                    break;  // 如果发生异常，则跳出循环
+                }
+            }
+            return false;  // 退出当前任务的执行
         } else {
-            return true;
+            return true;  // 正常执行任务
         }
     }
 
@@ -373,6 +393,14 @@ public class AntForest extends ModelTask {
     @Override
     public void run() {
         try {
+            // 每次运行时检查并更新计数器
+            checkAndUpdateCounters();
+            // 检查是否已经过午夜，如果是，强制执行任务
+            if (isMidnight()) {
+                Log.record(TAG, "午夜任务刷新，强制执行收取PK能量和好友能量");
+                collectPKEnergy();
+                collectFriendEnergy();
+            }
             errorWait = false;
 /// lzw add begin
             if(isMonday()) {
@@ -535,6 +563,44 @@ public class AntForest extends ModelTask {
     private interface JsonArrayHandler {
         void handle(JSONArray array);
     }
+
+    /**
+     * 每日重置
+     */
+    private void checkAndUpdateCounters() {
+        long currentTime = System.currentTimeMillis();
+        long midnight = getMidnightTime(); // 计算当前日期的午夜时间戳
+
+        if (currentTime >= midnight) {
+            // 如果时间已经过了午夜，重置计数器
+            resetTaskCounters();
+            Log.record(TAG, "午夜重置计数器");
+        }
+    }
+
+    // 判断当前时间是否已经过午夜
+    private boolean isMidnight() {
+        long currentTime = System.currentTimeMillis();
+        long midnightTime = getMidnightTime();
+        return currentTime >= midnightTime;
+    }
+
+    // 获取午夜时间戳
+    private long getMidnightTime() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis();
+    }
+
+    // 重置任务计数器（你需要根据具体任务的计数器来调整）
+    private void resetTaskCounters() {
+        taskCount.set(0); // 重置任务计数
+        Log.record(TAG, "任务计数器已重置");
+    }
+
 
 
     private void processJsonArray(JSONObject initialObj, String arrayKey, JsonArrayHandler handler) {
@@ -2532,6 +2598,10 @@ public class AntForest extends ModelTask {
                 else if (findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD") != null) {
                     jo = findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD");
                 }
+                // 查找敦煌飞天保护罩
+                else if (findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE") != null) {
+                    jo = findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE");
+                }
                 // 查找普通能量保护罩
                 else {
                     jo = findPropBag(bagObject, "ENERGY_SHIELD"); // 普通保护罩，一般用不到
@@ -2548,7 +2618,6 @@ public class AntForest extends ModelTask {
             Log.error(TAG + "useShieldCard err");
         }
     }
-
 
     public void useCardBoot(List<String> TargetTimeValue, String propName, Runnable func) {
         for (String targetTimeStr : TargetTimeValue) {
