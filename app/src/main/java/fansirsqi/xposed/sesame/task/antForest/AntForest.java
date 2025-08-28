@@ -1896,90 +1896,137 @@ public class AntForest extends ModelTask {
      */
     private void receiveTaskAward() {
         try {
-            // 修复：使用new HashSet包装从缓存获取的数据，兼容List/Set类型
+            // ------------------------------
+            // 1️⃣ 初始化失败任务黑名单
+            // ------------------------------
             Set<String> presetBad = new LinkedHashSet<>(List.of(
-                    "ENERGYRAIN", //能量雨
-                    "ENERGY_XUANJIAO", //践行绿色行为
-                    "FOREST_TOTAL_COLLECT_ENERGY_3",//累积3天收自己能量
-                    "TEST_LEAF_TASK",//逛农场得落叶肥料
-                    "SHARETASK"//邀请好友助力
+                    "ENERGYRAIN",
+                    "ENERGY_XUANJIAO",
+                    "FOREST_TOTAL_COLLECT_ENERGY_3",
+                    "TEST_LEAF_TASK",
+                    "SHARETASK"
             ));
-            /* 3️⃣ 失败任务集合：空文件时自动创建空 HashSet 并立即落盘 */
-            TypeReference<Set<String>> typeRef = new TypeReference<>() {
-            };
+
+            TypeReference<Set<String>> typeRef = new TypeReference<>() {};
             Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badForestTaskSet", typeRef);
-            /* 3️⃣ 首次运行时把预设黑名单合并进去并立即落盘 */
+
             if (badTaskSet.isEmpty()) {
                 badTaskSet.addAll(presetBad);
-                DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);   // 持久化
+                DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);
             }
+
+            // ------------------------------
+            // 2️⃣ 循环处理森林任务
+            // ------------------------------
             while (true) {
                 boolean doubleCheck = false; // 标记是否需要再次检查任务
-                String s = AntForestRpcCall.queryTaskList(); // 查询任务列表
-                JSONObject jo = new JSONObject(s); // 解析响应为 JSON 对象
+
+                // 查询任务列表 RPC
+                String s = AntForestRpcCall.queryTaskList();
+                JSONObject jo = new JSONObject(s);
+
+                // 检查 RPC 响应是否成功
                 if (!ResChecker.checkRes(TAG + "查询森林任务失败:", jo)) {
-                    Log.record(jo.getString("resultDesc")); // 记录失败描述
-                    Log.runtime(s); // 打印响应内容
+                    Log.record(jo.getString("resultDesc"));
+                    Log.runtime(s);
                     break;
                 }
+
+                // 处理每日签到任务
                 JSONArray forestSignVOList = jo.getJSONArray("forestSignVOList");
-                int SumawardCount = 0;
-                int DailyawardCount = dailyTask(forestSignVOList);
-                SumawardCount = DailyawardCount + SumawardCount;
+                int sumAwardCount = dailyTask(forestSignVOList);
+
+                // 获取新任务列表
                 JSONArray forestTasksNew = jo.optJSONArray("forestTasksNew");
-                if (forestTasksNew == null || forestTasksNew.length() == 0) {
-                    break; // 如果没有新任务，则返回
-                }
+                if (forestTasksNew == null || forestTasksNew.length() == 0) break;
+
+                // 遍历所有任务
                 for (int i = 0; i < forestTasksNew.length(); i++) {
                     JSONObject forestTask = forestTasksNew.getJSONObject(i);
-                    JSONArray taskInfoList = forestTask.getJSONArray("taskInfoList"); // 获取任务信息列表
+                    JSONArray taskInfoList = forestTask.getJSONArray("taskInfoList");
+
                     for (int j = 0; j < taskInfoList.length(); j++) {
                         JSONObject taskInfo = taskInfoList.getJSONObject(j);
+                        JSONObject taskBaseInfo = taskInfo.getJSONObject("taskBaseInfo");
+                        String taskType = taskBaseInfo.getString("taskType");
+                        String sceneCode = taskBaseInfo.getString("sceneCode");
+                        String taskStatus = taskBaseInfo.getString("taskStatus");
+                        JSONObject bizInfo = new JSONObject(taskBaseInfo.getString("bizInfo"));
+                        String taskTitle = bizInfo.optString("taskTitle", taskType);
+                        JSONObject taskRights = new JSONObject(taskInfo.getString("taskRights"));
+                        int awardCount = taskRights.optInt("awardCount", 0);
 
-                        JSONObject taskBaseInfo = taskInfo.getJSONObject("taskBaseInfo"); // 获取任务基本信息
-                        String taskType = taskBaseInfo.getString("taskType"); // 获取任务类型
-                        String sceneCode = taskBaseInfo.getString("sceneCode"); // 获取场景代码
-                        String taskStatus = taskBaseInfo.getString("taskStatus"); // 获取任务状态
+                        // ------------------------------
+                        // 3️⃣ 普通任务处理逻辑
+                        // ------------------------------
+                        if (!"mokuai_senlin_hlz".equals(taskType)) { // 过滤小游戏任务
+                            if (TaskStatus.FINISHED.name().equals(taskStatus)) {
+                                JSONObject joAward = new JSONObject(AntForestRpcCall.receiveTaskAward(sceneCode, taskType));
+                                if (ResChecker.checkRes(TAG + "领取森林任务奖励失败:", joAward)) {
+                                    Log.forest("森林奖励🎖️[" + taskTitle + "]# " + awardCount + "活力值");
+                                    sumAwardCount += awardCount;
+                                    doubleCheck = true;
+                                } else {
+                                    Log.error(TAG, "领取失败: " + taskTitle);
+                                    Log.runtime(joAward.toString());
+                                }
+                                GlobalThreadPools.sleep(500);
+                            } else if (TaskStatus.TODO.name().equals(taskStatus)) {
+                                if (badTaskSet.contains(taskType)) continue;
 
-                        JSONObject bizInfo = new JSONObject(taskBaseInfo.getString("bizInfo")); // 获取业务信息
-                        String taskTitle = bizInfo.optString("taskTitle", taskType); // 获取任务标题
-
-                        JSONObject taskRights = new JSONObject(taskInfo.getString("taskRights")); // 获取任务权益
-                        int awardCount = taskRights.optInt("awardCount", 0); // 获取奖励数量
-
-                        if (TaskStatus.FINISHED.name().equals(taskStatus)) {
-                            JSONObject joAward = new JSONObject(AntForestRpcCall.receiveTaskAward(sceneCode, taskType)); // 领取奖励请求
-                            if (ResChecker.checkRes(TAG + "领取森林任务奖励失败:", joAward)) {
-                                Log.forest("森林奖励🎖️[" + taskTitle + "]# " + awardCount + "活力值");
-                                SumawardCount = SumawardCount + awardCount;
-                                doubleCheck = true; // 标记需要重新检查任务
-                            } else {
-                                Log.error(TAG, "领取失败: " + taskTitle); // 记录领取失败信息
-                                Log.runtime(joAward.toString()); // 打印奖励响应
-                            }
-                            GlobalThreadPools.sleep(500);
-                        } else if (TaskStatus.TODO.name().equals(taskStatus)) {
-                            if (badTaskSet.contains(taskType)) continue;
-                            if (!badTaskSet.contains(taskType)) {
                                 String bizKey = sceneCode + "_" + taskType;
                                 int count = forestTaskTryCount
                                         .computeIfAbsent(bizKey, k -> new AtomicInteger(0))
                                         .incrementAndGet();
 
-                                JSONObject joFinishTask = new JSONObject(AntForestRpcCall.finishTask(sceneCode, taskType)); // 完成任务请求
+                                JSONObject joFinishTask = new JSONObject(AntForestRpcCall.finishTask(sceneCode, taskType));
                                 if (count > 1) {
-                                    Log.error(TAG, "完成森林任务失败超过1次" + taskTitle + "\n" + joFinishTask); // 记录完成任务失败信息
+                                    Log.error(TAG, "完成森林任务失败超过1次 " + taskTitle + "\n" + joFinishTask);
                                     badTaskSet.add(taskType);
                                     DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);
                                 } else {
                                     Log.forest("森林任务🧾️[" + taskTitle + "]");
-                                    doubleCheck = true; // 标记需要重新检查任务
+                                    doubleCheck = true;
                                 }
                             }
+                            continue; // 跳过小游戏逻辑
+                        }
 
+                        // ------------------------------
+                        // 4️⃣ 活力值小游戏任务逻辑
+                        // ------------------------------
+                        if ("mokuai_senlin_hlz".equals(taskType)) {
+                            Log.forest("森林任务🎮️[" + taskTitle + "] - 模拟玩游戏30秒...");
+                            try {
+                                // 完成任务 RPC
+                                JSONObject joFinishTask = new JSONObject(AntForestRpcCall.finishTask(sceneCode, taskType));
+                                if (!ResChecker.checkRes(TAG + "完成活力值小游戏任务失败:", joFinishTask)) {
+                                    // 模拟游戏运行 30 秒
+                                    GlobalThreadPools.sleep(30_000);
+
+                                    // 领取奖励 RPC
+                                    JSONObject joAward = new JSONObject(AntForestRpcCall.receiveTaskAward(sceneCode, taskType));
+                                    if (ResChecker.checkRes(TAG + "领取活力值小游戏奖励失败:", joAward)) {
+                                        Log.forest("森林奖励🎖️[" + taskTitle + "]# " + awardCount + "活力值");
+                                        sumAwardCount += awardCount;
+                                    } else {
+                                        Log.error(TAG, "领取奖励失败: " + taskTitle);
+                                        Log.runtime(joAward.toString());
+                                    }
+                                } else {
+                                    Log.error(TAG, "完成任务失败: " + taskTitle);
+                                    Log.runtime(joFinishTask.toString());
+                                }
+                            } catch (Exception e) {
+                                Log.error(TAG, "活力值小游戏异常: " + e.getMessage());
+                                Log.printStackTrace(TAG, e);
+                            }
+                            doubleCheck = true;
                         }
                     }
                 }
+
+                // 如果没有需要再次检查的任务，则退出循环
                 if (!doubleCheck) break;
             }
         } catch (JSONException e) {
@@ -1987,9 +2034,10 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             Log.error(TAG, "receiveTaskAward 错误:");
-            Log.printStackTrace(TAG, t); // 打印异常栈
+            Log.printStackTrace(TAG, t);
         }
     }
+
 
     private void usePropBeforeCollectEnergy(String userId) {
         try {
