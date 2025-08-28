@@ -174,6 +174,7 @@ public class AntForest extends ModelTask {
 
     private ChoiceModelField robExpandCard;//1.1倍能量卡
     private ListModelField robExpandCardTime; //1.1倍能量卡时间
+    private IntegerModelField cycleinterval;      // 循环间隔
 
     /**
      * 异常返回检测开关
@@ -323,47 +324,69 @@ public class AntForest extends ModelTask {
         modelFields.addField(advanceTime = new IntegerModelField("advanceTime", "提前时间(毫秒)", 0, Integer.MIN_VALUE, 500));
         modelFields.addField(tryCount = new IntegerModelField("tryCount", "尝试收取(次数)", 1, 0, 5));
         modelFields.addField(retryInterval = new IntegerModelField("retryInterval", "重试间隔(毫秒)", 1200, 0, 10000));
+        modelFields.addField(cycleinterval = new IntegerModelField("cycleinterval", "循环间隔(毫秒)", 5000, 0, 10000));
         modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容", false));
         return modelFields;
     }
 
     @Override
     public Boolean check() {
-        // 判断是否处于异常等待状态
-        if (RuntimeInfo.getInstance().getLong(RuntimeInfo.RuntimeInfoKey.ForestPauseTime) > System.currentTimeMillis()) {
+        long currentTime = System.currentTimeMillis();
+
+        // 1️⃣ 异常等待状态
+        if (RuntimeInfo.getInstance().getLong(RuntimeInfo.RuntimeInfoKey.ForestPauseTime) > currentTime) {
             Log.record(getName() + "任务-异常等待中，暂不执行检测！");
-            return false;  // 暂时不执行任务
+            return false;
         }
-        // 判断是否处于模块休眠时间
-        else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
+
+        // 2️⃣ 模块休眠时间
+        if (TaskCommon.IS_MODULE_SLEEP_TIME) {
             Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
-            return false;  // 停止执行任务
+            return false;
         }
-        // 判断是否处于只收能量时间段
-        else if (TaskCommon.IS_ENERGY_TIME) {
+
+        // 3️⃣ 只收能量时间段
+        if (TaskCommon.IS_ENERGY_TIME) {
             Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，开始循环收取自己、好友和PK好友的能量");
 
-            // 在只收能量时间段内，持续执行收取自己的能量、好友能量和PK好友能量
-            while (TaskCommon.IS_ENERGY_TIME) {
+            while (true) {
+                // 更新时间状态，保证 IS_ENERGY_TIME 是最新的
+                TaskCommon.update();
+
+                // 如果未到或超过能量时间段，跳出循环
+                if (!TaskCommon.IS_ENERGY_TIME) {
+                    Log.record(TAG, "当前不在只收能量时间段，退出循环");
+                    break;
+                }
+
+                // 收取自己能量
                 JSONObject selfHomeObj = querySelfHome();
                 if (selfHomeObj != null) {
-                    collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");  // 收取自己的能量
+                    collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");
                 }
-                collectFriendEnergy();  // 收取好友能量
-                collectPKEnergy();  // 收取PK好友能量
 
+                // 收取好友和PK好友能量
+                collectFriendEnergy();
+                collectPKEnergy();
+
+                // 循环间隔（毫秒）
                 try {
-                    Thread.sleep(10000);  // 暂停10秒后继续执行
+                    int sleepMillis = cycleinterval.getValue();
+                    Thread.sleep(sleepMillis);
                 } catch (InterruptedException e) {
                     Log.printStackTrace(TAG, "收能量时发生错误", e);
-                    break;  // 如果发生异常，则跳出循环
+                    break;
                 }
             }
-            return false;  // 退出当前任务的执行
-        } else {
-            return true;  // 正常执行任务
+
+            Log.record(TAG, "只收能量时间循环结束");
+            return false;
         }
+
+        // 4️⃣ 正常任务执行
+        return true;
     }
+
 
     @Override
     public Boolean isSync() {
