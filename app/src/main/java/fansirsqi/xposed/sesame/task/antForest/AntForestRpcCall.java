@@ -830,15 +830,5 @@ public class AntForestRpcCall {
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
     }
 
-    /**
-     * 查询游戏中心活力值任务列表
-     */
-    public static String queryGameCenter(String chInfo) {
-        return RequestManager.requestString("com.alipay.gamecenterhome.biz.rpc.queryGameAggCard",
-                "[{\"appearedCardIds\":[],\"deviceLevel\":\"high\",\"pageSize\":6,\"pageStart\":1," +
-                        "\"source\":\"" + chInfo + "\",\"topGameId\":\"\",\"trafficDriverId\":\"" + chInfo + "\"," +
-                        "\"unityDeviceLevel\":\"high\"}]");
-    }
-
 }
 
