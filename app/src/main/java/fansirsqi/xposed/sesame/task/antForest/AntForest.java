@@ -1907,37 +1907,46 @@ public class AntForest extends ModelTask {
                     "ENERGY_XUANJIAO", //践行绿色行为
                     "FOREST_TOTAL_COLLECT_ENERGY_3",//累积3天收自己能量
                     "TEST_LEAF_TASK",//逛农场得落叶肥料
-                    "SHARETASK"//邀请好友助力
+                    "SHARETASK" //邀请好友助力
             ));
+
             /* 3️⃣ 失败任务集合：空文件时自动创建空 HashSet 并立即落盘 */
-            TypeReference<Set<String>> typeRef = new TypeReference<>() {
-            };
+            TypeReference<Set<String>> typeRef = new TypeReference<>() {};
             Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badForestTaskSet", typeRef);
             /* 3️⃣ 首次运行时把预设黑名单合并进去并立即落盘 */
             if (badTaskSet.isEmpty()) {
                 badTaskSet.addAll(presetBad);
                 DataStore.INSTANCE.put("badForestTaskSet", badTaskSet);   // 持久化
             }
+
             while (true) {
                 boolean doubleCheck = false; // 标记是否需要再次检查任务
                 String s = AntForestRpcCall.queryTaskList(); // 查询任务列表
                 JSONObject jo = new JSONObject(s); // 解析响应为 JSON 对象
+
                 if (!ResChecker.checkRes(TAG + "查询森林任务失败:", jo)) {
                     Log.record(jo.getString("resultDesc")); // 记录失败描述
                     Log.runtime(s); // 打印响应内容
                     break;
                 }
+
+                // 提取森林任务列表
                 JSONArray forestSignVOList = jo.getJSONArray("forestSignVOList");
                 int SumawardCount = 0;
-                int DailyawardCount = dailyTask(forestSignVOList);
+                int DailyawardCount = dailyTask(forestSignVOList); // 执行每日任务
                 SumawardCount = DailyawardCount + SumawardCount;
+
+                // 提取森林任务
                 JSONArray forestTasksNew = jo.optJSONArray("forestTasksNew");
                 if (forestTasksNew == null || forestTasksNew.length() == 0) {
                     break; // 如果没有新任务，则返回
                 }
+
+                // 遍历任务
                 for (int i = 0; i < forestTasksNew.length(); i++) {
                     JSONObject forestTask = forestTasksNew.getJSONObject(i);
                     JSONArray taskInfoList = forestTask.getJSONArray("taskInfoList"); // 获取任务信息列表
+
                     for (int j = 0; j < taskInfoList.length(); j++) {
                         JSONObject taskInfo = taskInfoList.getJSONObject(j);
 
@@ -1952,25 +1961,31 @@ public class AntForest extends ModelTask {
                         JSONObject taskRights = new JSONObject(taskInfo.getString("taskRights")); // 获取任务权益
                         int awardCount = taskRights.optInt("awardCount", 0); // 获取奖励数量
 
+                        // 判断任务状态
                         if (TaskStatus.FINISHED.name().equals(taskStatus)) {
+                            // 领取任务奖励
                             JSONObject joAward = new JSONObject(AntForestRpcCall.receiveTaskAward(sceneCode, taskType)); // 领取奖励请求
                             if (ResChecker.checkRes(TAG + "领取森林任务奖励失败:", joAward)) {
                                 Log.forest("森林奖励🎖️[" + taskTitle + "]# " + awardCount + "活力值");
-                                SumawardCount = SumawardCount + awardCount;
+                                SumawardCount += awardCount;
                                 doubleCheck = true; // 标记需要重新检查任务
                             } else {
                                 Log.error(TAG, "领取失败: " + taskTitle); // 记录领取失败信息
                                 Log.runtime(joAward.toString()); // 打印奖励响应
                             }
                             GlobalThreadPools.sleep(500);
+
                         } else if (TaskStatus.TODO.name().equals(taskStatus)) {
+                            // 跳过已失败的任务
                             if (badTaskSet.contains(taskType)) continue;
+
                             if (!badTaskSet.contains(taskType)) {
                                 String bizKey = sceneCode + "_" + taskType;
                                 int count = forestTaskTryCount
                                         .computeIfAbsent(bizKey, k -> new AtomicInteger(0))
                                         .incrementAndGet();
 
+                                // 完成任务请求
                                 JSONObject joFinishTask = new JSONObject(AntForestRpcCall.finishTask(sceneCode, taskType)); // 完成任务请求
                                 if (count > 1) {
                                     Log.error(TAG, "完成森林任务失败超过1次" + taskTitle + "\n" + joFinishTask); // 记录完成任务失败信息
@@ -1981,12 +1996,21 @@ public class AntForest extends ModelTask {
                                     doubleCheck = true; // 标记需要重新检查任务
                                 }
                             }
+                        }
 
+                        // 如果是游戏任务类型，查询并处理游戏任务
+                        if ("GAME_TASK_TYPE".equals(taskType)) {
+                            String gameAggCardResponse = AntForestRpcCall.queryGameAggCard();
+                            JSONObject gameAggCardJson = new JSONObject(gameAggCardResponse);
+                            // 这里你可以进一步处理返回的游戏任务卡片，例如启动游戏等
+                            Log.runtime(TAG, "游戏任务卡片信息: " + gameAggCardJson.toString());
                         }
                     }
                 }
+
                 if (!doubleCheck) break;
             }
+
         } catch (JSONException e) {
             Log.error(TAG, "JSON解析错误: " + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -2613,74 +2637,74 @@ public class AntForest extends ModelTask {
     }
 
     /**
- * 使用能量保护罩，一般是限时保护罩，打开青春特权森林道具领取
- */
-private void useShieldCard(JSONObject bagObject) {
-    try {
-        Log.record(TAG, "开始执行 useShieldCard，背包内容：" + bagObject);
+     * 使用能量保护罩，一般是限时保护罩，打开青春特权森林道具领取
+     */
+    private void useShieldCard(JSONObject bagObject) {
+        try {
+            Log.record(TAG, "开始执行 useShieldCard，背包内容：" + bagObject);
 
-        // 在背包中查询限时保护罩
-        JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
-        Log.record(TAG, "初次查找限时保护罩 LIMIT_TIME_ENERGY_SHIELD_TREE，结果：" + jo);
+            // 在背包中查询限时保护罩
+            JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
+            Log.record(TAG, "初次查找限时保护罩 LIMIT_TIME_ENERGY_SHIELD_TREE，结果：" + jo);
 
-        // 如果没找到限时保护罩，则根据不同条件查找其他保护罩
-        if (jo == null) {
-            // 查找青春特权保护罩
-            if (youthPrivilege.getValue() > 0) {
-                Log.record(TAG, "检测到青春特权，尝试使用青春特权保护罩");
-                if (Privilege.INSTANCE.youthPrivilege()) {
-                    jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
-                    Log.record(TAG, "青春特权保护罩查找结果：" + jo);
-                } else {
-                    Log.record(TAG, "青春特权条件不满足");
+            // 如果没找到限时保护罩，则根据不同条件查找其他保护罩
+            if (jo == null) {
+                // 查找青春特权保护罩
+                if (youthPrivilege.getValue() > 0) {
+                    Log.record(TAG, "检测到青春特权，尝试使用青春特权保护罩");
+                    if (Privilege.INSTANCE.youthPrivilege()) {
+                        jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
+                        Log.record(TAG, "青春特权保护罩查找结果：" + jo);
+                    } else {
+                        Log.record(TAG, "青春特权条件不满足");
+                    }
+                }
+                // 查找普通保护罩
+                else if (shieldCardConstant.getValue()) {
+                    Log.record(TAG, "检测到普通保护罩常量，尝试兑换普通保护罩");
+                    if (exchangeEnergyShield()) {
+                        jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD");
+                        Log.record(TAG, "普通保护罩查找结果：" + jo);
+                    } else {
+                        Log.record(TAG, "兑换普通保护罩失败");
+                    }
+                }
+                // 查找树宝保护罩
+                else if (findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD") != null) {
+                    jo = findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD");
+                    Log.record(TAG, "找到树宝保护罩：" + jo);
+                }
+                // 查找敦煌飞天保护罩
+                else if (findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE") != null) {
+                    jo = findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE");
+                    Log.record(TAG, "找到敦煌飞天保护罩：" + jo);
+                }
+                // 查找普通能量保护罩
+                else {
+                    jo = findPropBag(bagObject, "ENERGY_SHIELD");
+                    Log.record(TAG, "找到普通保护罩：" + jo);
                 }
             }
-            // 查找普通保护罩
-            else if (shieldCardConstant.getValue()) {
-                Log.record(TAG, "检测到普通保护罩常量，尝试兑换普通保护罩");
-                if (exchangeEnergyShield()) {
-                    jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD");
-                    Log.record(TAG, "普通保护罩查找结果：" + jo);
-                } else {
-                    Log.record(TAG, "兑换普通保护罩失败");
-                }
-            }
-            // 查找树宝保护罩
-            else if (findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD") != null) {
-                jo = findPropBag(bagObject, "shubao3rd_ENERGY_SHIELD");
-                Log.record(TAG, "找到树宝保护罩：" + jo);
-            }
-            // 查找敦煌飞天保护罩
-            else if (findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE") != null) {
-                jo = findPropBag(bagObject, "MUSEUM_DUNHUANG_ENERGY_SHIELD_NO_EXPIRE");
-                Log.record(TAG, "找到敦煌飞天保护罩：" + jo);
-            }
-            // 查找普通能量保护罩
-            else {
-                jo = findPropBag(bagObject, "ENERGY_SHIELD");
-                Log.record(TAG, "找到普通保护罩：" + jo);
-            }
-        }
 
-        // 使用保护罩，如果找到且使用成功
-        if (jo != null) {
-            boolean success = usePropBag(jo);
-            Log.record(TAG, "尝试使用保护罩：" + jo + "，结果：" + success);
-            if (success) {
-                shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24; // 设置保护罩有效期为24小时
-                Log.record(TAG, "保护罩使用成功，shieldEndTime：" + shieldEndTime);
+            // 使用保护罩，如果找到且使用成功
+            if (jo != null) {
+                boolean success = usePropBag(jo);
+                Log.record(TAG, "尝试使用保护罩：" + jo + "，结果：" + success);
+                if (success) {
+                    shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24; // 设置保护罩有效期为24小时
+                    Log.record(TAG, "保护罩使用成功，shieldEndTime：" + shieldEndTime);
+                } else {
+                    Log.record(TAG, "保护罩使用失败，刷新主页");
+                    updateSelfHomePage(); // 更新主页
+                }
             } else {
-                Log.record(TAG, "保护罩使用失败，刷新主页");
+                Log.record(TAG, "未找到可用保护罩，刷新主页");
                 updateSelfHomePage(); // 更新主页
             }
-        } else {
-            Log.record(TAG, "未找到可用保护罩，刷新主页");
-            updateSelfHomePage(); // 更新主页
+        } catch (Throwable th) {
+            Log.error(TAG + "useShieldCard err");
         }
-    } catch (Throwable th) {
-        Log.error(TAG + " useShieldCard 异常");
     }
-}
 
     public void useCardBoot(List<String> TargetTimeValue, String propName, Runnable func) {
         for (String targetTimeStr : TargetTimeValue) {
