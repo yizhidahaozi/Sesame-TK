@@ -189,7 +189,7 @@ object HookUtil {
                             param.result = list.size  // 设置返回值为真实数量
                             val now = System.currentTimeMillis()
                             if (now - lastToastTime > 1000 * 60) { // 每N秒最多显示一次
-                                Toast.show("� TK已尝试为您突破限制")
+                                Toast.show("🎉 TK已尝试为您突破限制")
                                 lastToastTime = now
                             }
                         }
