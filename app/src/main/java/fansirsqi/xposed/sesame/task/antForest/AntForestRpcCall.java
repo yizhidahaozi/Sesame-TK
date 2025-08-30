@@ -243,6 +243,13 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
     }
 
+    public static String queryGameAggCard() {
+        return RequestManager.requestString("com.alipay.gamecenterhome.biz.rpc.queryGameAggCard",
+                "[{\"appearedCardIds\":[],\"deviceLevel\":\"high\",\"pageSize\":6,\"pageStart\":1," +
+                        "\"source\":\"mokuai_senlin_hlz\",\"trafficDriverId\":\"mokuai_senlin_hlz\",\"unityDeviceLevel\":\"high\"}]");
+    }
+
+
     /*青春特权道具任务状态查询🔍*/
     public static String queryTaskListV2(String firstTaskType) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -829,6 +836,5 @@ public class AntForestRpcCall {
         String args = "[" + params + "]";
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
     }
-
 }
 
