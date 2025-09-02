@@ -351,6 +351,9 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.queryAnimalPropList", new JSONArray().put(jo).toString());
     }
 
+    /**
+     * 普通道具使用（非保护罩，直接使用）
+     */
     public static String consumeProp(String propGroup, String propType, Boolean replace) throws JSONException {
         JSONObject jo = new JSONObject();
         jo.put("propGroup", propGroup);
@@ -358,6 +361,38 @@ public class AntForestRpcCall {
         jo.put("replace", replace.toString());
         jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
+    }
+
+    /**
+     * 道具 - 第一次检查是否可以延长（secondConfirm=false）
+     */
+    public static String checkProlongShield(String propGroup, String propId, String propType) throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("propGroup", propGroup);
+        jo.put("propId", propId);
+        jo.put("propType", propType);
+        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
+        jo.put("secondConfirm", false);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("timezoneId", "Asia/Shanghai");
+        jo.put("version", VERSION);
+        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
+    }
+
+    /**
+     * 道具 - 第二次确认使用（secondConfirm=true）
+     */
+    public static String useProlongShield(String propGroup, String propId, String propType) throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("propGroup", propGroup);
+        jo.put("propId", propId);
+        jo.put("propType", propType);
+        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
+        jo.put("secondConfirm", true);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("timezoneId", "Asia/Shanghai");
+        jo.put("version", VERSION);
         return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
     }
 
