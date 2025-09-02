@@ -1654,7 +1654,7 @@ public class AntFarm extends ModelTask {
                                     JSONObject feedFriendAnimaljo = new JSONObject(AntFarmRpcCall.feedFriendAnimal(friendFarmId));
                                     if (ResChecker.checkRes(TAG, feedFriendAnimaljo)) {
                                         foodStock = feedFriendAnimaljo.getInt("foodStock");
-                                        Log.farm("帮喂好友�[" + user + "]的小鸡[180g]#剩余" + foodStock + "g");
+                                        Log.farm("帮喂好友🥣[" + user + "]的小鸡[180g]#剩余" + foodStock + "g");
                                         Status.feedFriendToday(AntFarmRpcCall.farmId2UserId(friendFarmId));
                                     } else {
                                         Log.error(TAG, "😞喂[" + user + "]的鸡失败" + feedFriendAnimaljo);
