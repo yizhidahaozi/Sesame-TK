@@ -155,6 +155,7 @@ public class AntForest extends ModelTask {
     private PriorityModelField receiveForestTaskAward;
     private SelectAndCountModelField waterFriendList;
     private IntegerModelField waterFriendCount;
+    private BooleanModelField notifyFriend;
     public static SelectModelField giveEnergyRainList; //能量雨赠送列表
     private PriorityModelField vitalityExchange;
     private PriorityModelField userPatrol;
@@ -289,6 +290,7 @@ public class AntForest extends ModelTask {
         modelFields.addField(returnWater33 = new IntegerModelField("returnWater33", "返水 | 33克需收能量(关闭:0)", 0));
         modelFields.addField(waterFriendList = new SelectAndCountModelField("waterFriendList", "浇水 | 好友列表", new LinkedHashMap<>(), AlipayUser::getList, "设置浇水次数"));
         modelFields.addField(waterFriendCount = new IntegerModelField("waterFriendCount", "浇水 | 克数(10 18 33 66)", 66));
+        modelFields.addField(notifyFriend = new BooleanModelField("notifyFriend", "浇水 | 通知好友", false));
         modelFields.addField(giveProp = new PriorityModelField("giveProp", "赠送道具", priorityType.PRIORITY_2, priorityType.nickNames));
         modelFields.addField(whoYouWantToGiveTo = new SelectModelField("whoYouWantToGiveTo", "赠送 | 道具", new LinkedHashSet<>(), AlipayUser::getList, "所有可赠送的道具将全部赠"));
         modelFields.addField(collectProp = new PriorityModelField("collectProp", "收集道具", priorityType.PRIORITY_2, priorityType.nickNames));
@@ -874,6 +876,8 @@ public class AntForest extends ModelTask {
     private void waterFriends() {
         try {
             Map<String, Integer> friendMap = waterFriendList.getValue();
+            boolean notify = notifyFriend.getValue(); // 获取通知开关状态
+
             for (Map.Entry<String, Integer> friendEntry : friendMap.entrySet()) {
                 String uid = friendEntry.getKey();
                 if (selfId.equals(uid)) {
@@ -884,13 +888,19 @@ public class AntForest extends ModelTask {
                     continue;
                 }
                 waterCount = Math.min(waterCount, 3);
+
                 if (Status.canWaterFriendToday(uid, waterCount)) {
                     try {
                         String response = AntForestRpcCall.queryFriendHomePage(uid, null);
                         JSONObject jo = new JSONObject(response);
                         if (ResChecker.checkRes(TAG, jo)) {
                             String bizNo = jo.getString("bizNo");
-                            KVMap<Integer, Boolean> waterCountKVNode = returnFriendWater(uid, bizNo, waterCount, waterFriendCount.getValue());
+
+                            // ✅ 关键改动：传入通知开关
+                            KVMap<Integer, Boolean> waterCountKVNode = returnFriendWater(
+                                    uid, bizNo, waterCount, waterFriendCount.getValue(), notify
+                            );
+
                             int actualWaterCount = waterCountKVNode.getKey();
                             if (actualWaterCount > 0) {
                                 Status.waterFriendToday(uid, actualWaterCount);
@@ -1677,7 +1687,9 @@ public class AntForest extends ModelTask {
                         if (!bizNo.isEmpty()) {
                             int returnCount = getReturnCount(collected);
                             if (returnCount > 0) {
-                                returnFriendWater(userId, bizNo, 1, returnCount);
+                                // ✅ 调用 returnFriendWater 增加通知好友开关
+                                boolean notify = notifyFriend.getValue(); // 从配置获取
+                                returnFriendWater(userId, bizNo, 1, returnCount, notify);
                             }
                         }
                     }
@@ -1781,46 +1793,75 @@ public class AntForest extends ModelTask {
     /**
      * 为好友浇水并返回浇水次数和是否可以继续浇水的状态。
      *
-     * @param userId      好友的用户ID
-     * @param bizNo       业务编号
-     * @param count       需要浇水的次数
-     * @param waterEnergy 每次浇水的能量值
-     * @return KVNode 包含浇水次数和是否可以继续浇水的状态
+     * @param userId       好友的用户ID
+     * @param bizNo        业务编号
+     * @param count        需要浇水的次数
+     * @param waterEnergy  每次浇水的能量值
+     * @param notifyFriend 是否通知好友
+     * @return KVMap 包含浇水次数和是否可以继续浇水的状态
      */
-    private KVMap<Integer, Boolean> returnFriendWater(String userId, String bizNo, int count, int waterEnergy) {
-        // 如果业务编号为空，则直接返回默认值
+    private KVMap<Integer, Boolean> returnFriendWater(String userId, String bizNo, int count, int waterEnergy, boolean notifyFriend) {
+        // bizNo为空直接返回默认
         if (bizNo == null || bizNo.isEmpty()) {
             return new KVMap<>(0, true);
         }
-        int wateredTimes = 0; // 已浇水次数
+
+        int wateredTimes = 0;   // 已浇水次数
         boolean isContinue = true; // 是否可以继续浇水
+
         try {
-            // 获取能量ID
             int energyId = getEnergyId(waterEnergy);
-            // 循环浇水操作
+
+            // 循环浇水
             label:
             for (int waterCount = 1; waterCount <= count; waterCount++) {
-                // 调用RPC进行浇水操作
-                String rpcResponse = AntForestRpcCall.transferEnergy(userId, bizNo, energyId);
+                // 调用RPC进行浇水，并传入是否通知好友
+                String rpcResponse = AntForestRpcCall.transferEnergy(userId, bizNo, energyId, notifyFriend);
+
+                if (rpcResponse == null || rpcResponse.isEmpty()) {
+                    Log.record(TAG, "好友浇水返回空: " + UserMap.getMaskName(userId));
+                    isContinue = false;
+                    break;
+                }
+
                 JSONObject jo = new JSONObject(rpcResponse);
-                String resultCode = jo.getString("resultCode");
+
+                // 先处理可能的错误码
+                String errorCode = jo.optString("error");
+                if ("1009".equals(errorCode)) { // 访问被拒绝
+                    Log.record(TAG, "好友浇水🚿访问被拒绝: " + UserMap.getMaskName(userId));
+                    isContinue = false;
+                    break;
+                } else if ("3000".equals(errorCode)) { // 系统错误
+                    Log.record(TAG, "好友浇水🚿系统错误，稍后重试: " + UserMap.getMaskName(userId));
+                    Thread.sleep(500);
+                    waterCount--; // 重试当前次数
+                    continue;
+                }
+
+                // 处理正常返回
+                String resultCode = jo.optString("resultCode");
                 switch (resultCode) {
                     case "SUCCESS":
-                        String currentEnergy = jo.getJSONObject("treeEnergy").getString("currentEnergy");
+                        JSONObject treeEnergy = jo.optJSONObject("treeEnergy");
+                        String currentEnergy = treeEnergy != null ? treeEnergy.optString("currentEnergy", "未知") : "未知";
                         Log.forest("好友浇水🚿[" + UserMap.getMaskName(userId) + "]#" + waterEnergy + "g，剩余能量[" + currentEnergy + "g]");
                         wateredTimes++;
                         GlobalThreadPools.sleep(1200L);
                         break;
+
                     case "WATERING_TIMES_LIMIT":
-                        Log.record(TAG, "好友浇水🚿今日给[" + UserMap.getMaskName(userId) + "]浇水已达上限");
-                        wateredTimes = 3; // 假设上限为3次
+                        Log.record(TAG, "好友浇水🚿今日已达上限: " + UserMap.getMaskName(userId));
+                        wateredTimes = 3; // 上限假设3次
                         break label;
+
                     case "ENERGY_INSUFFICIENT":
-                        Log.record(TAG, "好友浇水🚿" + jo.getString("resultDesc"));
+                        Log.record(TAG, "好友浇水🚿" + jo.optString("resultDesc"));
                         isContinue = false;
                         break label;
+
                     default:
-                        Log.record(TAG, "好友浇水🚿" + jo.getString("resultDesc"));
+                        Log.record(TAG, "好友浇水🚿" + jo.optString("resultDesc"));
                         Log.runtime(jo.toString());
                         break;
                 }
@@ -1829,6 +1870,7 @@ public class AntForest extends ModelTask {
             Log.runtime(TAG, "returnFriendWater err");
             Log.printStackTrace(TAG, t);
         }
+
         return new KVMap<>(wateredTimes, isContinue);
     }
 
