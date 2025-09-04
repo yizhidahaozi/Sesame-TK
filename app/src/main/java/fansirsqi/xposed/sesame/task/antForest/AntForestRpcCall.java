@@ -13,7 +13,6 @@ import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
-import fansirsqi.xposed.sesame.util.StringUtil;
 
 /**
  * 森林 RPC 调用类
@@ -24,7 +23,7 @@ public class AntForestRpcCall {
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
         if (alipayVersion.compareTo(new AlipayVersion("10.5.88.8000")) > 0) {
-            VERSION = "20240403";
+            VERSION = "20250108";
         } else if (alipayVersion.compareTo(new AlipayVersion("10.3.96.8100")) > 0) {
             VERSION = "20230501";
         } else {
@@ -352,7 +351,7 @@ public class AntForestRpcCall {
     }
 
     /**
-     * 普通道具使用（非保护罩，直接使用）
+     * 普通道具使用
      */
     public static String consumeProp(String propGroup, String propType, Boolean replace) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -361,38 +360,6 @@ public class AntForestRpcCall {
         jo.put("replace", replace.toString());
         jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
-    }
-
-    /**
-     * 道具 - 第一次检查是否可以延长（secondConfirm=false）
-     */
-    public static String checkProlongShield(String propGroup, String propId, String propType) throws JSONException {
-        JSONObject jo = new JSONObject();
-        jo.put("propGroup", propGroup);
-        jo.put("propId", propId);
-        jo.put("propType", propType);
-        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
-        jo.put("secondConfirm", false);
-        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        jo.put("timezoneId", "Asia/Shanghai");
-        jo.put("version", VERSION);
-        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
-    }
-
-    /**
-     * 道具 - 第二次确认使用（secondConfirm=true）
-     */
-    public static String useProlongShield(String propGroup, String propId, String propType) throws JSONException {
-        JSONObject jo = new JSONObject();
-        jo.put("propGroup", propGroup);
-        jo.put("propId", propId);
-        jo.put("propType", propType);
-        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
-        jo.put("secondConfirm", true);
-        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        jo.put("timezoneId", "Asia/Shanghai");
-        jo.put("version", VERSION);
         return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
     }
 
