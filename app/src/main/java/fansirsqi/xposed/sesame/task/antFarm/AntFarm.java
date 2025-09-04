@@ -718,8 +718,8 @@ public class AntFarm extends ModelTask {
                 }
             }
         }
-		
-	// 2. 使用加饭卡（仅当正在吃饭且开启配置）
+
+        // 2. 使用加饭卡（仅当正在吃饭且开启配置）
         if (useBigEaterTool.getValue() && AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
             boolean result = useFarmTool(ownerFarmId, AntFarm.ToolType.BIG_EATER_TOOL);
             if (result) {
@@ -1417,44 +1417,62 @@ public class AntFarm extends ModelTask {
             Log.printStackTrace(TAG, "doFarmTasks 错误:", t);
         }
     }
-	
+
     private void receiveFarmAwards() {
         try {
             boolean doubleCheck;
+            boolean isFeedFull = false; // 添加饲料槽已满的标志
             do {
                 doubleCheck = false;
                 JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
-                if (ResChecker.checkRes(TAG, jo)) {
+                if (ResChecker.checkRes(TAG + "查询庄园任务失败:", jo)) {
                     JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
                     JSONObject signList = jo.getJSONObject("signList");
                     farmSign(signList);
+
                     for (int i = 0; i < farmTaskList.length(); i++) {
+                        // 如果饲料槽已满，跳过后续任务的领取
+                        if (isFeedFull) {
+                            break;
+                        }
+
                         JSONObject task = farmTaskList.getJSONObject(i);
                         String taskStatus = task.getString("taskStatus");
                         String taskTitle = task.optString("title", "未知任务");
                         int awardCount = task.optInt("awardCount", 0);
                         String taskId = task.optString("taskId");
+
                         if (TaskStatus.FINISHED.name().equals(taskStatus)) {
-                            if (Objects.equals(task.optString("awardType"), "ALLPURPOSE")) {
+                            if ("ALLPURPOSE".equals(task.optString("awardType"))) {
                                 if (awardCount + foodStock > foodStockLimit) {
                                     unreceiveTaskAward++;
                                     Log.record(TAG, taskTitle + "领取" + awardCount + "g饲料后将超过[" + foodStockLimit + "g]上限!终止领取");
                                     break;
                                 }
                             }
+
                             JSONObject receiveTaskAwardjo = new JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId));
-                            if (ResChecker.checkRes(TAG, receiveTaskAwardjo)) {
+
+                            if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount);
-                                Log.farm("庄园奖励🎖️[" + taskTitle + "]#" + awardCount + "g");
+                                Log.farm("庄园奖励[" + taskTitle + "]#" + awardCount + "g");
                                 doubleCheck = true;
-                                if (unreceiveTaskAward > 0)
-                                    unreceiveTaskAward--;
-                                GlobalThreadPools.sleep(1000);
+                                if (unreceiveTaskAward > 0) unreceiveTaskAward--;
+                            } else {
+                                // 检查是否是饲料槽已满的错误
+                                String resultCode = receiveTaskAwardjo.optString("resultCode", "");
+                                String memo = receiveTaskAwardjo.optString("memo", "");
+                                if ("331".equals(resultCode)) {
+                                    isFeedFull = true;
+                                    Log.record(TAG, "检测到饲料槽已满，停止领取任务奖励: " + memo);
+                                    break;
+                                }
                             }
                         }
+                        GlobalThreadPools.sleep(1000);
                     }
                 }
-            } while (doubleCheck);
+            } while (doubleCheck && !isFeedFull); // 如果饲料槽已满，不再进行双重检查
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t);
         }
