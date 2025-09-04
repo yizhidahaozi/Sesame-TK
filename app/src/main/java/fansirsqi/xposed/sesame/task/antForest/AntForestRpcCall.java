@@ -180,12 +180,13 @@ public class AntForestRpcCall {
         }
     }
 
-    public static String transferEnergy(String targetUser, String bizNo, int energyId) {
+    public static String transferEnergy(String targetUser, String bizNo, int energyId, boolean notifyFriend) {
         try {
             JSONObject arg = new JSONObject();
             arg.put("bizNo", bizNo + UUID.randomUUID().toString());
             arg.put("energyId", energyId);
-            arg.put("extInfo", new JSONObject().put("sendChat", "N"));
+            // ✅ 根据 notifyFriend 参数设置是否通知好友
+            arg.put("extInfo", new JSONObject().put("sendChat", notifyFriend ? "Y" : "N"));
             arg.put("from", "friendIndex");
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("targetUser", targetUser);
@@ -839,4 +840,3 @@ public class AntForestRpcCall {
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
     }
 }
-
