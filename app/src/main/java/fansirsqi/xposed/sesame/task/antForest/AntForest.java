@@ -2051,17 +2051,19 @@ public class AntForest extends ModelTask {
             if (Objects.equals(selfId, userId)) return;
 
             long now = System.currentTimeMillis();
-            long oneDay = 24 * 60 * 60 * 1000L; // 1天毫秒数
-            long threeDays = 3 * 24 * 60 * 60 * 1000L; // 3天毫秒数
+            long oneDay = 24 * 60 * 60 * 1000L;
+            long threeDays = 3 * 24 * 60 * 60 * 1000L;
+
+            Log.record(TAG, "检查道具续命: now=" + now);
 
             boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE) && doubleEndTime < now;
             boolean needRobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE) && robExpandCardEndTime < now;
             boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE) && stealthEndTime < now;
-            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
-                    && (shieldEndTime - now) < oneDay; // 剩余时间低于1天
-            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && (energyBombCardEndTime - now) < threeDays; // 剩余时间低于3天
+            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE) && (shieldEndTime - now) < oneDay;
+            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE) && (energyBombCardEndTime - now) < threeDays;
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+
+            Log.record(TAG, "needDouble=" + needDouble + ", needShield=" + needShield + ", needEnergyBomb=" + needEnergyBombCard);
 
             if (needDouble || needStealth || needShield || needEnergyBombCard || needRobExpand) {
                 synchronized (doubleCardLockObj) {
@@ -2072,10 +2074,11 @@ public class AntForest extends ModelTask {
                     if (needStealth) useStealthCard(bagObject);
                     if (needBubbleBoostCard) useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
 
-                    // 互斥逻辑：优先保护罩
                     if (needShield) {
+                        Log.record(TAG, "触发保护罩续命");
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
+                        Log.record(TAG, "触发炸弹卡续命");
                         useEnergyBombCard(bagObject);
                     }
                 }
@@ -2084,6 +2087,7 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(e);
         }
     }
+
 
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
