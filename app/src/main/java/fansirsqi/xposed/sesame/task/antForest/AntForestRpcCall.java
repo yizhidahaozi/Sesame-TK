@@ -364,6 +364,22 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
     }
 
+    /**
+     * 续用道具
+     */
+    public static String consumePropNew(String propId, String propType) throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("propGroup", "shield"); // 一般保护罩用 shield 分组，必要时可根据需求动态传
+        jo.put("propId", propId);
+        jo.put("propType", propType);
+        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
+        jo.put("secondConfirm", true); // ✅ 强制加上
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("timezoneId", "Asia/Shanghai");
+        jo.put("version", VERSION);
+        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp",new JSONArray().put(jo).toString());
+    }
+
     public static String giveProp(String giveConfigId, String propId, String targetUserId) throws JSONException {
         JSONObject jo = new JSONObject();
         jo.put("giveConfigId", giveConfigId);
