@@ -2088,39 +2088,76 @@ public class AntForest extends ModelTask {
         }
     }
 
+    /**
+     * 在收集能量之前使用道具。
+     * 这个方法检查是否需要使用增益卡
+     * 并在需要时使用相应的道具。
+     *
+     * @param userId 用户的ID。
+     */
     private void usePropBeforeCollectEnergy(String userId) {
         try {
-            if (Objects.equals(selfId, userId)) return;
+            if (Objects.equals(selfId, userId)) {
+                return;
+            }
 
             long now = System.currentTimeMillis();
-            long oneDay = 24 * 60 * 60 * 1000L;
-            long threeDays = 3 * 24 * 60 * 60 * 1000L;
 
-            Log.record(TAG, "检查道具续命: now=" + now);
+            // 双击卡：低于 31 天才可以续用
+            long thirtyOneDays = 31L * 24 * 60 * 60 * 1000;
+            boolean needDouble =
+                    !doubleCard.getValue().equals(applyPropType.CLOSE)
+                            && (doubleEndTime - now) < thirtyOneDays;
 
-            boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE) && doubleEndTime < now;
-            boolean needRobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE) && robExpandCardEndTime < now;
-            boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE) && stealthEndTime < now;
-            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE) && (shieldEndTime - now) < oneDay;
-            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE) && (energyBombCardEndTime - now) < threeDays;
-            boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+            // 抢收加成卡（没有说明上限，保持原逻辑）
+            boolean needrobExpand =
+                    !robExpandCard.getValue().equals(applyPropType.CLOSE)
+                            && robExpandCardEndTime < now;
 
-            Log.record(TAG, "needDouble=" + needDouble + ", needShield=" + needShield + ", needEnergyBomb=" + needEnergyBombCard);
+            // 隐身卡（保持原逻辑，随时可续）
+            boolean needStealth =
+                    !stealthCard.getValue().equals(applyPropType.CLOSE)
+                            && stealthEndTime < now;
 
-            if (needDouble || needStealth || needShield || needEnergyBombCard || needRobExpand) {
+            // 保护罩：低于 1 天才可以续用
+            long oneDay = 24L * 60 * 60 * 1000;
+            boolean needShield =
+                    !shieldCard.getValue().equals(applyPropType.CLOSE)
+                            && energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                            && (shieldEndTime - now) < oneDay;
+
+            // 炸弹卡：低于 3 天才可以续用
+            long threeDays = 3L * 24 * 60 * 60 * 1000;
+            boolean needEnergyBombCard =
+                    !energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                            && shieldCard.getValue().equals(applyPropType.CLOSE)
+                            && (energyBombCardEndTime - now) < threeDays;
+
+            // 加速卡：保持原逻辑
+            boolean needBubbleBoostCard =
+                    !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+
+            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
 
                     if (needDouble) useDoubleCard(bagObject);
-                    if (needRobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
-                    if (needStealth) useStealthCard(bagObject);
-                    if (needBubbleBoostCard) useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
 
+                    if (needrobExpand) {
+                        // 原逻辑改为封装方法
+                        useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
+                    }
+
+                    if (needStealth) useStealthCard(bagObject);
+
+                    if (needBubbleBoostCard) {
+                        useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
+                    }
+
+                    // 保护罩和炸弹卡互斥：优先保护罩
                     if (needShield) {
-                        Log.record(TAG, "触发保护罩续命");
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
-                        Log.record(TAG, "触发炸弹卡续命");
                         useEnergyBombCard(bagObject);
                     }
                 }
@@ -2129,7 +2166,6 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(e);
         }
     }
-
 
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
@@ -2617,6 +2653,36 @@ public class AntForest extends ModelTask {
         }
     }
 
+    /**
+     * 续用背包道具
+     *
+     * @param propJsonObj 道具对象
+     */
+    private boolean usePropBagNew(JSONObject propJsonObj) {
+        if (propJsonObj == null) {
+            Log.record(TAG, "要使用的道具不存在！");
+            return false;
+        }
+        try {
+            JSONObject jo = new JSONObject(AntForestRpcCall.consumePropNew(propJsonObj.getJSONArray("propIdList").getString(0), propJsonObj.getString("propType")));
+            if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
+                String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
+                String tag = propEmoji(propName);
+                Log.forest("使用道具" + tag + "[" + propName + "]");
+                updateSelfHomePage();
+                return true;
+            } else {
+                Log.record(jo.getString("resultDesc"));
+                Log.runtime(jo.toString());
+                return false;
+            }
+        } catch (Throwable th) {
+            Log.runtime(TAG, "usePropBagNew err");
+            Log.printStackTrace(TAG, th);
+            return false;
+        }
+    }
+
     @NonNull
     private static String propEmoji(String propName) {
         String tag;
@@ -2636,6 +2702,7 @@ public class AntForest extends ModelTask {
         return tag;
     }
 
+
     /**
      * 使用双击卡道具。 这个方法检查是否满足使用双击卡的条件，如果满足，则在背包中查找并使用双击卡。
      *
@@ -2653,7 +2720,7 @@ public class AntForest extends ModelTask {
                     }
                 }
                 if (jo == null) jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
-                if (jo != null && usePropBag(jo)) {
+                if (jo != null && usePropBagNew(jo)) {
                     doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
                     Status.DoubleToday();
                 } else {
@@ -2682,7 +2749,7 @@ public class AntForest extends ModelTask {
             if (jo == null) {
                 jo = findPropBag(bagObject, "STEALTH_CARD");
             }
-            if (jo != null && usePropBag(jo)) {
+            if (jo != null && usePropBagNew(jo)) {
                 stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
@@ -2700,38 +2767,21 @@ public class AntForest extends ModelTask {
         try {
             // 在背包中查询限时保护罩
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
-
             if (jo == null) {
                 if (youthPrivilege.getValue()) {
                     if (Privilege.INSTANCE.youthPrivilege()) {
                         jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
-                    }
+                    } // 重新查找
                 } else if (shieldCardConstant.getValue()) {
                     if (exchangeEnergyShield()) {
                         jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD");
                     }
                 } else {
-                    jo = findPropBag(bagObject, "ENERGY_SHIELD"); // 尝试查找普通保护罩
+                    jo = findPropBag(bagObject, "ENERGY_SHIELD"); // 尝试查找 普通保护罩，一般用不到
                 }
             }
-
-            if (jo != null) {
-                // 按抓包 RPC 调用使用保护罩
-                try {
-                    boolean success = AntForestRpcCall.consumeProp(
-                            jo.getString("propGroup"),
-                            jo.getString("propType"),
-                            true
-                    ) != null;
-                    if (success) {
-                        shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24; // 24小时有效期
-                    } else {
-                        updateSelfHomePage();
-                    }
-                } catch (JSONException e) {
-                    Log.error(TAG + "consumeProp JSON err: " + e);
-                    updateSelfHomePage();
-                }
+            if (jo != null && usePropBagNew(jo)) {
+                shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
             }
@@ -2839,116 +2889,29 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 使用能量炸弹卡
-     *
-     * @param bagObject 背包 JSON 对象
+     * 炸弹卡使用
      */
     private void useEnergyBombCard(JSONObject bagObject) {
         try {
-            // 第一步：在背包查找能量炸弹卡
             JSONObject jo = findPropBag(bagObject, "ENERGY_BOMB_CARD");
-
-            // 背包没有，再尝试兑换
             if (jo == null) {
                 JSONObject skuInfo = Vitality.findSkuInfoBySkuName("能量炸弹卡");
-                if (skuInfo != null) {
-                    String skuId = skuInfo.getString("skuId");
-                    if (Status.canVitalityExchangeToday(skuId, 1) &&
-                            Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
-                        jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
-                    }
+                if (skuInfo == null) {
+                    return;
+                }
+                String skuId = skuInfo.getString("skuId");
+                if (Status.canVitalityExchangeToday(skuId, 1) && Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
+                    jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
                 }
             }
-
-            // 使用能量炸弹卡（按抓包 RPC 调用）
-            if (jo != null) {
-                try {
-                    boolean success = AntForestRpcCall.consumeProp(
-                            jo.getString("propGroup"),
-                            jo.getString("propType"),
-                            true
-                    ) != null;
-                    if (success) {
-                        // 按服务器返回 endTime 设置剩余时间
-                        energyBombCardEndTime = getEnergyBombEndTimeFromServer(jo);
-                        Log.record(TAG, "能量炸弹卡使用成功，剩余时间：" +
-                                formatTimeDifference(energyBombCardEndTime - System.currentTimeMillis()));
-                    } else {
-                        updateSelfHomePage();
-                    }
-                } catch (JSONException e) {
-                    Log.error(TAG + "consumeProp JSON err: " + e);
-                    updateSelfHomePage();
-                }
+            if (jo != null && usePropBagNew(jo)) {
+                energyBombCardEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
             }
         } catch (Throwable th) {
-            Log.error(TAG + "useEnergyBombCard err");
-            Log.printStackTrace(th);
+            Log.error(TAG + "useShieldCard err");
         }
-    }
-
-    /**
-     * 从服务器返回的道具对象解析能量炸弹卡 endTime
-     * 注意：根据实际服务器返回字段自己实现
-     */
-    private long getEnergyBombEndTimeFromServer(JSONObject propJsonObj) {
-        try {
-            return propJsonObj.optLong("endTime", System.currentTimeMillis());
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "解析能量炸弹卡 endTime 出错:", e);
-            return System.currentTimeMillis();
-        }
-    }
-
-    private int tryOneCollect(RpcEntity rpcEntity, String userId, long bubbleId) {
-        try {
-            RequestManager.requestObject(rpcEntity, 0, 0);
-            if (rpcEntity.getHasError()) {
-                String errorCode = (String) XposedHelpers.callMethod(rpcEntity.getResponseObject(), "getString", "error");
-                if ("1004".equals(errorCode)) {
-                    if (BaseModel.getWaitWhenException().getValue() > 0) {
-                        long waitTime = System.currentTimeMillis() + BaseModel.getWaitWhenException().getValue();
-                        RuntimeInfo.getInstance().put(RuntimeInfo.RuntimeInfoKey.ForestPauseTime, waitTime);
-                        Notify.updateStatusText("异常");
-                        Log.record(TAG, "触发异常,等待至" + TimeUtil.getCommonDate(waitTime));
-                        errorWait = true;
-                        return -1;
-                    }
-                    GlobalThreadPools.sleep(600 + RandomUtil.delay());
-                }
-                return -2;
-            }
-            JSONObject jo = new JSONObject(rpcEntity.getResponseString());
-            String resultCode = jo.getString("resultCode");
-            if (!"SUCCESS".equalsIgnoreCase(resultCode)) {
-                if ("PARAM_ILLEGAL2".equals(resultCode)) {
-                    Log.record(TAG, "[" + UserMap.getMaskName(userId) + "]" + "能量已被收取,取消重试 错误:" + jo.getString("resultDesc"));
-                    return 1;
-                }
-                Log.record(TAG, "[" + UserMap.getMaskName(userId) + "]" + jo.getString("resultDesc"));
-                return 0;
-            }
-            int collected = 0;
-            JSONArray jaBubbles = jo.getJSONArray("bubbles");
-            JSONObject bubble = jaBubbles.getJSONObject(0);
-            collected += bubble.getInt("collectedEnergy");
-            if (collected > 0) {
-                int randomIndex = random.nextInt(emojiList.size());
-                String randomEmoji = emojiList.get(randomIndex);
-                Log.record(TAG, "单次收取" + randomEmoji + collected + "g[" + UserMap.getMaskName(userId) + "]");
-                return collected;
-            } else {
-                Log.record(TAG, "单次收取❌[" + UserMap.getMaskName(userId) + "]的能量失败");
-                Log.runtime(TAG, "，UserID：" + userId + "，BubbleId：" + bubble.getLong("id"));
-            }
-        } catch (Exception e) {
-            Log.runtime(TAG, "collectEnergy err");
-            Log.printStackTrace(e);
-            return -1;
-        }
-        return 0;
     }
 
     /**
@@ -2966,7 +2929,6 @@ public class AntForest extends ModelTask {
         private final long bubbleId;
 
         private final long produceTime;
-        private final boolean is_self;
 
         /**
          * 实例化一个新的能量收取定时任务
@@ -2978,12 +2940,9 @@ public class AntForest extends ModelTask {
         EnergyTimerTask(String uid, long bid, long pt) {
             // 调用父类构造方法，传入任务ID和提前执行时间
             super(AntForest.getEnergyTimerTid(uid, bid), pt - advanceTimeInt);
-            this.userId = uid;
-            this.bubbleId = bid;
-            this.produceTime = pt;
-
-            // ✅ 用内容比较，避免 == 带来的引用比较问题
-            this.is_self = Objects.equals(selfId, uid);
+            userId = uid;
+            bubbleId = bid;
+            produceTime = pt;
         }
 
         @Override
@@ -3001,38 +2960,7 @@ public class AntForest extends ModelTask {
                     }
                 }
                 Log.record(TAG, "执行蹲点收取⏰ 任务ID " + getId() + " [" + userName + "]" + "时差[" + averageInteger + "]ms" + "提前[" + advanceTimeInt + "]ms");
-                int rt = 0;
-                if(is_self) {
-                    Log.forest("自己的能量，多尝试收取几次");
-                    long start_time = System.currentTimeMillis();
-                    while (System.currentTimeMillis() - start_time < 3000) {
-                        Log.record("持续时间"+(System.currentTimeMillis() - start_time));
-                        try {
-                            RpcEntity rpcEntity = AntForestRpcCall.energyRpcEntity("", userId, bubbleId);
-                            rt = tryOneCollect(rpcEntity,userId, bubbleId);
-                            if(-1 == rt) {
-                                break;
-                            }
-                            if(rt >= 0) {
-                                break;
-                            }
-                        } catch (Exception e) {
-                            Log.runtime(TAG, "collectEnergy err");
-                            Log.printStackTrace(e);
-                            break;
-                        }
-                        try {
-                            Thread.sleep(300);
-                        } catch (InterruptedException e) {
-                            Log.runtime("线程延时失败");
-                            break;
-                        }
-                    }
-
-                }
-                if(rt <= 0) {
-                    collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)), true);
-                }
+                collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)), true);
             };
         }
     }
