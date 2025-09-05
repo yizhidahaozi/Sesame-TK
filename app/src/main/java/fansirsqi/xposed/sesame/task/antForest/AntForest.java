@@ -1465,7 +1465,6 @@ public class AntForest extends ModelTask {
         }
     }
 
-
     private void collectGiftBox(JSONObject userHomeObj) {
         try {
             JSONObject giftBoxInfo = userHomeObj.optJSONObject("giftBoxInfo");
@@ -2664,12 +2663,19 @@ public class AntForest extends ModelTask {
             return false;
         }
         try {
-            JSONObject jo = new JSONObject(AntForestRpcCall.consumePropNew(propJsonObj.getJSONArray("propIdList").getString(0), propJsonObj.getString("propType")));
+            // 直接使用 propGroup 字段
+            String propGroup = propJsonObj.getString("propGroup");
+            String propId = propJsonObj.getJSONArray("propIdList").getString(0);
+            String propType = propJsonObj.getString("propType");
+
+            // 调用 RPC
+            JSONObject jo = new JSONObject(AntForestRpcCall.consumePropNew(propGroup, propId, propType));
+
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
                 String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
                 String tag = propEmoji(propName);
                 Log.forest("使用道具" + tag + "[" + propName + "]");
-                updateSelfHomePage();
+                updateSelfHomePage(); // 更新首页道具状态
                 return true;
             } else {
                 Log.record(jo.getString("resultDesc"));
