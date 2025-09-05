@@ -2100,60 +2100,45 @@ public class AntForest extends ModelTask {
                 return;
             }
 
-            long now = System.currentTimeMillis();
+            // 毫秒常量
+            long ONE_HOUR = 60 * 60 * 1000L;         // 1 小时
+            long ONE_DAY = 24 * ONE_HOUR;           // 1 天
+            long THREE_DAYS = 3 * ONE_DAY;          // 3 天
 
-            // 双击卡：低于 31 天才可以续用
-            long thirtyOneDays = 31L * 24 * 60 * 60 * 1000;
-            boolean needDouble =
-                    !doubleCard.getValue().equals(applyPropType.CLOSE)
-                            && (doubleEndTime - now) < thirtyOneDays;
+            boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
+                    && doubleEndTime < System.currentTimeMillis();
 
-            // 抢收加成卡（没有说明上限，保持原逻辑）
-            boolean needrobExpand =
-                    !robExpandCard.getValue().equals(applyPropType.CLOSE)
-                            && robExpandCardEndTime < now;
+            boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
+                    && robExpandCardEndTime < System.currentTimeMillis();
 
-            // 隐身卡（保持原逻辑，随时可续）
-            boolean needStealth =
-                    !stealthCard.getValue().equals(applyPropType.CLOSE)
-                            && stealthEndTime < now;
+            boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
+                    && stealthEndTime < System.currentTimeMillis();
 
-            // 保护罩：低于 1 天才可以续用
-            long oneDay = 24L * 60 * 60 * 1000;
-            boolean needShield =
-                    !shieldCard.getValue().equals(applyPropType.CLOSE)
-                            && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                            && (shieldEndTime - now) < oneDay;
+            // 保护罩低于 24 小时续命
+            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
+                    && energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                    && (shieldEndTime - System.currentTimeMillis() < ONE_DAY);
 
-            // 炸弹卡：低于 3 天才可以续用
-            long threeDays = 3L * 24 * 60 * 60 * 1000;
-            boolean needEnergyBombCard =
-                    !energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                            && shieldCard.getValue().equals(applyPropType.CLOSE)
-                            && (energyBombCardEndTime - now) < threeDays;
+            // 炸弹卡低于 3 天续命
+            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                    && shieldCard.getValue().equals(applyPropType.CLOSE)
+                    && (energyBombCardEndTime - System.currentTimeMillis() < THREE_DAYS);
 
-            // 加速卡：保持原逻辑
-            boolean needBubbleBoostCard =
-                    !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+            boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
-
                     if (needDouble) useDoubleCard(bagObject);
-
                     if (needrobExpand) {
-                        // 原逻辑改为封装方法
                         useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
                     }
-
                     if (needStealth) useStealthCard(bagObject);
-
                     if (needBubbleBoostCard) {
                         useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
                     }
 
-                    // 保护罩和炸弹卡互斥：优先保护罩
+                    // 互斥逻辑：如果两个开关都打开，则优先使用保护罩，不使用炸弹卡
                     if (needShield) {
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
@@ -2165,6 +2150,7 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(e);
         }
     }
+
 
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
@@ -2600,6 +2586,9 @@ public class AntForest extends ModelTask {
         return null; // 未找到或出错时返回 null
     }
 
+    /**
+     * 返回背包道具信息
+     */
     private JSONObject showBag() {
         JSONObject bagObject = queryPropList();
         if (Objects.isNull(bagObject)) {
@@ -2652,43 +2641,6 @@ public class AntForest extends ModelTask {
         }
     }
 
-    /**
-     * 续用背包道具
-     *
-     * @param propJsonObj 道具对象
-     */
-    private boolean usePropBagNew(JSONObject propJsonObj) {
-        if (propJsonObj == null) {
-            Log.record(TAG, "要使用的道具不存在！");
-            return false;
-        }
-        try {
-            // 直接使用 propGroup 字段
-            String propGroup = propJsonObj.getString("propGroup");
-            String propId = propJsonObj.getJSONArray("propIdList").getString(0);
-            String propType = propJsonObj.getString("propType");
-
-            // 调用 RPC
-            JSONObject jo = new JSONObject(AntForestRpcCall.consumePropNew(propGroup, propId, propType));
-
-            if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
-                String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
-                String tag = propEmoji(propName);
-                Log.forest("使用道具" + tag + "[" + propName + "]");
-                updateSelfHomePage(); // 更新首页道具状态
-                return true;
-            } else {
-                Log.record(jo.getString("resultDesc"));
-                Log.runtime(jo.toString());
-                return false;
-            }
-        } catch (Throwable th) {
-            Log.runtime(TAG, "usePropBagNew err");
-            Log.printStackTrace(TAG, th);
-            return false;
-        }
-    }
-
     @NonNull
     private static String propEmoji(String propName) {
         String tag;
@@ -2726,7 +2678,7 @@ public class AntForest extends ModelTask {
                     }
                 }
                 if (jo == null) jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
-                if (jo != null && usePropBagNew(jo)) {
+                if (jo != null && usePropBag(jo)) {
                     doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
                     Status.DoubleToday();
                 } else {
@@ -2755,7 +2707,7 @@ public class AntForest extends ModelTask {
             if (jo == null) {
                 jo = findPropBag(bagObject, "STEALTH_CARD");
             }
-            if (jo != null && usePropBagNew(jo)) {
+            if (jo != null && usePropBag(jo)) {
                 stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
@@ -2786,7 +2738,7 @@ public class AntForest extends ModelTask {
                     jo = findPropBag(bagObject, "ENERGY_SHIELD"); // 尝试查找 普通保护罩，一般用不到
                 }
             }
-            if (jo != null && usePropBagNew(jo)) {
+            if (jo != null && usePropBag(jo)) {
                 shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
@@ -2910,7 +2862,7 @@ public class AntForest extends ModelTask {
                     jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
                 }
             }
-            if (jo != null && usePropBagNew(jo)) {
+            if (jo != null && usePropBag(jo)) {
                 energyBombCardEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
             } else {
                 updateSelfHomePage();
