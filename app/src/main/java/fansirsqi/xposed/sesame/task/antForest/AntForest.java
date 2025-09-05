@@ -2119,21 +2119,7 @@ public class AntForest extends ModelTask {
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombRemain < THREE_DAYS;
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
-
-            // 打印调试信息
-            Log.runtime(TAG, "===== usePropBeforeCollectEnergy 状态 =====");
-            Log.runtime(TAG, "userId=" + userId + " selfId=" + selfId);
-            Log.runtime(TAG, "needDouble=" + needDouble + " doubleEndTime=" + doubleEndTime);
-            Log.runtime(TAG, "needrobExpand=" + needrobExpand + " robExpandCardEndTime=" + robExpandCardEndTime);
-            Log.runtime(TAG, "needStealth=" + needStealth + " stealthEndTime=" + stealthEndTime);
-            Log.runtime(TAG, "needShield=" + needShield + " shieldEndTime=" + shieldEndTime +
-                    " shieldRemain(ms)=" + shieldRemain + " shieldCard=" + shieldCard.getValue() +
-                    " energyBombCardType=" + energyBombCardType.getValue());
-            Log.runtime(TAG, "needEnergyBombCard=" + needEnergyBombCard + " energyBombCardEndTime=" + energyBombCardEndTime +
-                    " energyBombRemain(ms)=" + energyBombRemain + " energyBombCardType=" + energyBombCardType.getValue() +
-                    " shieldCard=" + shieldCard.getValue());
-            Log.runtime(TAG, "needBubbleBoostCard=" + needBubbleBoostCard);
-
+            
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
@@ -2731,28 +2717,27 @@ public class AntForest extends ModelTask {
      */
     private void useShieldCard(JSONObject bagObject) {
         try {
-            // 在背包中查询限时保护罩
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
             if (jo == null) {
-                if (youthPrivilege.getValue()) {
-                    if (Privilege.INSTANCE.youthPrivilege()) {
-                        jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
-                    } // 重新查找
-                } else if (shieldCardConstant.getValue()) {
-                    if (exchangeEnergyShield()) {
-                        jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_SHIELD");
-                    }
+                if (youthPrivilege.getValue() && Privilege.INSTANCE.youthPrivilege()) {
+                    jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
+                } else if (shieldCardConstant.getValue() && exchangeEnergyShield()) {
+                    jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD");
                 } else {
-                    jo = findPropBag(bagObject, "ENERGY_SHIELD"); // 尝试查找 普通保护罩，一般用不到
+                    jo = findPropBag(bagObject, "ENERGY_SHIELD");
                 }
             }
+
             if (jo != null && usePropBag(jo)) {
-                shieldEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
+                // 使用成功后刷新首页道具状态
+                updateSelfHomePage();
             } else {
+                // 如果未使用成功，也刷新一次
                 updateSelfHomePage();
             }
         } catch (Throwable th) {
-            Log.error(TAG + "useShieldCard err");
+            Log.error(TAG + "使用能量保护罩， err");
+            Log.printStackTrace(th);
         }
     }
 
