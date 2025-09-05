@@ -2119,7 +2119,7 @@ public class AntForest extends ModelTask {
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombRemain < THREE_DAYS;
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
-            
+
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
@@ -2847,21 +2847,25 @@ public class AntForest extends ModelTask {
             JSONObject jo = findPropBag(bagObject, "ENERGY_BOMB_CARD");
             if (jo == null) {
                 JSONObject skuInfo = Vitality.findSkuInfoBySkuName("能量炸弹卡");
-                if (skuInfo == null) {
-                    return;
-                }
+                if (skuInfo == null) return;
+
                 String skuId = skuInfo.getString("skuId");
-                if (Status.canVitalityExchangeToday(skuId, 1) && Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
+                if (Status.canVitalityExchangeToday(skuId, 1) &&
+                        Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
                     jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
                 }
             }
+
             if (jo != null && usePropBag(jo)) {
-                energyBombCardEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
+                // 使用成功后刷新真实结束时间
+                updateSelfHomePage();
+                Log.runtime(TAG, "能量炸弹卡使用成功，已刷新结束时间");
             } else {
                 updateSelfHomePage();
             }
         } catch (Throwable th) {
-            Log.error(TAG + "useShieldCard err");
+            Log.error(TAG + "useEnergyBombCard err");
+            Log.printStackTrace(th);
         }
     }
 
