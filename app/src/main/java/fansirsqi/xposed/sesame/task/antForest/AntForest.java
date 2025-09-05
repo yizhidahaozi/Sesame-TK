@@ -2096,11 +2096,6 @@ public class AntForest extends ModelTask {
      */
     private void usePropBeforeCollectEnergy(String userId) {
         try {
-            if (Objects.equals(selfId, userId)) {
-                Log.runtime(TAG, "自己用户，不使用道具");
-                return;
-            }
-
             // 毫秒常量
             long ONE_HOUR = 60 * 60 * 1000L;   // 1 小时
             long ONE_DAY = 24 * ONE_HOUR;     // 1 天
@@ -2127,6 +2122,7 @@ public class AntForest extends ModelTask {
 
             // 打印调试信息
             Log.runtime(TAG, "===== usePropBeforeCollectEnergy 状态 =====");
+            Log.runtime(TAG, "userId=" + userId + " selfId=" + selfId);
             Log.runtime(TAG, "needDouble=" + needDouble + " doubleEndTime=" + doubleEndTime);
             Log.runtime(TAG, "needrobExpand=" + needrobExpand + " robExpandCardEndTime=" + robExpandCardEndTime);
             Log.runtime(TAG, "needStealth=" + needStealth + " stealthEndTime=" + stealthEndTime);
@@ -2163,7 +2159,6 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(e);
         }
     }
-
 
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
