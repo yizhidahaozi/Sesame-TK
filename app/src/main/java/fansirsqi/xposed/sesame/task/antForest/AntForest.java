@@ -2115,14 +2115,28 @@ public class AntForest extends ModelTask {
                     && stealthEndTime < System.currentTimeMillis();
 
             // 保护罩低于 24 小时续命
+            long shieldRemain = shieldEndTime - System.currentTimeMillis();
+            Log.runtime(TAG,
+                    "保护罩结束时间：" + shieldEndTime +
+                            " 当前时间：" + System.currentTimeMillis() +
+                            " 剩余(ms)：" + shieldRemain +
+                            " ≈ " + formatTimeDifference(shieldRemain));
+
             boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && (shieldEndTime - System.currentTimeMillis() < ONE_DAY);
+                    && (shieldRemain < ONE_DAY);
 
             // 炸弹卡低于 3 天续命
+            long energyBombRemain = energyBombCardEndTime - System.currentTimeMillis();
+            Log.runtime(TAG,
+                    "炸弹卡结束时间：" + energyBombCardEndTime +
+                            " 当前时间：" + System.currentTimeMillis() +
+                            " 剩余(ms)：" + energyBombRemain +
+                            " ≈ " + formatTimeDifference(energyBombRemain));
+
             boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
-                    && (energyBombCardEndTime - System.currentTimeMillis() < THREE_DAYS);
+                    && (energyBombRemain < THREE_DAYS);
 
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
@@ -2150,7 +2164,6 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(e);
         }
     }
-
 
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
