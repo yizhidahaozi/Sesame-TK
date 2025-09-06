@@ -140,7 +140,7 @@ public class AntFarm extends ModelTask {
     /**
      * 遣返小鸡
      */
-    private PriorityModelField sendBackAnimal;
+    private BooleanModelField sendBackAnimal;
     /**
      * 遣返方式
      */
@@ -236,7 +236,7 @@ public class AntFarm extends ModelTask {
         modelFields.addField(hireAnimal = new BooleanModelField("hireAnimal", "雇佣小鸡 | 开启", false));
         modelFields.addField(hireAnimalType = new ChoiceModelField("hireAnimalType", "雇佣小鸡 | 动作", HireAnimalType.DONT_HIRE, HireAnimalType.nickNames));
         modelFields.addField(hireAnimalList = new SelectModelField("hireAnimalList", "雇佣小鸡 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(sendBackAnimal = new PriorityModelField("sendBackAnimal", "遣返 | 开启", priorityType.PRIORITY_2, priorityType.nickNames));
+        modelFields.addField(sendBackAnimal = new BooleanModelField("sendBackAnimal", "遣返 | 开启", false));
         modelFields.addField(sendBackAnimalWay = new ChoiceModelField("sendBackAnimalWay", "遣返 | 方式", SendBackAnimalWay.NORMAL, SendBackAnimalWay.nickNames));
         modelFields.addField(sendBackAnimalType = new ChoiceModelField("sendBackAnimalType", "遣返 | 动作", SendBackAnimalType.NOT_BACK, SendBackAnimalType.nickNames));
         modelFields.addField(sendBackAnimalList = new SelectModelField("dontSendFriendList", "遣返 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
@@ -308,7 +308,7 @@ public class AntFarm extends ModelTask {
                 rewardFriend();
                 tc.countDebug("打赏好友");
             }
-            if (getRunCnts() >= sendBackAnimal.getValue()) {
+            if (sendBackAnimal.getValue()) {
                 sendBackAnimal();
                 tc.countDebug("遣返");
             }
