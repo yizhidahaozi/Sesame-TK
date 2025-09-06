@@ -352,17 +352,26 @@ public class AntForestRpcCall {
     }
 
     /**
-     * 普通道具使用
+     * 调用蚂蚁森林 RPC 使用道具
+     *
+     * @param propId 道具ID
+     * @param propType 道具类型
+     * @param secondConfirm 是否为确认调用（续用时传 true）
+     * @return RPC 响应字符串
      */
-    public static String consumeProp(String propGroup, String propType, Boolean replace) throws JSONException {
+    public static String consumeProp(String propId, String propType, boolean secondConfirm) throws JSONException {
         JSONObject jo = new JSONObject();
-        jo.put("propGroup", propGroup);
+        jo.put("propId", propId);
         jo.put("propType", propType);
-        jo.put("replace", replace.toString());
+        jo.put("replace", "false");
         jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
-        jo.put("secondConfirm", true); // ✅ 续用
+        jo.put("secondConfirm", secondConfirm);
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        return RequestManager.requestString("alipay.antforest.forest.h5.consumeProp", new JSONArray().put(jo).toString());
+
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.consumeProp",
+                new JSONArray().put(jo).toString()
+        );
     }
 
     public static String giveProp(String giveConfigId, String propId, String targetUserId) throws JSONException {
