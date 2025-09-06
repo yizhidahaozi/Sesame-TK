@@ -117,7 +117,6 @@ public class AntForest extends ModelTask {
     private final Average delayTimeMath = new Average(5);
     private final ObjReference<Long> collectEnergyLockLimit = new ObjReference<>(0L);
     private final Object doubleCardLockObj = new Object();
-    private BooleanModelField expiredEnergy; // 收取过期能量
     private PriorityModelField collectEnergy;
     private BooleanModelField pkEnergy; // PK能量
     private BooleanModelField energyRain;
@@ -261,7 +260,6 @@ public class AntForest extends ModelTask {
         modelFields.addField(giveEnergyRainList = new SelectModelField("giveEnergyRainList", "赠送能量雨 | 配置列表", new LinkedHashSet<>(), AlipayUser::getList));
         modelFields.addField(energyRainChance = new BooleanModelField("energyRainChance", "兑换使用能量雨次卡 | 开关", false));
         modelFields.addField(collectWateringBubble = new BooleanModelField("collectWateringBubble", "收取浇水金球 | 开关", false));
-        modelFields.addField(expiredEnergy = new BooleanModelField("expiredEnergy", "收取过期能量 | 开关", false));
         modelFields.addField(doubleCard = new ChoiceModelField("doubleCard", "双击卡开关 | 消耗类型", applyPropType.CLOSE, applyPropType.nickNames));
         modelFields.addField(doubleCountLimit = new IntegerModelField("doubleCountLimit", "双击卡 | 使用次数", 6));
         modelFields.addField(doubleCardTime = new ListModelField.ListJoinCommaToStringModelField("doubleCardTime", "双击卡 | 使用时间/范围", ListUtil.newArrayList(
@@ -1314,7 +1312,6 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, "queryEnergyRanking 异常", t);
         }
     }
-
 
     /**
      * 收取排名靠后的能量
@@ -2616,24 +2613,66 @@ public class AntForest extends ModelTask {
             return false;
         }
         try {
-            JSONObject jo = new JSONObject(AntForestRpcCall.consumeProp(propJsonObj.getJSONArray("propIdList").getString(0), propJsonObj.getString("propType")));
+            String propId = propJsonObj.getJSONArray("propIdList").getString(0);
+            String propType = propJsonObj.getString("propType");
+            String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
+            String tag = propEmoji(propName);
+
+            JSONObject jo;
+
+            // -------------------------
+            // 判断是否是可续用类道具
+            // -------------------------
+            if (isRenewableProp(propType)) {
+                // 第一次调用：检查能否续用
+                JSONObject check = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, false));
+                if (!ResChecker.checkRes(TAG + "道具检查失败:", check)) {
+                    Log.record(check.optString("resultDesc", "检查失败"));
+                    Log.runtime(check.toString());
+                    return false;
+                }
+                String status = check.optJSONObject("resData").optString("usePropStatus");
+                if (!"NEED_CONFIRM_CAN_PROLONG".equals(status)) {
+                    Log.record("道具状态异常: " + status);
+                    return false;
+                }
+
+                // 第二次调用：确认续用
+                jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
+            } else {
+                // 普通道具：直接使用
+                jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
+            }
+
+            // -------------------------
+            // 统一结果处理
+            // -------------------------
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
-                String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
-                String tag = propEmoji(propName);
                 Log.forest("使用道具" + tag + "[" + propName + "]");
                 updateSelfHomePage();
                 return true;
             } else {
-                Log.record(jo.getString("resultDesc"));
+                Log.record(jo.optString("resultDesc", "未知错误"));
                 Log.runtime(jo.toString());
                 return false;
             }
+
         } catch (Throwable th) {
             Log.runtime(TAG, "usePropBag err");
             Log.printStackTrace(TAG, th);
             return false;
         }
     }
+
+    /**
+     * 判断是否是可续用类道具
+     */
+    private boolean isRenewableProp(String propType) {
+        return "ENERGY_SHIELD".equals(propType)   // 保护罩
+                || "ENERGY_BOMB_CARD".equals(propType) // 炸弹卡
+                || "DOUBLE_CARD".equals(propType);     // 双击卡
+    }
+
 
     @NonNull
     private static String propEmoji(String propName) {
