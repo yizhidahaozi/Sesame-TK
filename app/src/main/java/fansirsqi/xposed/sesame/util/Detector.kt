@@ -48,6 +48,7 @@ object Detector {
         } else {
             getApiUrlWithKey(key)
         }
+
     }
 
     /**
@@ -60,6 +61,7 @@ object Detector {
                 context.packageName,
                 PackageManager.GET_META_DATA
             )
+            val hasLSPatch = appInfo.metaData?.containsKey("lspatch") == true
             return appInfo.metaData?.containsKey("lspatch") == true
         } catch (e: Exception) {
             Log.error(TAG, "检查LSPatch运行环境时出错: ${e.message}")
@@ -67,38 +69,20 @@ object Detector {
         }
     }
 
-    /**
-     * 检测是否通过nPatch运行
-     */
-    private fun isRunningInNPatch(context: Context): Boolean {
-        try {
-            // 检查应用元数据中是否有nPatch标记
-            val appInfo = context.packageManager.getApplicationInfo(
-                context.packageName,
-                PackageManager.GET_META_DATA
-            )
-            return appInfo.metaData?.containsKey("npatch") == true
-        } catch (e: Exception) {
-            Log.error(TAG, "检查nPatch运行环境时出错: ${e.message}")
-            return false
-        }
-    }
 
     /**
      * 检测模块是否在合法环境中运行
      */
     fun isLegitimateEnvironment(context: Context): Boolean {
         val isRunningInLSPatch = isRunningInLSPatch(context)
-        val isRunningInNPatch = isRunningInNPatch(context)
-
-        if (!isRunningInLSPatch && !isRunningInNPatch) {
+        if (!isRunningInLSPatch) {
             return false
         }
-
         val isEmbedded = isEmbeddedNative(context)
         Log.runtime(TAG, "isEmbedded: $isEmbedded")
         return isEmbedded
     }
+
 
     fun initDetector(context: Context) {
         try {
@@ -119,4 +103,5 @@ object Detector {
             return null
         }
     }
+
 }
