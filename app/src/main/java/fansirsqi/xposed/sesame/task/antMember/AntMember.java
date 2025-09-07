@@ -339,13 +339,14 @@ public class AntMember extends ModelTask {
       return false;
     }
   }
+
   /**
    * 芝麻信用任务
    */
   private static void doAllAvailableSesameTask() {
     try {
       String s = AntMemberRpcCall.queryAvailableSesameTask();
-      // GlobalThreadPools.sleep(500);
+      GlobalThreadPools.sleep(500);
       JSONObject jo = new JSONObject(s);
       if (jo.has("resData")) {
         jo = jo.getJSONObject("resData");
@@ -355,12 +356,26 @@ public class AntMember extends ModelTask {
         Log.error(TAG + ".doAllAvailableSesameTask.queryAvailableSesameTask", "芝麻信用💳[查询任务响应失败]#" + s);
         return;
       }
+
       JSONObject taskObj = jo.getJSONObject("data");
+      //Log.record(TAG, "芝麻信用💳[任务数据]#" + taskObj);
       if (taskObj.has("dailyTaskListVO")) {
-        joinAndFinishSesameTask(taskObj.getJSONObject("dailyTaskListVO").getJSONArray("waitCompleteTaskVOS"));
-        joinAndFinishSesameTask(taskObj.getJSONObject("dailyTaskListVO").getJSONArray("waitJoinTaskVOS"));
+        JSONObject dailyTaskListVO = taskObj.getJSONObject("dailyTaskListVO");
+        // Log.record(TAG, "芝麻信用💳[日常任务列表]#" + dailyTaskListVO);
+
+        if (dailyTaskListVO.has("waitCompleteTaskVOS")) {
+          Log.record(TAG, "芝麻信用💳[待完成任务]#开始处理");
+          joinAndFinishSesameTask(dailyTaskListVO.getJSONArray("waitCompleteTaskVOS"));
+        }
+
+        if (dailyTaskListVO.has("waitJoinTaskVOS")) {
+          Log.record(TAG, "芝麻信用💳[待加入任务]#开始处理");
+          joinAndFinishSesameTask(dailyTaskListVO.getJSONArray("waitJoinTaskVOS"));
+        }
       }
+
       if (taskObj.has("toCompleteVOS")) {
+        Log.record(TAG, "芝麻信用💳[toCompleteVOS任务]#开始处理");
         joinAndFinishSesameTask(taskObj.getJSONArray("toCompleteVOS"));
       }
     } catch (Throwable t) {
@@ -372,12 +387,25 @@ public class AntMember extends ModelTask {
    * @param taskList 任务列表
    * @throws JSONException JSON解析异常，上抛处理
    */
+
   private static void joinAndFinishSesameTask(JSONArray taskList) throws JSONException {
+    try {
+      // Log.record(TAG, "芝麻信用💳[任务列表]#" + taskList.toString());
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG + ".joinAndFinishSesameTask", t);
+    }
+
     for (int i = 0; i < taskList.length(); i++) {
       JSONObject task = taskList.getJSONObject(i);
+      // 添加检查，确保templateId存在
+      if (!task.has("templateId")) {
+        String taskTitle = task.has("title") ? task.getString("title") : "未知任务";
+        Log.error(TAG, "芝麻信用💳[任务缺少templateId字段]#任务标题:" + taskTitle);
+        continue;  // 跳过这个任务
+      }
       String taskTemplateId = task.getString("templateId");
-      String taskTitle = task.getString("title");
-      int needCompleteNum = task.getInt("needCompleteNum");
+      String taskTitle = task.has("title") ? task.getString("title") : "未知任务";
+      int needCompleteNum = task.has("needCompleteNum") ? task.getInt("needCompleteNum") : 1;
       int completedNum = task.optInt("completedNum", 0);
       String s;
       String recordId;
@@ -391,14 +419,15 @@ public class AntMember extends ModelTask {
           continue;
       }
 
-      if (task.getString("actionUrl").contains("jumpAction")) {
+      if (task.has("actionUrl") && task.getString("actionUrl").contains("jumpAction")) {
         // 跳转APP任务 依赖跳转的APP发送请求鉴别任务完成 仅靠hook支付宝无法完成
+        Log.record(TAG, "芝麻信用💳[跳过跳转APP任务]#" + taskTitle);
         continue;
       }
       if (!task.has("todayFinish")) {
         // 领取任务
         s = AntMemberRpcCall.joinSesameTask(taskTemplateId);
-        // GlobalThreadPools.sleep(200);
+        GlobalThreadPools.sleep(200);
         responseObj = new JSONObject(s);
         if (!responseObj.optBoolean("success")) {
           Log.other(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s);
@@ -415,7 +444,7 @@ public class AntMember extends ModelTask {
         recordId = task.getString("recordId");
       }
       s = AntMemberRpcCall.feedBackSesameTask(taskTemplateId);
-      // GlobalThreadPools.sleep(200);
+      GlobalThreadPools.sleep(200);
       responseObj = new JSONObject(s);
       if (!responseObj.optBoolean("success")) {
         Log.other(TAG, "芝麻信用💳[任务" + taskTitle + "回调失败]#" + responseObj.getString("errorMessage"));
@@ -424,7 +453,7 @@ public class AntMember extends ModelTask {
       }
 
       // 是否为浏览15s任务
-      boolean assistiveTouch = task.getJSONObject("strategyRule").optBoolean("assistiveTouch");
+      boolean assistiveTouch = task.has("strategyRule") && task.getJSONObject("strategyRule").optBoolean("assistiveTouch");
       if (task.optBoolean("jumpToPushModel") || assistiveTouch) {
         s = AntMemberRpcCall.finishSesameTask(recordId);
         GlobalThreadPools.sleep(16000);

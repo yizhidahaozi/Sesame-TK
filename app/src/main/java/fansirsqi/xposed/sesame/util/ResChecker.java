@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.util;
 
+import androidx.annotation.NonNull;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -15,7 +17,6 @@ public class ResChecker {
             if (jo.optBoolean("success") || jo.optBoolean("isSuccess")) {
                 return true;
             }
-
             // 检查 resultCode
             Object resCode = jo.opt("resultCode");
             if (resCode != null) {
@@ -26,19 +27,45 @@ public class ResChecker {
                     return true;
                 }
             }
-
             // 检查 memo 字段
             if ("SUCCESS".equalsIgnoreCase(jo.optString("memo", ""))) {
                 return true;
             }
 
-            Log.error(TAG, "Check failed: " + jo);
+            // 获取调用栈信息以确定错误来源
+            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+            String callerInfo = getString(stackTrace);
+            Log.error(TAG, "Check failed: [来源: " + callerInfo + "] " + jo);
             return false;
 
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "Error checking JSON success:", t);
             return false;
         }
+    }
+
+    @NonNull
+    private static String getString(StackTraceElement[] stackTrace) {
+        String callerInfo = "";
+        // 寻找第一个非ResChecker类且非Java系统类的调用者（真正的业务代码调用位置）
+        for (StackTraceElement element : stackTrace) {
+            String className = element.getClassName();
+            // 跳过ResChecker类和Java系统类
+            if (!className.contains("ResChecker") &&
+                    !className.startsWith("java.lang.") &&
+                    !className.startsWith("java.util.") &&
+                    className.contains("fansirsqi.xposed.sesame")) {
+                // 获取简化的类名（不含包名）
+                String simpleClassName = className.substring(className.lastIndexOf('.') + 1);
+                callerInfo = simpleClassName + "." + element.getMethodName() + ":" + element.getLineNumber();
+                break;
+            }
+        }
+
+        if (callerInfo.isEmpty()) {
+            callerInfo = "未知来源";
+        }
+        return callerInfo;
     }
 
     /**
