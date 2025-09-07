@@ -1064,9 +1064,9 @@ public class AntForest extends ModelTask {
                 if (closeWhackMole.getValue()) {
                     JSONObject propertiesObject = selfHomeObj.optJSONObject("properties");
                     if (propertiesObject != null) {
-                        // 如果用户主页的属性中标记了“whackMole”
+                        // 如果用户主页的属性中标记了"whackMole"
                         if (Objects.equals("Y", propertiesObject.optString("whackMoleEntry"))) {
-                            // 尝试关闭“6秒拼手速”功能
+                            // 尝试关闭"6秒拼手速"功能
                             boolean success = WhackMole.closeWhackMole();
                             Log.record(success ? "6秒拼手速关闭成功" : "6秒拼手速关闭失败");
                         }
@@ -2124,31 +2124,69 @@ public class AntForest extends ModelTask {
      */
     private void usePropBeforeCollectEnergy(String userId) {
         try {
+            /*
+             * 在收集能量之前决定是否使用增益类道具卡。
+             *
+             * 主要逻辑:
+             * 1. 定义时间常量，用于判断道具剩余有效期。
+             * 2. 获取当前时间及各类道具的到期时间，计算剩余时间。
+             * 3. 根据以下条件判断是否需要使用特定道具:
+             *    - needDouble: 双击卡开关已打开，且当前没有生效的双击卡。
+             *    - needrobExpand: 1.1倍能量卡开关已打开，且当前没有生效的卡。
+             *    - needStealth: 隐身卡开关已打开，且当前没有生效的隐身卡。
+             *    - needShield: 保护罩开关已打开，炸弹卡开关已关闭，且保护罩剩余时间不足一天。
+             *    - needEnergyBombCard: 炸弹卡开关已打开，保护罩开关已关闭，且炸弹卡剩余时间不足三天。
+             *    - needBubbleBoostCard: 加速卡开关已打开。
+             * 4. 如果有任何一个道具需要使用，则同步查询背包信息，并调用相应的使用道具方法。
+             */
+
             // 毫秒常量
             long ONE_HOUR = 60 * 60 * 1000L;   // 1 小时
             long ONE_DAY = 24 * ONE_HOUR;     // 1 天
             long THREE_DAYS = 3 * ONE_DAY;    // 3 天
-
+            long THIRTY_ONE_DAYS = 31 * ONE_DAY; // 31 天
             long now = System.currentTimeMillis();
-
             long shieldRemain = shieldEndTime - now;
             long energyBombRemain = energyBombCardEndTime - now;
+            long doubleRemain = doubleEndTime - now;
+            Log.runtime(TAG, "--- 道具使用条件检查 ---");
+            Log.runtime(TAG, "当前时间: " + TimeUtil.getCommonDate(now));
+            Log.runtime(TAG, "[双击卡] 开关: " + doubleCard.getValue() + " (0=关), 到期时间: "
+                    + (doubleEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(doubleEndTime)
+                    + ", 剩余时间<31天: " + (doubleRemain < THIRTY_ONE_DAYS));
+            Log.runtime(TAG, "[1.1倍卡] 开关: " + robExpandCard.getValue() + " (0=关), 到期时间: "
+                    + (robExpandCardEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(robExpandCardEndTime));
+            Log.runtime(TAG, "[隐身卡] 开关: " + stealthCard.getValue() + " (0=关), 到期时间: "
+                    + (stealthEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(stealthEndTime));
+            Log.runtime(TAG, "[保护罩] 开关: " + shieldCard.getValue() + " (0=关), 炸弹卡开关: " + energyBombCardType.getValue()
+                    + " (0=关), 到期时间: " + (shieldEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(shieldEndTime)
+                    + ", 剩余时间<1天: " + (shieldRemain < ONE_DAY));
+            Log.runtime(TAG, "[炸弹卡] 开关: " + energyBombCardType.getValue() + " (0=关), 保护罩开关: "
+                    + shieldCard.getValue() + " (0=关), 到期时间: "
+                    + (energyBombCardEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(energyBombCardEndTime)
+                    + ", 剩余时间<3天: " + (energyBombRemain < THREE_DAYS));
+            Log.runtime(TAG, "[加速卡] 开关: " + bubbleBoostCard.getValue() + " (0=关)");
+            Log.runtime(TAG, "----------------------");
 
             boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
-                    && doubleEndTime < now;
+                    && doubleRemain < THIRTY_ONE_DAYS;
             boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
                     && robExpandCardEndTime < now;
             boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
                     && stealthEndTime < now;
             boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && shieldRemain < ONE_DAY;
+                    && (shieldRemain < ONE_DAY || shieldEndTime < now);
             boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombRemain < THREE_DAYS;
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
-            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand) {
+            Log.runtime(TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
+                    ", needStealth=" + needStealth + ", needShield=" + needShield +
+                    ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
+
+            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
                     Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
@@ -2157,9 +2195,8 @@ public class AntForest extends ModelTask {
                     if (needrobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
                     if (needStealth) useStealthCard(bagObject);
                     if (needBubbleBoostCard) useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
-
                     if (needShield) {
-                        Log.runtime(TAG, "准备使用保护罩");
+                        Log.runtime(TAG, "尝试使用保护罩罩");
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
                         Log.runtime(TAG, "准备使用能量炸弹卡");
@@ -2324,7 +2361,7 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 持续巡护森林，直到巡护状态不再是“进行中”
+     * 持续巡护森林，直到巡护状态不再是"进行中"
      *
      * @param s         巡护请求的响应字符串，若为null将重新请求
      * @param nodeIndex 当前节点索引
@@ -2366,7 +2403,7 @@ public class AntForest extends ModelTask {
                         }
                     }
                 }
-                // 如果巡护状态不是“进行中”，则退出循环
+                // 如果巡护状态不是"进行中"，则退出循环
                 if (!"GOING".equals(jo.getString("currentStatus"))) {
                     return;
                 }
@@ -2643,37 +2680,45 @@ public class AntForest extends ModelTask {
             return false;
         }
         try {
+            Log.record(TAG, "尝试使用道具: " + propJsonObj.toString());
             String propId = propJsonObj.getJSONArray("propIdList").getString(0);
-            String propType = propJsonObj.getString("propType");
-            String propName = propJsonObj.getJSONObject("propConfigVO").getString("propName");
+            JSONObject propConfigVO = propJsonObj.getJSONObject("propConfigVO");
+            String propType = propConfigVO.getString("propType");
+            String propName = propConfigVO.getString("propName");
             String tag = propEmoji(propName);
-
             JSONObject jo;
 
             // -------------------------
             // 判断是否是可续用类道具
             // -------------------------
-            if (isRenewableProp(propType)) {
+            boolean isRenewable = isRenewableProp(propType);
+            Log.runtime(TAG, "道具 " + propName + " (类型: " + propType + "), 是否可续用: " + isRenewable);
+            if (isRenewable) {
                 // 第一次调用：检查能否续用
                 JSONObject check = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, false));
                 if (!ResChecker.checkRes(TAG + "道具检查失败:", check)) {
-                    Log.record(check.optString("resultDesc", "检查失败"));
+                    Log.runtime(check.optString("resultDesc", "检查失败"));
                     Log.runtime(check.toString());
                     return false;
                 }
-                String status = Objects.requireNonNull(check.optJSONObject("resData")).optString("usePropStatus");
-                if (!"NEED_CONFIRM_CAN_PROLONG".equals(status)) {
-                    Log.record("道具状态异常: " + status);
+                JSONObject resData = check.optJSONObject("resData");
+                if (resData == null) {
+                    Log.runtime(TAG, "道具状态检查失败: 响应中缺少 resData。");
+                    Log.runtime(check.toString());
                     return false;
                 }
-
+                String status = resData.optString("usePropStatus");
+                Log.runtime(TAG, "可续用道具状态检查成功, 状态: " + status);
+                if (!"NEED_CONFIRM_CAN_PROLONG".equals(status) && !"NEED_CONFIRM_CAN_NOT_PROLONG".equals(status)) {
+                    Log.runtime("道具状态异常: " + status + ", 无法使用该道具。");
+                    return false;
+                }
                 // 第二次调用：确认续用
                 jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
             } else {
                 // 普通道具：直接使用
                 jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
             }
-
             // -------------------------
             // 统一结果处理
             // -------------------------
@@ -2682,7 +2727,7 @@ public class AntForest extends ModelTask {
                 updateSelfHomePage();
                 return true;
             } else {
-                Log.record(jo.optString("resultDesc", "未知错误"));
+                Log.runtime("使用道具失败: " + jo.optString("resultDesc", "未知错误"));
                 Log.runtime(jo.toString());
                 return false;
             }
@@ -2698,9 +2743,9 @@ public class AntForest extends ModelTask {
      * 判断是否是可续用类道具
      */
     private boolean isRenewableProp(String propType) {
-        return "ENERGY_SHIELD".equals(propType)   // 保护罩
-                || "ENERGY_BOMB_CARD".equals(propType) // 炸弹卡
-                || "DOUBLE_CARD".equals(propType);     // 双击卡
+        return propType.contains("SHIELD")   // 保护罩
+                || propType.contains("BOMB_CARD") // 炸弹卡
+                || propType.contains("DOUBLE_CLICK");     // 双击卡
     }
 
 
@@ -2732,21 +2777,32 @@ public class AntForest extends ModelTask {
     private void useDoubleCard(JSONObject bagObject) {
         try {
             if (hasDoubleCardTime() && Status.canDoubleToday()) {
+                Log.runtime(TAG, "尝试使用双击卡...");
                 JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_DOUBLE_CLICK");
                 if (jo == null && doubleCardConstant.getValue()) {//如果背包内没有双击卡
+                    Log.runtime(TAG, "背包中没有限时双击卡，尝试兑换...");
                     if (Vitality.handleVitalityExchange("SK20240805004754")) {//就鸡巴兑换
                         jo = findPropBag(queryPropList(), "ENERGY_DOUBLE_CLICK_31DAYS");
                     } else if (Vitality.handleVitalityExchange("CR20230516000363")) {
                         jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_DOUBLE_CLICK");
                     }
                 }
-                if (jo == null) jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
-                if (jo != null && usePropBag(jo)) {
-                    doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
-                    Status.DoubleToday();
+                if (jo == null) {
+                    Log.runtime(TAG, "未找到限时双击卡，尝试查找普通双击卡...");
+                    jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
+                }
+                if (jo != null) {
+                    Log.runtime(TAG, "找到双击卡，准备使用: " + jo.toString());
+                    if (usePropBag(jo)) {
+                        doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
+                        Status.DoubleToday();
+                    }
                 } else {
+                    Log.runtime(TAG, "背包中未找到任何可用双击卡。");
                     updateSelfHomePage();
                 }
+            } else {
+                Log.runtime(TAG, "不满足使用双击卡条件: inDoubleTime=" + hasDoubleCardTime() + ", canDoubleToday=" + Status.canDoubleToday());
             }
         } catch (Throwable th) {
             Log.error(TAG + "useDoubleCard err");
@@ -2761,18 +2817,25 @@ public class AntForest extends ModelTask {
      */
     private void useStealthCard(JSONObject bagObject) {
         try {
+            Log.runtime(TAG, "尝试使用隐身卡...");
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_STEALTH_CARD");
             if (jo == null && stealthCardConstant.getValue()) {
+                Log.runtime(TAG, "背包中没有限时隐身卡，尝试兑换...");
                 if (exchangeStealthCard()) {
                     jo = findPropBag(queryPropList(), "LIMIT_TIME_STEALTH_CARD");
                 }
             }
             if (jo == null) {
+                Log.runtime(TAG, "未找到限时隐身卡，尝试查找普通隐身卡...");
                 jo = findPropBag(bagObject, "STEALTH_CARD");
             }
-            if (jo != null && usePropBag(jo)) {
-                stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
+            if (jo != null) {
+                Log.runtime(TAG, "找到隐身卡，准备使用: " + jo.toString());
+                if (usePropBag(jo)) {
+                    stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
+                }
             } else {
+                Log.runtime(TAG, "背包中未找到任何可用隐身卡。");
                 updateSelfHomePage();
             }
         } catch (Throwable th) {
@@ -2786,21 +2849,42 @@ public class AntForest extends ModelTask {
      */
     private void useShieldCard(JSONObject bagObject) {
         try {
+            Log.runtime(TAG, "尝试使用保护罩...");
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
             if (jo == null) {
-                if (youthPrivilege.getValue() && Privilege.INSTANCE.youthPrivilege()) {
-                    jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
-                } else if (shieldCardConstant.getValue() && exchangeEnergyShield()) {
-                    jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD");
-                } else {
-                    jo = findPropBag(bagObject, "ENERGY_SHIELD");
+                Log.runtime(TAG, "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型...");
+
+                if (youthPrivilege.getValue()) {
+                    Log.runtime(TAG, "尝试通过青春特权获取保护罩...");
+                    if (Privilege.INSTANCE.youthPrivilege()) {
+                        jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD_TREE");
+                    }
                 }
             }
-
-            if (jo != null && usePropBag(jo)) {
-                // 使用成功后刷新首页道具状态
-                updateSelfHomePage();
+            if (jo == null) {
+                if (shieldCardConstant.getValue()) {
+                    Log.runtime(TAG, "尝试通过活力值兑换保护罩...");
+                    if (exchangeEnergyShield()) {
+                        jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD");
+                    }
+                }
+            }
+            if (jo == null) {
+                Log.runtime(TAG, "尝试限时保护罩(ENERGY_SHIELD)...");
+                jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD");
+            }
+            if (jo == null) {
+                Log.runtime(TAG, "尝试查找普通保护罩(ENERGY_SHIELD)...");
+                jo = findPropBag(bagObject, "ENERGY_SHIELD");
+            }
+            if (jo != null) {
+                Log.runtime(TAG, "找到保护罩，准备使用: " + jo);
+                if (usePropBag(jo)) {
+                    // 使用成功后刷新首页道具状态
+                    updateSelfHomePage();
+                }
             } else {
+                Log.runtime(TAG, "背包中未找到任何可用保护罩。");
                 // 如果未使用成功，也刷新一次
                 updateSelfHomePage();
             }
@@ -2913,23 +2997,35 @@ public class AntForest extends ModelTask {
      */
     private void useEnergyBombCard(JSONObject bagObject) {
         try {
+            Log.runtime(TAG, "尝试使用炸弹卡...");
             JSONObject jo = findPropBag(bagObject, "ENERGY_BOMB_CARD");
             if (jo == null) {
+                Log.runtime(TAG, "背包中没有炸弹卡，尝试兑换...");
                 JSONObject skuInfo = Vitality.findSkuInfoBySkuName("能量炸弹卡");
-                if (skuInfo == null) return;
+                if (skuInfo == null) {
+                    Log.runtime(TAG, "活力值商店中未找到炸弹卡。");
+                    return;
+                }
 
                 String skuId = skuInfo.getString("skuId");
-                if (Status.canVitalityExchangeToday(skuId, 1) &&
-                        Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
-                    jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
+                if (Status.canVitalityExchangeToday(skuId, 1)) {
+                    if (Vitality.VitalityExchange(skuInfo.getString("spuId"), skuId, "能量炸弹卡")) {
+                        jo = findPropBag(queryPropList(), "ENERGY_BOMB_CARD");
+                    }
+                } else {
+                    Log.runtime(TAG, "今日炸弹卡兑换次数已达上限。");
                 }
             }
 
-            if (jo != null && usePropBag(jo)) {
-                // 使用成功后刷新真实结束时间
-                updateSelfHomePage();
-                Log.runtime(TAG, "能量炸弹卡使用成功，已刷新结束时间");
+            if (jo != null) {
+                Log.runtime(TAG, "找到炸弹卡，准备使用: " + jo.toString());
+                if (usePropBag(jo)) {
+                    // 使用成功后刷新真实结束时间
+                    updateSelfHomePage();
+                    Log.runtime(TAG, "能量炸弹卡使用成功，已刷新结束时间");
+                }
             } else {
+                Log.runtime(TAG, "背包中未找到任何可用炸弹卡。");
                 updateSelfHomePage();
             }
         } catch (Throwable th) {
