@@ -15,7 +15,6 @@ import fansirsqi.xposed.sesame.ui.ChoiceDialog;
 
 public class PriorityModelField extends ModelField<Integer> {
     private String[] choiceArray;
-    private boolean enable = true; // 新增开关字段，默认启用
 
     public PriorityModelField(String code, String name, Integer value) {
         super(code, name, value);
@@ -40,13 +39,8 @@ public class PriorityModelField extends ModelField<Integer> {
         return choiceArray;
     }
 
-    // ✅ 新增方法，兼容原来调用
     public boolean isEnable() {
-        return enable;
-    }
-
-    public void setEnable(boolean enable) {
-        this.enable = enable;
+        return getValue() > 0;
     }
 
     @Override
