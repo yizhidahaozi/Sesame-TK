@@ -2713,12 +2713,10 @@ public class AntForest extends ModelTask {
                     Log.runtime("道具状态异常: " + status + ", 无法使用该道具。");
                     return false;
                 }
-                // 第二次调用：确认续用
-                jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
-            } else {
-                // 普通道具：直接使用
-                jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
             }
+            // 最终调用：确认使用或直接使用
+            jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
+
             // -------------------------
             // 统一结果处理
             // -------------------------
