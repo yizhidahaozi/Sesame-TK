@@ -213,7 +213,7 @@ public class EcoLife {
             }
             if (allPhotos.isEmpty()) {
                 if (!Status.hasFlagToday("EcoLife::plateNotify0")) {
-                    Log.forest("光盘行动�缓存中没有照片数据");
+                    Log.forest("光盘行动🍛缓存中没有照片数据");
                     Status.setFlagToday("EcoLife::plateNotify0");
                 }
                 photo = null;
@@ -222,7 +222,7 @@ public class EcoLife {
             }
             if (photo == null) {
                 if (!Status.hasFlagToday("EcoLife::plateNotify1")) {
-                    Log.forest("光盘行动�请先完成一次光盘打卡");
+                    Log.forest("光盘行动🍛请先完成一次光盘打卡");
                     Status.setFlagToday("EcoLife::plateNotify1");
                 }
                 return;
