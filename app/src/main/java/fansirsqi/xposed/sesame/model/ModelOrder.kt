@@ -34,9 +34,9 @@ object ModelOrder {
         GreenFinance::class.java,  // 绿色经营
         Reserve::class.java,       // 保护地
         AnswerAI::class.java         // AI答题
-      //AntBookRead::class.java,   // 读书
-      //ConsumeGold::class.java,   // 消费金
-      //OmegakoiTown::class.java,  // 小镇
+        //AntBookRead::class.java,   // 读书
+        //ConsumeGold::class.java,   // 消费金
+        //OmegakoiTown::class.java,  // 小镇
     )
 
     val allConfig: List<Class<out Model>> = array.toList()

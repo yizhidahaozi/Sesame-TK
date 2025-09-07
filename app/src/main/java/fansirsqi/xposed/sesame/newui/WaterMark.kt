@@ -151,6 +151,4 @@ class WatermarkView(context: android.content.Context) : android.view.View(contex
             return watermarkView
         }
     }
-
-
 }
