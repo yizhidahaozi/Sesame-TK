@@ -2189,7 +2189,7 @@ public class AntForest extends ModelTask {
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
-                    Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
+                   // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
 
                     if (needDouble) useDoubleCard(bagObject);
                     if (needrobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
@@ -2878,14 +2878,12 @@ public class AntForest extends ModelTask {
             if (jo != null) {
                 Log.runtime(TAG, "找到保护罩，准备使用: " + jo);
                 if (usePropBag(jo)) {
-                    // 使用成功后刷新首页道具状态
-                    updateSelfHomePage();
+                    return; // 使用成功，直接返回
                 }
-            } else {
-                Log.runtime(TAG, "背包中未找到任何可用保护罩。");
-                // 如果未使用成功，也刷新一次
-                updateSelfHomePage();
             }
+            Log.runtime(TAG, "背包中未找到任何可用保护罩。");
+            // 如果未使用成功，也刷新一次
+            updateSelfHomePage();
         } catch (Throwable th) {
             Log.error(TAG + "使用能量保护罩， err");
             Log.printStackTrace(th);
