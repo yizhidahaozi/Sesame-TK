@@ -20,6 +20,12 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 public class AntForestRpcCall {
     private static String VERSION = "";
 
+    /**
+     * 初始化API版本号
+     * <p>
+     * 根据支付宝版本号设置合适的API版本参数
+     * </p>
+     */
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
         Log.record("AntForestRpcCall", "当前支付宝版本: " + alipayVersion.toString());

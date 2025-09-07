@@ -21,10 +21,16 @@ import lombok.Setter;
 
 public abstract class ModelTask extends Model {
     private static final Map<ModelTask, Thread> MAIN_TASK_MAP = new ConcurrentHashMap<>();
-    private static final ThreadPoolExecutor MAIN_THREAD_POOL = new ThreadPoolExecutor(getModelArray().length, Integer.MAX_VALUE, 30L, TimeUnit.SECONDS, new SynchronousQueue<>(), new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final ThreadPoolExecutor MAIN_THREAD_POOL =
+            new ThreadPoolExecutor(getModelArray().length, Integer.MAX_VALUE,
+                    30L, TimeUnit.SECONDS,
+                    new SynchronousQueue<>(),
+                    new ThreadPoolExecutor.CallerRunsPolicy());
+
     private final Map<String, ChildModelTask> childTaskMap = new ConcurrentHashMap<>();
     private ChildTaskExecutor childTaskExecutor;
     private int run_cnts = 0;
+
     @Getter
     private final Runnable mainRunnable = new Runnable() {
         private final ModelTask task = ModelTask.this;
@@ -47,8 +53,7 @@ public abstract class ModelTask extends Model {
         }
     };
 
-    public ModelTask() {
-    }
+    public ModelTask() {}
 
     public void addRunCnts() {
         run_cnts += 1;
@@ -67,84 +72,47 @@ public abstract class ModelTask extends Model {
     }
 
     /**
-     * 获取任务ID
-     *
-     * @return 任务ID
+     * 确保 childTaskExecutor 初始化
      */
+    private void ensureChildTaskExecutor() {
+        if (childTaskExecutor == null) {
+            childTaskExecutor = newTimedTaskExecutor();
+        }
+    }
+
     public String getId() {
         return toString();
     }
 
-    /**
-     * 获取任务类型
-     *
-     * @return 任务类型为TASK
-     */
     public ModelType getType() {
         return ModelType.TASK;
     }
 
-    /**
-     * 获取任务名称
-     *
-     * @return 任务名称
-     */
     public abstract String getName();
 
-    /**
-     * 获取任务的字段
-     *
-     * @return 任务字段
-     */
     public abstract ModelFields getFields();
 
-    /**
-     * 检查任务是否可执行
-     *
-     * @return Boolean值，表示是否通过检查
-     */
     public abstract Boolean check();
 
-    /**
-     * 是否为同步任务
-     *
-     * @return Boolean值，表示是否为同步任务
-     */
     public Boolean isSync() {
         return true;
     }
 
-    /**
-     * 执行任务
-     */
     public abstract void run();
 
-    /**
-     * 检查任务是否包含指定的子任务
-     *
-     * @param childId 子任务ID
-     * @return 是否包含该子任务
-     */
     public Boolean hasChildTask(String childId) {
         return childTaskMap.containsKey(childId);
     }
 
-    /**
-     * 获取指定ID的子任务
-     *
-     * @param childId 子任务ID
-     * @return 子任务对象
-     */
     public ChildModelTask getChildTask(String childId) {
         return childTaskMap.get(childId);
     }
 
     /**
      * 添加子任务
-     *
-     * @param childTask 子任务对象
      */
     public void addChildTask(ChildModelTask childTask) {
+        ensureChildTaskExecutor();
         String childId = childTask.getId();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             childTaskMap.compute(childId, (key, value) -> {
@@ -172,11 +140,10 @@ public abstract class ModelTask extends Model {
     }
 
     /**
-     * 移除指定ID的子任务
-     *
-     * @param childId 子任务ID
+     * 移除子任务
      */
     public void removeChildTask(String childId) {
+        ensureChildTaskExecutor();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             childTaskMap.compute(childId, (key, value) -> {
                 if (value != null) {
@@ -195,30 +162,14 @@ public abstract class ModelTask extends Model {
         }
     }
 
-    /**
-     * 获取当前任务的子任务数量
-     *
-     * @return 子任务数量
-     */
     public Integer countChildTask() {
         return childTaskMap.size();
     }
 
-    /**
-     * 启动任务
-     *
-     * @return 是否成功启动任务
-     */
     public Boolean startTask() {
         return startTask(false);
     }
 
-    /**
-     * 启动任务
-     *
-     * @param force 是否强制启动
-     * @return 是否成功启动任务
-     */
     public synchronized Boolean startTask(Boolean force) {
         if (MAIN_TASK_MAP.containsKey(this)) {
             if (!force) {
@@ -228,11 +179,10 @@ public abstract class ModelTask extends Model {
         }
         try {
             if (isEnable() && check()) {
+                prepare(); // 启动前准备执行器
                 if (isSync()) {
-                    // Log.record("run task sync");
                     mainRunnable.run();
                 } else {
-                    Log.record("add task to thread pool");
                     MAIN_THREAD_POOL.execute(mainRunnable);
                 }
                 return true;
@@ -243,9 +193,6 @@ public abstract class ModelTask extends Model {
         return false;
     }
 
-    /**
-     * 停止当前任务及其所有子任务
-     */
     public synchronized void stopTask() {
         for (ChildModelTask childModelTask : childTaskMap.values()) {
             try {
@@ -256,50 +203,40 @@ public abstract class ModelTask extends Model {
         }
         if (childTaskExecutor != null) {
             childTaskExecutor.clearAllChildTask();
+            childTaskExecutor = null; // 清理引用，避免旧实例残留
         }
         childTaskMap.clear();
         MAIN_THREAD_POOL.remove(mainRunnable);
         MAIN_TASK_MAP.remove(this);
     }
 
-    /**
-     * 启动所有任务
-     */
     public static void startAllTask() {
         startAllTask(false);
     }
 
-    /**
-     * 启动所有任务
-     *
-     * @param force 是否强制启动
-     */
     public static void startAllTask(Boolean force) {
         Notify.setStatusTextExec();
-        for (int run_cnt=1;run_cnt<=2;run_cnt++) {
-            Log.record("第"+run_cnt+"轮开始");
+        for (int run_cnt = 1; run_cnt <= 2; run_cnt++) {
+            Log.record("第" + run_cnt + "轮开始");
             for (Model model : getModelArray()) {
                 if (model != null) {
                     if (ModelType.TASK == model.getType()) {
                         ((ModelTask) model).addRunCnts();
                         int model_priority = ((ModelTask) model).getPriority();
                         if (run_cnt < model_priority) {
-                            Log.record("模块["+((ModelTask) model).getName()+"]优先级:"+model_priority+" 第"+run_cnt+"轮跳过");
+                            Log.record("模块[" + ((ModelTask) model).getName() + "]优先级:" + model_priority + " 第" + run_cnt + "轮跳过");
                             continue;
                         }
                         if (((ModelTask) model).startTask(force)) {
-                        	GlobalThreadPools.sleep(10);
+                            GlobalThreadPools.sleep(10);
                         }
                     }
                 }
             }
-            Log.record("第"+run_cnt+"轮结束");
+            Log.record("第" + run_cnt + "轮结束");
         }
     }
 
-    /**
-     * 停止所有任务
-     */
     public static void stopAllTask() {
         for (Model model : getModelArray()) {
             if (model != null) {
@@ -314,11 +251,6 @@ public abstract class ModelTask extends Model {
         }
     }
 
-    /**
-     * 创建一个新的子任务执行器
-     *
-     * @return 子任务执行器
-     */
     private ChildTaskExecutor newTimedTaskExecutor() {
         ChildTaskExecutor childTaskExecutor;
         Integer timedTaskModel = BaseModel.getTimedTaskModel().getValue();
@@ -371,34 +303,18 @@ public abstract class ModelTask extends Model {
             this.execTime = execTime;
         }
 
-        /**
-         * 设置子任务的运行逻辑
-         *
-         * @return 子任务的运行逻辑
-         */
         public Runnable setRunnable() {
             return null;
         }
 
-        /**
-         * 执行子任务
-         */
         public final void run() {
             getRunnable().run();
         }
 
-        /**
-         * 设置取消任务的逻辑
-         *
-         * @param cancelTask 取消任务的逻辑
-         */
         protected void setCancelTask(CancelTask cancelTask) {
             this.cancelTask = cancelTask;
         }
 
-        /**
-         * 取消子任务
-         */
         public final void cancel() {
             if (getCancelTask() != null) {
                 try {

@@ -415,7 +415,7 @@ public class AntForest extends ModelTask {
 
     /**
      * 创建区间限制对象
-     * 
+     *
      * @param intervalStr 区间字符串，如 "1000-2000"
      * @param defaultMin 默认最小值
      * @param defaultMax 默认最大值
@@ -425,7 +425,7 @@ public class AntForest extends ModelTask {
     private FixedOrRangeIntervalLimit createSafeIntervalLimit(String intervalStr, int defaultMin, int defaultMax, String description) {
         // 记录原始输入值
         Log.record(TAG, description + "原始设置值: [" + intervalStr + "]");
-        
+
         // 使用自定义区间限制类，处理所有边界情况
         FixedOrRangeIntervalLimit limit = new FixedOrRangeIntervalLimit(intervalStr, defaultMin, defaultMax);
         Log.record(TAG, description + "成功创建区间限制");
@@ -435,34 +435,34 @@ public class AntForest extends ModelTask {
     @Override
     public void boot(ClassLoader classLoader) {
         super.boot(classLoader);
-        
 
-        
+
+
         // 安全创建各种区间限制
         FixedOrRangeIntervalLimit queryIntervalLimit = createSafeIntervalLimit(
-            queryInterval.getValue(), 10, 10000, "查询间隔");
-            
+                queryInterval.getValue(), 10, 10000, "查询间隔");
+
         // 添加RPC间隔限制
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryFriendHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.collectEnergy", 200);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.queryEnergyRanking", 200);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.fillUserRobFlag", 500);
-        
+
         // 设置其他参数
         tryCountInt = tryCount.getValue();
         retryIntervalInt = retryInterval.getValue();
         advanceTimeInt = advanceTime.getValue();
         checkIntervalInt = BaseModel.getCheckInterval().getValue();
         dsontCollectMap = dontCollectList.getValue();
-        
+
         // 创建收取间隔实体
         collectIntervalEntity = createSafeIntervalLimit(
-            collectInterval.getValue(), 50, 10000, "收取间隔");
-            
+                collectInterval.getValue(), 50, 10000, "收取间隔");
+
         // 创建双击收取间隔实体
         doubleCollectIntervalEntity = createSafeIntervalLimit(
-            doubleCollectInterval.getValue(), 10, 5000, "双击间隔");
+                doubleCollectInterval.getValue(), 10, 5000, "双击间隔");
         delayTimeMath.clear();
         AntForestRpcCall.init();
     }
@@ -2996,4 +2996,3 @@ public class AntForest extends ModelTask {
         return "BT|" + uid + "|" + bid;
     }
 }
-
