@@ -39,6 +39,7 @@ import fansirsqi.xposed.sesame.entity.VitalityStore;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.FixedOrRangeIntervalLimit;
+import fansirsqi.xposed.sesame.hook.rpc.intervallimit.IntervalLimit;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.ModelFields;
@@ -89,8 +90,8 @@ public class AntForest extends ModelTask {
      * 执行间隔-分钟
      */
     private Integer checkIntervalInt;
-    private FixedOrRangeIntervalLimit collectIntervalEntity;
-    private FixedOrRangeIntervalLimit doubleCollectIntervalEntity;
+    private IntervalLimit collectIntervalEntity;
+    private IntervalLimit doubleCollectIntervalEntity;
     /**
      * 双击卡结束时间
      */
@@ -197,13 +198,13 @@ public class AntForest extends ModelTask {
     private PriorityModelField forestChouChouLe;//森林抽抽乐
     private static boolean canConsumeAnimalProp;
     private static int totalCollected = 0;
-    private static int totalHelpCollected = 0;
-    private static int totalWatered = 0;
+    private static final int totalHelpCollected = 0;
+    private static final int totalWatered = 0;
 
     private final Map<String, AtomicInteger> forestTaskTryCount = new ConcurrentHashMap<>();
 
     @Getter
-    private Set<String> dontCollectMap = new HashSet<>();
+    private Set<String> dsontCollectMap = new HashSet<>();
     ArrayList<String> emojiList = new ArrayList<>(Arrays.asList(
             "🍅", "🍓", "🥓", "🍂", "🍚", "🌰", "🟢", "🌴",
             "🥗", "🧀", "🥩", "🍍", "🌶️", "🍲", "🍆", "🥕",
@@ -372,7 +373,7 @@ public class AntForest extends ModelTask {
                 now = Calendar.getInstance();
                 hour = now.get(Calendar.HOUR_OF_DAY);
                 minute = now.get(Calendar.MINUTE);
-                if (!(TaskCommon.IS_ENERGY_TIME || (hour == 7 && minute >= 0 && minute < 30))) {
+                if (!(TaskCommon.IS_ENERGY_TIME || hour == 7 && minute < 30)) {
                     Log.record(TAG, "当前不在只收能量时间段，退出循环");
                     break;
                 }
@@ -408,31 +409,60 @@ public class AntForest extends ModelTask {
     }
 
     @Override
-    public Boolean isSync() {
-        return true;
-    }
-
-    @Override
     public int getPriority() {
         return 1;
+    }
+
+    /**
+     * 创建区间限制对象
+     * 
+     * @param intervalStr 区间字符串，如 "1000-2000"
+     * @param defaultMin 默认最小值
+     * @param defaultMax 默认最大值
+     * @param description 描述，用于日志
+     * @return 区间限制对象
+     */
+    private FixedOrRangeIntervalLimit createSafeIntervalLimit(String intervalStr, int defaultMin, int defaultMax, String description) {
+        // 记录原始输入值
+        Log.record(TAG, description + "原始设置值: [" + intervalStr + "]");
+        
+        // 使用自定义区间限制类，处理所有边界情况
+        FixedOrRangeIntervalLimit limit = new FixedOrRangeIntervalLimit(intervalStr, defaultMin, defaultMax);
+        Log.record(TAG, description + "成功创建区间限制");
+        return limit;
     }
 
     @Override
     public void boot(ClassLoader classLoader) {
         super.boot(classLoader);
-        FixedOrRangeIntervalLimit queryIntervalLimit = new FixedOrRangeIntervalLimit(queryInterval.getValue(), 200, 800);//限制查询间隔
+        
+
+        
+        // 安全创建各种区间限制
+        FixedOrRangeIntervalLimit queryIntervalLimit = createSafeIntervalLimit(
+            queryInterval.getValue(), 10, 10000, "查询间隔");
+            
+        // 添加RPC间隔限制
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryFriendHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.collectEnergy", 200);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.queryEnergyRanking", 200);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.fillUserRobFlag", 500);
+        
+        // 设置其他参数
         tryCountInt = tryCount.getValue();
         retryIntervalInt = retryInterval.getValue();
         advanceTimeInt = advanceTime.getValue();
         checkIntervalInt = BaseModel.getCheckInterval().getValue();
-        dontCollectMap = dontCollectList.getValue();
-        collectIntervalEntity = new FixedOrRangeIntervalLimit(collectInterval.getValue(), 200, 800);//收取间隔
-        doubleCollectIntervalEntity = new FixedOrRangeIntervalLimit(doubleCollectInterval.getValue(), 50, 150);//双击间隔
+        dsontCollectMap = dontCollectList.getValue();
+        
+        // 创建收取间隔实体
+        collectIntervalEntity = createSafeIntervalLimit(
+            collectInterval.getValue(), 50, 10000, "收取间隔");
+            
+        // 创建双击收取间隔实体
+        doubleCollectIntervalEntity = createSafeIntervalLimit(
+            doubleCollectInterval.getValue(), 10, 5000, "双击间隔");
         delayTimeMath.clear();
         AntForestRpcCall.init();
     }
@@ -442,7 +472,6 @@ public class AntForest extends ModelTask {
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters();
-
             // 午夜强制任务
             if (isMidnight()) {
                 JSONObject selfHomeObj = querySelfHome();
@@ -1089,7 +1118,7 @@ public class AntForest extends ModelTask {
             Log.record(TAG, "进入[" + userName + "]的蚂蚁森林");
 
             // 3. 判断是否允许收取能量
-            if ((collectEnergy.getValue() <= 0) || dontCollectMap.contains(userId)) {
+            if ((collectEnergy.getValue() <= 0) || dsontCollectMap.contains(userId)) {
                 Log.debug(TAG, "[" + userName + "] 不允许收取能量，跳过");
                 return userHomeObj;
             }
@@ -1371,7 +1400,7 @@ public class AntForest extends ModelTask {
                 }
             } else {
                 if (Objects.equals(userId, selfId)) return;//如果是自己，则跳过
-                boolean needCollectEnergy = (collectEnergy.getValue() > 0 ) && !dontCollectMap.contains(userId); //开启了收能量功能并且不在排除名单中
+                boolean needCollectEnergy = (collectEnergy.getValue() > 0 ) && !dsontCollectMap.contains(userId); //开启了收能量功能并且不在排除名单中
                 boolean needHelpProtect = helpFriendCollectType.getValue() != HelpFriendCollectType.NONE && obj.optBoolean("canProtectBubble") && Status.canProtectBubbleToday(selfId);
                 boolean needCollectGiftBox = collectGiftBox.getValue() && obj.optBoolean("canCollectGiftBox");
                 if (!needCollectEnergy && !needHelpProtect && !needCollectGiftBox) {
@@ -1569,12 +1598,14 @@ public class AntForest extends ModelTask {
                     long sleep;
                     if (needDouble) {
                         collectEnergyEntity.unsetNeedDouble();
-                        sleep = doubleCollectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get();
+                        Integer interval = doubleCollectIntervalEntity.getInterval();
+                        sleep = (interval != null ? interval : 1000) - System.currentTimeMillis() + collectEnergyLockLimit.get();
                     } else if (needRetry) {
                         collectEnergyEntity.unsetNeedRetry();
                         sleep = retryIntervalInt - System.currentTimeMillis() + collectEnergyLockLimit.get();
                     } else {
-                        sleep = collectIntervalEntity.getInterval() - System.currentTimeMillis() + collectEnergyLockLimit.get();
+                        Integer interval = collectIntervalEntity.getInterval();
+                        sleep = (interval != null ? interval : 1000) - System.currentTimeMillis() + collectEnergyLockLimit.get();
                     }
                     if (sleep > 0) {
                         GlobalThreadPools.sleep(sleep);
@@ -1814,7 +1845,7 @@ public class AntForest extends ModelTask {
                 // 调用RPC进行浇水，并传入是否通知好友
                 String rpcResponse = AntForestRpcCall.transferEnergy(userId, bizNo, energyId, notifyFriend);
 
-                if (rpcResponse == null || rpcResponse.isEmpty()) {
+                if (rpcResponse.isEmpty()) {
                     Log.record(TAG, "好友浇水返回空: " + UserMap.getMaskName(userId));
                     isContinue = false;
                     break;
@@ -2580,13 +2611,13 @@ public class AntForest extends ModelTask {
     /**
      * 返回背包道具信息
      */
-    private JSONObject showBag() {
+    private void showBag() {
         JSONObject bagObject = queryPropList();
         if (Objects.isNull(bagObject)) {
-            return null;
+            return;
         }
         try {
-            JSONArray forestPropVOList = bagObject.getJSONArray("forestPropVOList");
+            JSONArray forestPropVOList = Objects.requireNonNull(bagObject).getJSONArray("forestPropVOList");
             for (int i = 0; i < forestPropVOList.length(); i++) {
                 JSONObject forestPropVO = forestPropVOList.getJSONObject(i);
                 JSONObject propConfigVO = forestPropVO.getJSONObject("propConfigVO");
@@ -2599,7 +2630,6 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, e);
         }
 
-        return null; // 未找到或出错时返回 null
     }
 
     /**
@@ -2631,7 +2661,7 @@ public class AntForest extends ModelTask {
                     Log.runtime(check.toString());
                     return false;
                 }
-                String status = check.optJSONObject("resData").optString("usePropStatus");
+                String status = Objects.requireNonNull(check.optJSONObject("resData")).optString("usePropStatus");
                 if (!"NEED_CONFIRM_CAN_PROLONG".equals(status)) {
                     Log.record("道具状态异常: " + status);
                     return false;
@@ -2966,3 +2996,4 @@ public class AntForest extends ModelTask {
         return "BT|" + uid + "|" + bid;
     }
 }
+
