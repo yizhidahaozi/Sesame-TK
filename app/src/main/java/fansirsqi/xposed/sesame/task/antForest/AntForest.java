@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
@@ -3041,48 +3043,60 @@ public class AntForest extends ModelTask {
     public enum CollectStatus {AVAILABLE, WAITING, INSUFFICIENT, ROBBED}
 
     /**
+     * 线程数
+     */
+    private static final ScheduledExecutorService ENERGY_SCHEDULER =
+            Executors.newScheduledThreadPool(4); // 可根据需要调整线程数
+    
+    /**
      * 能量定时任务类型
      */
     private class EnergyTimerTask extends ChildModelTask {
 
         private final String userId;
-
         private final long bubbleId;
-
         private final long produceTime;
 
-        /**
-         * 实例化一个新的能量收取定时任务
-         *
-         * @param uid 用户id
-         * @param bid 能量id
-         * @param pt  能量产生时间
-         */
         EnergyTimerTask(String uid, long bid, long pt) {
-            // 调用父类构造方法，传入任务ID和提前执行时间
             super(AntForest.getEnergyTimerTid(uid, bid), pt - advanceTimeInt);
-            userId = uid;
-            bubbleId = bid;
-            produceTime = pt;
+            this.userId = uid;
+            this.bubbleId = bid;
+            this.produceTime = pt;
         }
 
         @Override
         public Runnable setRunnable() {
             return () -> {
-                String userName = UserMap.getMaskName(userId);
-                int averageInteger = offsetTimeMath.getAverageInteger();
-                long readyTime = produceTime - advanceTimeInt + averageInteger - delayTimeMath.getAverageInteger() - System.currentTimeMillis() + 70;
-                if (readyTime > 0) {
-                    try {
-                        Thread.sleep(readyTime);
-                    } catch (InterruptedException e) {
-                        Log.runtime(TAG, "终止[" + userName + "]蹲点收取任务, 任务ID[" + getId() + "]");
-                        return;
+                try {
+                    String userName = UserMap.getMaskName(userId);
+                    int averageInteger = offsetTimeMath.getAverageInteger();
+                    long readyTime = produceTime - advanceTimeInt + averageInteger
+                            - delayTimeMath.getAverageInteger()
+                            - System.currentTimeMillis() + 70;
+
+                    Log.record(TAG, "准备执行蹲点收取⏰ 任务ID " + getId() + " [" + userName + "]" +
+                            ", 时差[" + averageInteger + "]ms" +
+                            ", 提前[" + advanceTimeInt + "]ms" +
+                            ", 等待时间: " + readyTime + "ms");
+
+                    if (readyTime <= 0) {
+                        collectNow(userName);
+                    } else {
+                        ENERGY_SCHEDULER.schedule(() -> collectNow(userName), readyTime, TimeUnit.MILLISECONDS);
                     }
+                } catch (Throwable t) {
+                    Log.printStackTrace(TAG, t);
                 }
-                Log.record(TAG, "执行蹲点收取⏰ 任务ID " + getId() + " [" + userName + "]" + "时差[" + averageInteger + "]ms" + "提前[" + advanceTimeInt + "]ms");
-                collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)), true);
             };
+        }
+
+        private void collectNow(String userName) {
+            try {
+                Log.record(TAG, "执行蹲点收取⏰ 任务ID " + getId() + " [" + userName + "]");
+                collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)), true);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+            }
         }
     }
 
