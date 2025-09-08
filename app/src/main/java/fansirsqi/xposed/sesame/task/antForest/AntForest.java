@@ -1113,8 +1113,7 @@ public class AntForest extends ModelTask {
         }
         return null;
     }
-
-
+    
     /**
      * 收取用户的蚂蚁森林能量。
      *
@@ -1193,9 +1192,7 @@ public class AntForest extends ModelTask {
             return null;
         }
     }
-
-
-
+    
     /**
      * 提取能量球状态
      *
@@ -1325,8 +1322,7 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, "collectPKEnergy 异常", e);
         }
     }
-
-
+    
     private void collectFriendEnergy() {
         try {
             TimeCounter tc = new TimeCounter(TAG);
@@ -2153,90 +2149,81 @@ public class AntForest extends ModelTask {
      */
     private void usePropBeforeCollectEnergy(String userId) {
         try {
-            /*
-             * 在收集能量之前决定是否使用增益类道具卡。
-             *
-             * 主要逻辑:
-             * 1. 定义时间常量，用于判断道具剩余有效期。
-             * 2. 获取当前时间及各类道具的到期时间，计算剩余时间。
-             * 3. 根据以下条件判断是否需要使用特定道具:
-             *    - needDouble: 双击卡开关已打开，且当前没有生效的双击卡。
-             *    - needrobExpand: 1.1倍能量卡开关已打开，且当前没有生效的卡。
-             *    - needStealth: 隐身卡开关已打开，且当前没有生效的隐身卡。
-             *    - needShield: 保护罩开关已打开，炸弹卡开关已关闭，且保护罩剩余时间不足一天。
-             *    - needEnergyBombCard: 炸弹卡开关已打开，保护罩开关已关闭，且炸弹卡剩余时间不足三天。
-             *    - needBubbleBoostCard: 加速卡开关已打开。
-             * 4. 如果有任何一个道具需要使用，则同步查询背包信息，并调用相应的使用道具方法。
-             */
-
-            // 毫秒常量
-            long ONE_HOUR = 60 * 60 * 1000L;   // 1 小时
-            long ONE_DAY = 24 * ONE_HOUR;     // 1 天
-            long THREE_DAYS = 3 * ONE_DAY;    // 3 天
-            long THIRTY_ONE_DAYS = 31 * ONE_DAY; // 31 天
+            long ONE_HOUR = 60 * 60 * 1000L;
+            long ONE_DAY = 24 * ONE_HOUR;
+            long THREE_DAYS = 3 * ONE_DAY;
+            long THIRTY_ONE_DAYS = 31 * ONE_DAY;
             long now = System.currentTimeMillis();
-            long shieldRemain = shieldEndTime - now;
-            long energyBombRemain = energyBombCardEndTime - now;
-            long doubleRemain = doubleEndTime - now;
-            Log.runtime(TAG, "--- 道具使用条件检查 ---");
-            Log.runtime(TAG, "当前时间: " + TimeUtil.getCommonDate(now));
-            Log.runtime(TAG, "[双击卡] 开关: " + doubleCard.getValue() + " (0=关), 到期时间: "
-                    + (doubleEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(doubleEndTime)
-                    + ", 剩余时间<31天: " + (doubleRemain < THIRTY_ONE_DAYS));
-            Log.runtime(TAG, "[1.1倍卡] 开关: " + robExpandCard.getValue() + " (0=关), 到期时间: "
-                    + (robExpandCardEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(robExpandCardEndTime));
-            Log.runtime(TAG, "[隐身卡] 开关: " + stealthCard.getValue() + " (0=关), 到期时间: "
-                    + (stealthEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(stealthEndTime));
-            Log.runtime(TAG, "[保护罩] 开关: " + shieldCard.getValue() + " (0=关), 炸弹卡开关: " + energyBombCardType.getValue()
-                    + " (0=关), 到期时间: " + (shieldEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(shieldEndTime)
-                    + ", 剩余时间<1天: " + (shieldRemain < ONE_DAY));
-            Log.runtime(TAG, "[炸弹卡] 开关: " + energyBombCardType.getValue() + " (0=关), 保护罩开关: "
-                    + shieldCard.getValue() + " (0=关), 到期时间: "
-                    + (energyBombCardEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(energyBombCardEndTime)
-                    + ", 剩余时间<3天: " + (energyBombRemain < THREE_DAYS));
-            Log.runtime(TAG, "[加速卡] 开关: " + bubbleBoostCard.getValue() + " (0=关)");
-            Log.runtime(TAG, "----------------------");
 
-            boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
-                    && doubleRemain < THIRTY_ONE_DAYS;
-            boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
-                    && robExpandCardEndTime < now;
-            boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
-                    && stealthEndTime < now;
-            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
-                    && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && (shieldRemain < ONE_DAY || shieldEndTime < now);
-            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && shieldCard.getValue().equals(applyPropType.CLOSE)
-                    && energyBombRemain < THREE_DAYS;
-            boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+            // -----------------------
+            // 可配置续用阈值
+            // -----------------------
+            long DOUBLE_CARD_THRESHOLD = 2 * ONE_DAY;       // 双击卡：剩余 <2天续用
+            long SHIELD_CARD_THRESHOLD = 1 * ONE_DAY;       // 保护罩：剩余 <1天续用
+            long ENERGY_BOMB_THRESHOLD = 3 * ONE_DAY;       // 能量炸弹卡：剩余 <3天续用
+            long ROB_EXPAND_THRESHOLD = 1 * ONE_DAY;        // 1.1倍卡：剩余 <1天续用
+            long STEALTH_THRESHOLD = 1 * ONE_DAY;           // 隐身卡：剩余 <1天续用
 
-            Log.runtime(TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
-                    ", needStealth=" + needStealth + ", needShield=" + needShield +
-                    ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
+            // -----------------------
+            // 先刷新道具剩余时间
+            // -----------------------
+            JSONObject joHomePage = new JSONObject(AntForestRpcCall.queryHomePage());
+            updateSelfHomePage(joHomePage);
 
-            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
-                synchronized (doubleCardLockObj) {
+            synchronized (doubleCardLockObj) {
+                // -----------------------
+                // 判断是否需要使用道具
+                // -----------------------
+                long doubleRemain = doubleEndTime - now;
+                long shieldRemain = shieldEndTime - now;
+                long energyBombRemain = energyBombCardEndTime - now;
+                long robExpandRemain = robExpandCardEndTime - now;
+                long stealthRemain = stealthEndTime - now;
+
+                boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
+                        && doubleRemain < DOUBLE_CARD_THRESHOLD;
+
+                boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
+                        && robExpandRemain < ROB_EXPAND_THRESHOLD;
+
+                boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
+                        && stealthRemain < STEALTH_THRESHOLD;
+
+                boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
+                        && energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                        && (shieldRemain < SHIELD_CARD_THRESHOLD || shieldEndTime < now);
+
+                boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                        && shieldCard.getValue().equals(applyPropType.CLOSE)
+                        && energyBombRemain < ENERGY_BOMB_THRESHOLD;
+
+                boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
+
+                Log.runtime(TAG, "--- 道具使用检查 ---");
+                Log.runtime(TAG, "needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
+                        ", needStealth=" + needStealth + ", needShield=" + needShield +
+                        ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
+
+                if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
                     JSONObject bagObject = queryPropList();
-                    // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
 
                     if (needDouble) useDoubleCard(bagObject);
                     if (needrobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
                     if (needStealth) useStealthCard(bagObject);
                     if (needBubbleBoostCard) useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
                     if (needShield) {
-                        Log.runtime(TAG, "尝试使用保护罩罩");
+                        Log.runtime(TAG, "尝试使用保护罩");
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
                         Log.runtime(TAG, "准备使用能量炸弹卡");
                         useEnergyBombCard(bagObject);
                     }
+                } else {
+                    Log.runtime(TAG, "没有需要使用的道具");
                 }
-            } else {
-                Log.runtime(TAG, "没有需要使用的道具");
             }
         } catch (Exception e) {
-            Log.printStackTrace(e);
+            Log.printStackTrace(TAG, e);
         }
     }
 
