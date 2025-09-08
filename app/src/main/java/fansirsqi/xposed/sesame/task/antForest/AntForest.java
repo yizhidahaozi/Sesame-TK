@@ -2189,7 +2189,7 @@ public class AntForest extends ModelTask {
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
-                   // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
+                    // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
 
                     if (needDouble) useDoubleCard(bagObject);
                     if (needrobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
@@ -2670,7 +2670,7 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 使用背包道具
+     * 使用背包道具（支持普通道具、首次使用、续期）
      *
      * @param propJsonObj 道具对象
      */
@@ -2686,36 +2686,42 @@ public class AntForest extends ModelTask {
             String propType = propConfigVO.getString("propType");
             String propName = propConfigVO.getString("propName");
             String tag = propEmoji(propName);
-            JSONObject jo;
 
-            // -------------------------
-            // 判断是否是可续用类道具
-            // -------------------------
             boolean isRenewable = isRenewableProp(propType);
             Log.runtime(TAG, "道具 " + propName + " (类型: " + propType + "), 是否可续用: " + isRenewable);
+
+            JSONObject jo;
+
             if (isRenewable) {
-                // 第一次调用：检查能否续用
+                // 第一次调用：检查是否可以续用
                 JSONObject check = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, false));
                 if (!ResChecker.checkRes(TAG + "道具检查失败:", check)) {
                     Log.runtime(check.optString("resultDesc", "检查失败"));
                     Log.runtime(check.toString());
                     return false;
                 }
+
                 JSONObject resData = check.optJSONObject("resData");
                 if (resData == null) {
                     Log.runtime(TAG, "道具状态检查失败: 响应中缺少 resData。");
                     Log.runtime(check.toString());
                     return false;
                 }
+
                 String status = resData.optString("usePropStatus");
-                Log.runtime(TAG, "可续用道具状态检查成功, 状态: " + status);
-                if (!"NEED_CONFIRM_CAN_PROLONG".equals(status) && !"NEED_CONFIRM_CAN_NOT_PROLONG".equals(status)) {
-                    Log.runtime("道具状态异常: " + status + ", 无法使用该道具。");
-                    return false;
+                Log.runtime(TAG, "道具检查成功, 状态: " + status);
+
+                // 只有在 NEED_CONFIRM_CAN_PROLONG / NEED_CONFIRM_CAN_NOT_PROLONG 时才需要二次确认
+                if ("NEED_CONFIRM_CAN_PROLONG".equals(status) || "NEED_CONFIRM_CAN_NOT_PROLONG".equals(status)) {
+                    jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
+                } else {
+                    // 首次使用 或 已经直接生效的情况，直接用 check 的结果即可
+                    jo = check;
                 }
+            } else {
+                // 非续用道具，直接一次调用
+                jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
             }
-            // 最终调用：确认使用或直接使用
-            jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
 
             // -------------------------
             // 统一结果处理
@@ -2741,11 +2747,10 @@ public class AntForest extends ModelTask {
      * 判断是否是可续用类道具
      */
     private boolean isRenewableProp(String propType) {
-        return propType.contains("SHIELD")   // 保护罩
+        return propType.contains("SHIELD")        // 保护罩
                 || propType.contains("BOMB_CARD") // 炸弹卡
-                || propType.contains("DOUBLE_CLICK");     // 双击卡
+                || propType.contains("DOUBLE_CLICK"); // 双击卡
     }
-
 
     @NonNull
     private static String propEmoji(String propName) {
