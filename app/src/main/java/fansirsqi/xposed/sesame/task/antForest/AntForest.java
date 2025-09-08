@@ -11,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -67,6 +68,7 @@ import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import lombok.Getter;
 /// lzw add begin
 import fansirsqi.xposed.sesame.model.modelFieldExt.PriorityModelField;
@@ -480,9 +482,17 @@ public class AntForest extends ModelTask {
                 if (selfHomeObj != null) {
                     collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");  // 收自己
                 }
+                // 强制重新初始化模块和任务
+                forceInitHandler();     // 允许访问私有方法ApplicationHook.initHandler(true)
                 collectFriendEnergy();  // 好友能量收取
                 collectPKEnergy();      // PK好友能量
                 Log.record(TAG, "午夜任务刷新，强制执行收取PK好友能量和好友能量");
+            }
+
+            // 早上 6:50 强制刷新
+            if (isMorning650()) {
+                Log.record(TAG, "早上6:50刷新模块和任务");
+                forceInitHandler();     // 允许访问私有方法ApplicationHook.initHandler(true)
             }
 
             errorWait = false;
@@ -643,6 +653,17 @@ public class AntForest extends ModelTask {
         }
     }
 
+    private void forceInitHandler() {
+        try {
+            Method initHandlerMethod = ApplicationHook.class.getDeclaredMethod("initHandler", Boolean.class);
+            initHandlerMethod.setAccessible(true); // 允许访问私有方法
+            Boolean result = (Boolean) initHandlerMethod.invoke(null, true);
+            Log.record(TAG, "ApplicationHook.initHandler(true) 执行结果: " + result);
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "强制初始化 ApplicationHook 失败: ", e);
+        }
+    }
+
     /**
      * 每日重置
      */
@@ -679,6 +700,12 @@ public class AntForest extends ModelTask {
         taskCount.set(0); // 重置任务计数
         Log.record(TAG, "任务计数器已重置");
     }
+
+    private boolean isMorning650() {
+        Calendar now = Calendar.getInstance();
+        return now.get(Calendar.HOUR_OF_DAY) == 6 && now.get(Calendar.MINUTE) == 50;
+    }
+
 
     /**
      * 定义一个 处理器接口
@@ -3047,7 +3074,7 @@ public class AntForest extends ModelTask {
      */
     private static final ScheduledExecutorService ENERGY_SCHEDULER =
             Executors.newScheduledThreadPool(4); // 可根据需要调整线程数
-    
+
     /**
      * 能量定时任务类型
      */
