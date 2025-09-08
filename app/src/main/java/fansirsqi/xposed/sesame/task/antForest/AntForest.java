@@ -2220,33 +2220,6 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 支持以 "HHmm" 格式指定阈值，例如 "2355" 表示 23 小时 55 分钟。
-     * 非法格式将回退到默认 23 小时。
-     */
-    private boolean shouldRenewShield(long shieldEnd, long nowMillis, String hhmmThreshold) {
-        int hours = 23, minutes = 0;
-        if (hhmmThreshold != null && hhmmThreshold.matches("^\\d{3,4}$")) {
-            try {
-                String s = hhmmThreshold.length() == 3 ? "0" + hhmmThreshold : hhmmThreshold;
-                hours = Integer.parseInt(s.substring(0, 2));
-                minutes = Integer.parseInt(s.substring(2, 4));
-                if (hours < 0 || hours > 99) hours = 23;
-                if (minutes < 0 || minutes > 59) minutes = 0;
-            } catch (Exception ignored) {}
-        }
-        long thresholdMs = hours * ONE_HOUR_MS + minutes * 60000L;
-        if (shieldEnd <= nowMillis) { // 未生效或已过期
-            Log.runtime(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
-            return true;
-        }
-        long remain = shieldEnd - nowMillis;
-        Log.runtime(TAG, "[保护罩] 剩余=" + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
-        boolean needRenew = remain <= thresholdMs;
-        Log.runtime(TAG, "[保护罩] 比较: remain <= thresholdMs -> " + needRenew);
-        return needRenew;
-    }
-
-    /**
      * 保护罩剩余时间判断
      * 以整数 HHmm 指定保护罩续写阈值。
      * 例如：2355 表示 23 小时 55 分钟，0955 可直接写为 955。
