@@ -373,11 +373,9 @@ public class AntForestRpcCall {
         JSONObject jo = new JSONObject();
         jo.put("propId", propId);
         jo.put("propType", propType);
-        jo.put("replace", "false");
         jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
         jo.put("secondConfirm", secondConfirm);
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.consumeProp",
                 new JSONArray().put(jo).toString()

@@ -3,6 +3,8 @@ package fansirsqi.xposed.sesame.task.antForest;
 import static fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasBombCard;
 import static fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasShield;
 
+import android.annotation.SuppressLint;
+
 import androidx.annotation.NonNull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -118,6 +120,13 @@ public class AntForest extends ModelTask {
     private final Average delayTimeMath = new Average(5);
     private final ObjReference<Long> collectEnergyLockLimit = new ObjReference<>(0L);
     private final Object doubleCardLockObj = new Object();
+
+    /**
+     * 一小时毫秒数
+     */
+    private static final long ONE_HOUR_MS = 60 * 60 * 1000L;
+    /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
+    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2355;
     private PriorityModelField collectEnergy;
     private BooleanModelField pkEnergy; // PK能量
     private BooleanModelField energyRain;
@@ -2146,25 +2155,22 @@ public class AntForest extends ModelTask {
             long THREE_DAYS = 3 * ONE_DAY;    // 3 天
             long THIRTY_ONE_DAYS = 31 * ONE_DAY; // 31 天
             long now = System.currentTimeMillis();
-            long shieldRemain = shieldEndTime - now;
             long energyBombRemain = energyBombCardEndTime - now;
             long doubleRemain = doubleEndTime - now;
             Log.runtime(TAG, "--- 道具使用条件检查 ---");
             Log.runtime(TAG, "当前时间: " + TimeUtil.getCommonDate(now));
             Log.runtime(TAG, "[双击卡] 开关: " + doubleCard.getValue() + " (0=关), 到期时间: "
                     + (doubleEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(doubleEndTime)
-                    + ", 剩余时间<31天: " + (doubleRemain < THIRTY_ONE_DAYS));
+                    );
             Log.runtime(TAG, "[1.1倍卡] 开关: " + robExpandCard.getValue() + " (0=关), 到期时间: "
                     + (robExpandCardEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(robExpandCardEndTime));
             Log.runtime(TAG, "[隐身卡] 开关: " + stealthCard.getValue() + " (0=关), 到期时间: "
                     + (stealthEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(stealthEndTime));
-            Log.runtime(TAG, "[保护罩] 开关: " + shieldCard.getValue() + " (0=关), 炸弹卡开关: " + energyBombCardType.getValue()
-                    + " (0=关), 到期时间: " + (shieldEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(shieldEndTime)
-                    + ", 剩余时间<1天: " + (shieldRemain < ONE_DAY));
+            // 保护罩详细日志移动至 shouldRenewShield 内部打印
             Log.runtime(TAG, "[炸弹卡] 开关: " + energyBombCardType.getValue() + " (0=关), 保护罩开关: "
                     + shieldCard.getValue() + " (0=关), 到期时间: "
                     + (energyBombCardEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(energyBombCardEndTime)
-                    + ", 剩余时间<3天: " + (energyBombRemain < THREE_DAYS));
+                    );
             Log.runtime(TAG, "[加速卡] 开关: " + bubbleBoostCard.getValue() + " (0=关)");
             Log.runtime(TAG, "----------------------");
 
@@ -2174,9 +2180,12 @@ public class AntForest extends ModelTask {
                     && robExpandCardEndTime < now;
             boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
                     && stealthEndTime < now;
+
+
             boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                    && (shieldRemain < ONE_DAY || shieldEndTime < now);
+                    && shouldRenewShield(shieldEndTime, now);
+
             boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombRemain < THREE_DAYS;
@@ -2185,7 +2194,6 @@ public class AntForest extends ModelTask {
             Log.runtime(TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
                     ", needStealth=" + needStealth + ", needShield=" + needShield +
                     ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
-
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
                 synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
@@ -2209,6 +2217,60 @@ public class AntForest extends ModelTask {
         } catch (Exception e) {
             Log.printStackTrace(e);
         }
+    }
+
+    /**
+     * 支持以 "HHmm" 格式指定阈值，例如 "2355" 表示 23 小时 55 分钟。
+     * 非法格式将回退到默认 23 小时。
+     */
+    private boolean shouldRenewShield(long shieldEnd, long nowMillis, String hhmmThreshold) {
+        int hours = 23, minutes = 0;
+        if (hhmmThreshold != null && hhmmThreshold.matches("^\\d{3,4}$")) {
+            try {
+                String s = hhmmThreshold.length() == 3 ? "0" + hhmmThreshold : hhmmThreshold;
+                hours = Integer.parseInt(s.substring(0, 2));
+                minutes = Integer.parseInt(s.substring(2, 4));
+                if (hours < 0 || hours > 99) hours = 23;
+                if (minutes < 0 || minutes > 59) minutes = 0;
+            } catch (Exception ignored) {}
+        }
+        long thresholdMs = hours * ONE_HOUR_MS + minutes * 60000L;
+        if (shieldEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        long remain = shieldEnd - nowMillis;
+        Log.runtime(TAG, "[保护罩] 剩余=" + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
+        boolean needRenew = remain <= thresholdMs;
+        Log.runtime(TAG, "[保护罩] 比较: remain <= thresholdMs -> " + needRenew);
+        return needRenew;
+    }
+
+    /**
+     * 保护罩剩余时间判断
+     * 以整数 HHmm 指定保护罩续写阈值。
+     * 例如：2355 表示 23 小时 55 分钟，0955 可直接写为 955。
+     * 校验规则：0 ≤ HH ≤ 99，0 ≤ mm ≤ 59；非法值将回退为 23 小时。
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewShield(long shieldEnd, long nowMillis) {
+        int hours = 23, minutes = 0;
+        if (SHIELD_RENEW_THRESHOLD_HHMM >= 0 && SHIELD_RENEW_THRESHOLD_HHMM <= 9959) {
+            try {
+                int abs = Math.abs(SHIELD_RENEW_THRESHOLD_HHMM);
+                minutes = abs % 100;
+            } catch (Exception ignored) {}
+        }
+        long thresholdMs = hours * ONE_HOUR_MS + minutes * 60_000L;
+        if (shieldEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        long remain = shieldEnd - nowMillis;
+        Log.runtime(TAG, "[保护罩] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
+        boolean needRenew = remain <= thresholdMs;
+        Log.runtime(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
+        return needRenew;
     }
 
     /**
@@ -2717,6 +2779,8 @@ public class AntForest extends ModelTask {
             // 最终调用：确认使用或直接使用
             jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
 
+
+
             // -------------------------
             // 统一结果处理
             // -------------------------
@@ -2851,7 +2915,6 @@ public class AntForest extends ModelTask {
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
             if (jo == null) {
                 Log.runtime(TAG, "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型...");
-
                 if (youthPrivilege.getValue()) {
                     Log.runtime(TAG, "尝试通过青春特权获取保护罩...");
                     if (Privilege.INSTANCE.youthPrivilege()) {
@@ -2870,10 +2933,6 @@ public class AntForest extends ModelTask {
             if (jo == null) {
                 Log.runtime(TAG, "尝试限时保护罩(ENERGY_SHIELD)...");
                 jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD");
-            }
-            if (jo == null) {
-                Log.runtime(TAG, "尝试查找普通保护罩(ENERGY_SHIELD)...");
-                jo = findPropBag(bagObject, "ENERGY_SHIELD");
             }
             if (jo != null) {
                 Log.runtime(TAG, "找到保护罩，准备使用: " + jo);
