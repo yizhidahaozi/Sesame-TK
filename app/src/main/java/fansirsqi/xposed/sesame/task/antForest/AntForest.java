@@ -125,6 +125,10 @@ public class AntForest extends ModelTask {
      * 一小时毫秒数
      */
     private static final long ONE_HOUR_MS = 60 * 60 * 1000L;
+    /**
+     * 一天毫秒数
+     */
+    private static final long ONE_DAY = 24 * ONE_HOUR_MS;
     /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
     private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2355;
     private PriorityModelField collectEnergy;
@@ -2149,46 +2153,24 @@ public class AntForest extends ModelTask {
              * 4. 如果有任何一个道具需要使用，则同步查询背包信息，并调用相应的使用道具方法。
              */
 
-            // 毫秒常量
-            long ONE_HOUR = 60 * 60 * 1000L;   // 1 小时
-            long ONE_DAY = 24 * ONE_HOUR;     // 1 天
-            long THREE_DAYS = 3 * ONE_DAY;    // 3 天
-            long THIRTY_ONE_DAYS = 31 * ONE_DAY; // 31 天
             long now = System.currentTimeMillis();
-            long energyBombRemain = energyBombCardEndTime - now;
-            long doubleRemain = doubleEndTime - now;
-            Log.runtime(TAG, "--- 道具使用条件检查 ---");
-            Log.runtime(TAG, "当前时间: " + TimeUtil.getCommonDate(now));
-            Log.runtime(TAG, "[双击卡] 开关: " + doubleCard.getValue() + " (0=关), 到期时间: "
-                    + (doubleEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(doubleEndTime)
-                    );
-            Log.runtime(TAG, "[1.1倍卡] 开关: " + robExpandCard.getValue() + " (0=关), 到期时间: "
-                    + (robExpandCardEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(robExpandCardEndTime));
-            Log.runtime(TAG, "[隐身卡] 开关: " + stealthCard.getValue() + " (0=关), 到期时间: "
-                    + (stealthEndTime < now ? "已过期 " : "") + TimeUtil.getCommonDate(stealthEndTime));
-            // 保护罩详细日志移动至 shouldRenewShield 内部打印
-            Log.runtime(TAG, "[炸弹卡] 开关: " + energyBombCardType.getValue() + " (0=关), 保护罩开关: "
-                    + shieldCard.getValue() + " (0=关), 到期时间: "
-                    + (energyBombCardEndTime < now ? "未生效 " : "") + TimeUtil.getCommonDate(energyBombCardEndTime)
-                    );
-            Log.runtime(TAG, "[加速卡] 开关: " + bubbleBoostCard.getValue() + " (0=关)");
-            Log.runtime(TAG, "----------------------");
-
+            // 双击卡判断
             boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
-                    && doubleRemain < THIRTY_ONE_DAYS;
+                    && shouldRenewDoubleCard(doubleEndTime, now);
+
             boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
                     && robExpandCardEndTime < now;
             boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
                     && stealthEndTime < now;
 
-
+            // 保护罩判断
             boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
                     && energyBombCardType.getValue().equals(applyPropType.CLOSE)
                     && shouldRenewShield(shieldEndTime, now);
-
+            // 炸弹卡判断
             boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
                     && shieldCard.getValue().equals(applyPropType.CLOSE)
-                    && energyBombRemain < THREE_DAYS;
+                    && shouldRenewEnergyBomb(energyBombCardEndTime, now);
             boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
             Log.runtime(TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
@@ -2245,7 +2227,58 @@ public class AntForest extends ModelTask {
         Log.runtime(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
         return needRenew;
     }
-
+    
+    /**
+     * 炸弹卡剩余时间判断
+     * 当炸弹卡剩余时间低于3天时，需要续用
+     * 最多可续用到4天
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewEnergyBomb(long bombEnd, long nowMillis) {
+        // 炸弹卡最长有效期为4天
+        long MAX_BOMB_DURATION = 4 * ONE_DAY;
+        // 炸弹卡续用阈值为3天
+        long BOMB_RENEW_THRESHOLD = 3 * ONE_DAY;
+        if (bombEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[炸弹卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        long remain = bombEnd - nowMillis;
+        Log.runtime(TAG, "[炸弹卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(BOMB_RENEW_THRESHOLD));
+        
+        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        boolean needRenew = remain <= BOMB_RENEW_THRESHOLD && (bombEnd - nowMillis + remain) <= MAX_BOMB_DURATION;
+        Log.runtime(TAG, "[炸弹卡] 比较: " + remain + " <= " + BOMB_RENEW_THRESHOLD + " == " + needRenew + 
+                   ", 总时长检查: " + (bombEnd - nowMillis + remain) + " <= " + MAX_BOMB_DURATION);
+        return needRenew;
+    }
+    
+    /**
+     * 双击卡剩余时间判断
+     * 当双击卡剩余时间低于31天时，需要续用
+     * 最多可续用到31+31天，但不建议，因为平时有5分钟、3天、7天等短期双击卡
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewDoubleCard(long doubleEnd, long nowMillis) {
+        // 双击卡最长有效期为62天（31+31）
+        long MAX_DOUBLE_DURATION = 62 * ONE_DAY;
+        // 双击卡续用阈值为31天
+        long DOUBLE_RENEW_THRESHOLD = 31 * ONE_DAY;
+        
+        if (doubleEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        
+        long remain = doubleEnd - nowMillis;
+        Log.runtime(TAG, "[双击卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(DOUBLE_RENEW_THRESHOLD));
+        
+        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        boolean needRenew = remain <= DOUBLE_RENEW_THRESHOLD;
+        Log.runtime(TAG, "[双击卡] 比较: " + remain + " <= " + DOUBLE_RENEW_THRESHOLD + " == " + needRenew);
+        return needRenew;
+    }
+    
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
      *
