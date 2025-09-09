@@ -130,7 +130,7 @@ public class AntForest extends ModelTask {
      */
     private static final long ONE_DAY = 24 * ONE_HOUR_MS;
     /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
-    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2355;
+    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2358;
     private PriorityModelField collectEnergy;
     private BooleanModelField pkEnergy; // PK能量
     private BooleanModelField energyRain;
@@ -2218,13 +2218,13 @@ public class AntForest extends ModelTask {
         }
         long thresholdMs = hours * ONE_HOUR_MS + minutes * 60_000L;
         if (shieldEnd <= nowMillis) { // 未生效或已过期
-            Log.runtime(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            Log.record(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
             return true;
         }
         long remain = shieldEnd - nowMillis;
-        Log.runtime(TAG, "[保护罩] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
+        Log.record(TAG, "[保护罩] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
         boolean needRenew = remain <= thresholdMs;
-        Log.runtime(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
+        Log.record(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
         return needRenew;
     }
     
@@ -2742,72 +2742,85 @@ public class AntForest extends ModelTask {
      *
      * @param propJsonObj 道具对象
      */
+    /**
+     * 使用背包道具
+     *
+     * @param propJsonObj 道具对象
+     */
+    /**
+     * 使用背包道具
+     *
+     * @param propJsonObj 道具对象
+     */
+    /**
+     * 使用背包道具
+     *
+     * @param propJsonObj 道具对象
+     */
     private boolean usePropBag(JSONObject propJsonObj) {
         if (propJsonObj == null) {
             Log.record(TAG, "要使用的道具不存在！");
             return false;
         }
         try {
-            Log.runtime(TAG, "尝试使用道具: " + propJsonObj);
             String propId = propJsonObj.getJSONArray("propIdList").getString(0);
             JSONObject propConfigVO = propJsonObj.getJSONObject("propConfigVO");
             String propType = propConfigVO.getString("propType");
             String propName = propConfigVO.getString("propName");
             String tag = propEmoji(propName);
             JSONObject jo;
-
-            // -------------------------
-            // 判断是否是可续用类道具
-            // -------------------------
             boolean isRenewable = isRenewableProp(propType);
-            Log.runtime(TAG, "道具 " + propName + " (类型: " + propType + "), 是否可续用: " + isRenewable);
-
+            Log.record(TAG, "道具 " + propName + " (类型: " + propType + "), 是否可续用: " + isRenewable);
             String propGroup = AntForestRpcCall.getPropGroup(propType);
             if (isRenewable) {
-                // 第一步：发送检查请求(secondConfirm=false)
-                String checkResponse = AntForestRpcCall.consumeProp(propGroup, propId, propType, false);
-                JSONObject check = new JSONObject(checkResponse);
-                
-                if (!ResChecker.checkRes(TAG + "道具检查失败:", check)) {
-                    Log.runtime(check.optString("resultDesc", "检查失败"));
-                    Log.runtime(check.toString());
-                    return false;
-                }
-                
-                JSONObject resData = check.optJSONObject("resData");
+                // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
+                String checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false);
+                JSONObject checkResponse = new JSONObject(checkResponseStr);
+                Log.record(TAG, "发送检查请求: " + checkResponse);
+                JSONObject resData = checkResponse.optJSONObject("resData");
                 if (resData == null) {
-                    Log.runtime(TAG, "道具状态检查失败: 响应中缺少 resData。");
-                    Log.runtime(check.toString());
-                    return false;
+                    resData = checkResponse;
                 }
-                
+
                 String status = resData.optString("usePropStatus");
-                Log.runtime(TAG, "可续用道具状态检查成功, 状态: " + status);
-                
-                if ("NEED_CONFIRM_CAN_PROLONG".equals(status) ) {
-                    // 第二步：发送确认请求(secondConfirm=true)
-                    GlobalThreadPools.sleep(1000); // 等待一小段时间再发送确认请求
-                    String confirmResponse = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
-                    jo = new JSONObject(confirmResponse);
+                Log.record(TAG, "可续用道具状态检查成功, 状态: " + status);
+
+                if ("NEED_CONFIRM_CAN_PROLONG".equals(status)) {
+                    // 情况1: 需要二次确认 (真正的续写)
+                    Log.record(TAG, "需要二次确认，发送确认请求...");
+                    GlobalThreadPools.sleep(2000);
+                    String confirmResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
+                    jo = new JSONObject(confirmResponseStr);
+                    Log.record(TAG, "发送确认请求: " + jo);
+                } else if ("SUCCESS".equals(resData.optString("resultCode")) && resData.has("userPropVO")) {
+                    // 情况2: 第一次请求直接成功 (首次使用)
+                    Log.record(TAG, "道具首次使用成功，无需二次确认。");
+                    jo = checkResponse;
                 } else {
-                    Log.runtime(TAG, "道具状态不需要确认: " + status);
-                    jo = check; // 使用第一步的响应
+                    // 其他所有情况都视为最终结果，通常是失败
+                    Log.record(TAG, "道具状态异常或使用失败。");
+                    jo = checkResponse;
                 }
             } else {
                 // 非续用类道具，直接使用
-                jo = new JSONObject(AntForestRpcCall.consumeProp2(propGroup, propId, propType));
+                Log.record(TAG, "非续用类道具，直接使用");
+                String consumeResponse = AntForestRpcCall.consumeProp2(propGroup, propId, propType);
+                jo = new JSONObject(consumeResponse);
             }
 
-            // -------------------------
             // 统一结果处理
-            // -------------------------
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
                 Log.forest("使用道具" + tag + "[" + propName + "]");
                 updateSelfHomePage();
                 return true;
             } else {
-                Log.runtime("使用道具失败: " + jo.optString("resultDesc", "未知错误"));
-                Log.runtime(jo.toString());
+                JSONObject errorData = jo.optJSONObject("resData");
+                if (errorData == null) {
+                    errorData = jo;
+                }
+                String resultDesc = errorData.optString("resultDesc", "未知错误");
+                Log.record("使用道具失败: " + resultDesc);
+                Toast.show(resultDesc);
                 return false;
             }
 
@@ -2817,7 +2830,6 @@ public class AntForest extends ModelTask {
             return false;
         }
     }
-
     /**
      * 判断是否是可续用类道具
      */
@@ -2928,10 +2940,10 @@ public class AntForest extends ModelTask {
      */
     private void useShieldCard(JSONObject bagObject) {
         try {
-            Log.runtime(TAG, "尝试使用保护罩...");
+            Log.record(TAG, "尝试使用保护罩...");
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
             if (jo == null) {
-                Log.runtime(TAG, "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型...");
+                Log.record(TAG, "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型...");
                 if (youthPrivilege.getValue()) {
                     Log.runtime(TAG, "尝试通过青春特权获取保护罩...");
                     if (Privilege.INSTANCE.youthPrivilege()) {
@@ -2941,15 +2953,15 @@ public class AntForest extends ModelTask {
             }
             if (jo == null) {
                 if (shieldCardConstant.getValue()) {
-                    Log.runtime(TAG, "尝试通过活力值兑换保护罩...");
+                    Log.record(TAG, "尝试通过活力值兑换保护罩...");
                     if (exchangeEnergyShield()) {
                         jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD");
                     }
                 }
             }
             if (jo == null) {
-                Log.runtime(TAG, "尝试限时保护罩(ENERGY_SHIELD)...");
-                jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD");
+                Log.record(TAG, "尝试能量保护罩(ENERGY_SHIELD)...");
+                jo = findPropBag(bagObject, "ENERGY_SHIELD");
             }
             if (jo != null) {
                 Log.runtime(TAG, "找到保护罩，准备使用: " + jo);
@@ -2957,7 +2969,7 @@ public class AntForest extends ModelTask {
                     return; // 使用成功，直接返回
                 }
             }
-            Log.runtime(TAG, "背包中未找到任何可用保护罩。");
+            Log.record(TAG, "背包中未找到任何可用保护罩。");
             // 如果未使用成功，也刷新一次
             updateSelfHomePage();
         } catch (Throwable th) {
