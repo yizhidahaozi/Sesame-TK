@@ -306,8 +306,4 @@ object HookUtil {
             Log.printStackTrace(TAG, "hookUser 失败", it)
         }
     }
-
-
 }
-
-
