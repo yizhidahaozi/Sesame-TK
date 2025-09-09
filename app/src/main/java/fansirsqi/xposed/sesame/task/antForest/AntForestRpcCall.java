@@ -20,12 +20,6 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 public class AntForestRpcCall {
     private static String VERSION = "";
 
-    /**
-     * 初始化API版本号
-     * <p>
-     * 根据支付宝版本号设置合适的API版本参数
-     * </p>
-     */
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
         Log.record("AntForestRpcCall", "当前支付宝版本: " + alipayVersion.toString());
@@ -368,7 +362,59 @@ public class AntForestRpcCall {
     }
 
     /**
+     * 调用蚂蚁森林 RPC 使用道具 是否使用
+     *
+     * @param propGroup 道具组
+     * @param propId 道具ID
+     * @param propType 道具类型
+     * @param secondConfirm 是否为确认调用（续用时传 true）
+     * @return RPC 响应字符串
+     */
+    public static String consumeProp(String propGroup, String propId, String propType, boolean secondConfirm) throws JSONException {
+        JSONObject jo = new JSONObject();
+        if (propGroup != null && !propGroup.isEmpty()) {
+            jo.put("propGroup", propGroup);
+        }
+        jo.put("propId", propId);
+        jo.put("propType", propType);
+        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
+        jo.put("secondConfirm", secondConfirm);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("timezoneId", "Asia/Shanghai");
+        jo.put("version", VERSION);
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.consumeProp",
+                new JSONArray().put(jo).toString()
+        );
+    }
+
+    /**
      * 调用蚂蚁森林 RPC 使用道具
+     *
+     * @param propGroup 道具组
+     * @param propId 道具ID
+     * @param propType 道具类型
+     * @return RPC 响应字符串
+     */
+    public static String consumeProp2(String propGroup, String propId, String propType) throws JSONException {
+        JSONObject jo = new JSONObject();
+        if (propGroup != null && !propGroup.isEmpty()) {
+            jo.put("propGroup", propGroup);
+        }
+        jo.put("propId", propId);
+        jo.put("propType", propType);
+        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("timezoneId", "Asia/Shanghai");
+        jo.put("version", VERSION);
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.consumeProp",
+                new JSONArray().put(jo).toString()
+        );
+    }
+
+    /**
+     * 调用蚂蚁森林 RPC 使用道具 (旧方法，为兼容性保留)
      *
      * @param propId 道具ID
      * @param propType 道具类型
@@ -376,16 +422,7 @@ public class AntForestRpcCall {
      * @return RPC 响应字符串
      */
     public static String consumeProp(String propId, String propType, boolean secondConfirm) throws JSONException {
-        JSONObject jo = new JSONObject();
-        jo.put("propId", propId);
-        jo.put("propType", propType);
-        jo.put("sToken", System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8));
-        jo.put("secondConfirm", secondConfirm);
-        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        return RequestManager.requestString(
-                "alipay.antforest.forest.h5.consumeProp",
-                new JSONArray().put(jo).toString()
-        );
+        return consumeProp("", propId, propType, secondConfirm);
     }
 
     public static String giveProp(String giveConfigId, String propId, String targetUserId) throws JSONException {
@@ -862,5 +899,27 @@ public class AntForestRpcCall {
         params.put("taskType", taskType);
         String args = "[" + params + "]";
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
+    }
+
+    /**
+     * 根据道具类型获取道具组
+     * @param propType 道具类型
+     * @return 道具组
+     */
+    public static String getPropGroup(String propType) {
+        if (propType.contains("SHIELD")) {
+            return "shield";
+        } else if (propType.contains("DOUBLE_CLICK")) {
+            return "doubleClick";
+        } else if (propType.contains("STEALTH")) {
+            return "stealthCard";
+        } else if (propType.contains("BOMB_CARD")) {
+            return "energyBombCard";
+        } else if (propType.contains("ROB_EXPAND")) {
+            return "robExpandCard";
+        } else if (propType.contains("BUBBLE_BOOST")) {
+            return "bubbleBoostCard";
+        }
+        return ""; // 默认返回空字符串
     }
 }
