@@ -126,6 +126,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     private volatile long lastExecTime = 0; // 添加为类成员变量
+    private static final long MAX_INACTIVE_TIME = 3600000; // 最大不活动时间：1小时
 
     private XC_LoadPackage.LoadPackageParam modelLoadPackageParam;
 
@@ -168,6 +169,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     private void scheduleNextExecution(long lastExecTime) {
         try {
+            // 检查长时间未执行的情况
+            checkInactiveTime();
+            
             int checkInterval = BaseModel.getCheckInterval().getValue();
             List<String> execAtTimeList = BaseModel.getExecAtTimeList().getValue();
             if (execAtTimeList != null && execAtTimeList.contains("-1")) {
@@ -509,6 +513,26 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     @SuppressLint("WakelockTimeout")
     private synchronized Boolean initHandler(Boolean force) {
         try {
+            // 检查是否长时间未执行，特别是跨越0点的情况
+            if (!force && lastExecTime > 0) {
+                long currentTime = System.currentTimeMillis();
+                long inactiveTime = currentTime - lastExecTime;
+                
+                Calendar lastExecCalendar = Calendar.getInstance();
+                lastExecCalendar.setTimeInMillis(lastExecTime);
+                
+                Calendar currentCalendar = Calendar.getInstance();
+                currentCalendar.setTimeInMillis(currentTime);
+                
+                boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
+                                         lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
+                
+                if (inactiveTime > MAX_INACTIVE_TIME || crossedMidnight) {
+                    Log.record(TAG, "⚠️ 初始化时检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，将强制重新初始化");
+                    force = true; // 强制重新初始化
+                }
+            }
+            
             destroyHandler(force); // 销毁之前的处理程序
             Model.initAllModel(); //在所有服务启动前装模块配置
             if (service == null) {
@@ -660,7 +684,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     static void execDelayedHandler(long delayMillis) {
         if (mainHandler == null) {
-
             return;
         }
         mainHandler.postDelayed(() -> mainTask.startTask(true), delayMillis);
@@ -671,6 +694,41 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             Toast.show(nt);
         } catch (Exception e) {
             Log.printStackTrace(e);
+        }
+    }
+    
+    /**
+     * 检查长时间未执行的情况，如果超过阈值则自动重启
+     * 特别针对0点后可能出现的执行中断情况
+     */
+    private void checkInactiveTime() {
+        try {
+            if (lastExecTime == 0) {
+                return; // 首次执行，跳过检查
+            }
+            
+            long currentTime = System.currentTimeMillis();
+            long inactiveTime = currentTime - lastExecTime;
+            
+            // 检查是否经过了0点
+            Calendar lastExecCalendar = Calendar.getInstance();
+            lastExecCalendar.setTimeInMillis(lastExecTime);
+            
+            Calendar currentCalendar = Calendar.getInstance();
+            currentCalendar.setTimeInMillis(currentTime);
+            
+            boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
+                                     lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
+            
+            // 如果超过最大不活动时间或者跨越了0点但已经过了一段时间
+            if (inactiveTime > MAX_INACTIVE_TIME || 
+                (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
+                Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，尝试重新登录");
+                reLogin();
+            }
+        } catch (Exception e) {
+            Log.runtime(TAG, "checkInactiveTime err:" + e.getMessage());
+            Log.printStackTrace(TAG, e);
         }
     }
 

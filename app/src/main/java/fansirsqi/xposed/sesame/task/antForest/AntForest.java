@@ -3,6 +3,8 @@ package fansirsqi.xposed.sesame.task.antForest;
 import static fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasBombCard;
 import static fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasShield;
 
+import android.annotation.SuppressLint;
+
 import androidx.annotation.NonNull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -122,6 +124,17 @@ public class AntForest extends ModelTask {
     private final Average delayTimeMath = new Average(5);
     private final ObjReference<Long> collectEnergyLockLimit = new ObjReference<>(0L);
     private final Object doubleCardLockObj = new Object();
+
+    /**
+     * 一小时毫秒数
+     */
+    private static final long ONE_HOUR_MS = 60 * 60 * 1000L;
+    /**
+     * 一天毫秒数
+     */
+    private static final long ONE_DAY = 24 * ONE_HOUR_MS;
+    /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
+    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2355;
     private PriorityModelField collectEnergy;
     private BooleanModelField pkEnergy; // PK能量
     private BooleanModelField energyRain;
@@ -2149,84 +2162,148 @@ public class AntForest extends ModelTask {
      */
     private void usePropBeforeCollectEnergy(String userId) {
         try {
-            long ONE_HOUR = 60 * 60 * 1000L;
-            long ONE_DAY = 24 * ONE_HOUR;
-            long THREE_DAYS = 3 * ONE_DAY;
-            long THIRTY_ONE_DAYS = 31 * ONE_DAY;
+            /*
+             * 在收集能量之前决定是否使用增益类道具卡。
+             *
+             * 主要逻辑:
+             * 1. 定义时间常量，用于判断道具剩余有效期。
+             * 2. 获取当前时间及各类道具的到期时间，计算剩余时间。
+             * 3. 根据以下条件判断是否需要使用特定道具:
+             *    - needDouble: 双击卡开关已打开，且当前没有生效的双击卡。
+             *    - needrobExpand: 1.1倍能量卡开关已打开，且当前没有生效的卡。
+             *    - needStealth: 隐身卡开关已打开，且当前没有生效的隐身卡。
+             *    - needShield: 保护罩开关已打开，炸弹卡开关已关闭，且保护罩剩余时间不足一天。
+             *    - needEnergyBombCard: 炸弹卡开关已打开，保护罩开关已关闭，且炸弹卡剩余时间不足三天。
+             *    - needBubbleBoostCard: 加速卡开关已打开。
+             * 4. 如果有任何一个道具需要使用，则同步查询背包信息，并调用相应的使用道具方法。
+             */
+
             long now = System.currentTimeMillis();
+            // 双击卡判断
+            boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
+                    && shouldRenewDoubleCard(doubleEndTime, now);
 
-            // -----------------------
-            // 可配置续用阈值
-            // -----------------------
-            long DOUBLE_CARD_THRESHOLD = 2 * ONE_DAY;       // 双击卡：剩余 <2天续用
-            long SHIELD_CARD_THRESHOLD = 1 * ONE_DAY;       // 保护罩：剩余 <1天续用
-            long ENERGY_BOMB_THRESHOLD = 3 * ONE_DAY;       // 能量炸弹卡：剩余 <3天续用
-            long ROB_EXPAND_THRESHOLD = 1 * ONE_DAY;        // 1.1倍卡：剩余 <1天续用
-            long STEALTH_THRESHOLD = 1 * ONE_DAY;           // 隐身卡：剩余 <1天续用
+            boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
+                    && robExpandCardEndTime < now;
+            boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
+                    && stealthEndTime < now;
 
-            // -----------------------
-            // 先刷新道具剩余时间
-            // -----------------------
-            JSONObject joHomePage = new JSONObject(AntForestRpcCall.queryHomePage());
-            updateSelfHomePage(joHomePage);
+            // 保护罩判断
+            boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
+                    && energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                    && shouldRenewShield(shieldEndTime, now);
+            // 炸弹卡判断
+            boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
+                    && shieldCard.getValue().equals(applyPropType.CLOSE)
+                    && shouldRenewEnergyBomb(energyBombCardEndTime, now);
+            boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
 
-            synchronized (doubleCardLockObj) {
-                // -----------------------
-                // 判断是否需要使用道具
-                // -----------------------
-                long doubleRemain = doubleEndTime - now;
-                long shieldRemain = shieldEndTime - now;
-                long energyBombRemain = energyBombCardEndTime - now;
-                long robExpandRemain = robExpandCardEndTime - now;
-                long stealthRemain = stealthEndTime - now;
-
-                boolean needDouble = !doubleCard.getValue().equals(applyPropType.CLOSE)
-                        && doubleRemain < DOUBLE_CARD_THRESHOLD;
-
-                boolean needrobExpand = !robExpandCard.getValue().equals(applyPropType.CLOSE)
-                        && robExpandRemain < ROB_EXPAND_THRESHOLD;
-
-                boolean needStealth = !stealthCard.getValue().equals(applyPropType.CLOSE)
-                        && stealthRemain < STEALTH_THRESHOLD;
-
-                boolean needShield = !shieldCard.getValue().equals(applyPropType.CLOSE)
-                        && energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                        && (shieldRemain < SHIELD_CARD_THRESHOLD || shieldEndTime < now);
-
-                boolean needEnergyBombCard = !energyBombCardType.getValue().equals(applyPropType.CLOSE)
-                        && shieldCard.getValue().equals(applyPropType.CLOSE)
-                        && energyBombRemain < ENERGY_BOMB_THRESHOLD;
-
-                boolean needBubbleBoostCard = !bubbleBoostCard.getValue().equals(applyPropType.CLOSE);
-
-                Log.runtime(TAG, "--- 道具使用检查 ---");
-                Log.runtime(TAG, "needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
-                        ", needStealth=" + needStealth + ", needShield=" + needShield +
-                        ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
-
-                if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
+            Log.runtime(TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
+                    ", needStealth=" + needStealth + ", needShield=" + needShield +
+                    ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard);
+            if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
+                synchronized (doubleCardLockObj) {
                     JSONObject bagObject = queryPropList();
+                   // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
 
                     if (needDouble) useDoubleCard(bagObject);
                     if (needrobExpand) useCardBoot(robExpandCardTime.getValue(), "1.1倍能量卡", this::userobExpandCard);
                     if (needStealth) useStealthCard(bagObject);
                     if (needBubbleBoostCard) useCardBoot(bubbleBoostTime.getValue(), "加速卡", this::useBubbleBoostCard);
                     if (needShield) {
-                        Log.runtime(TAG, "尝试使用保护罩");
+                        Log.runtime(TAG, "尝试使用保护罩罩");
                         useShieldCard(bagObject);
                     } else if (needEnergyBombCard) {
                         Log.runtime(TAG, "准备使用能量炸弹卡");
                         useEnergyBombCard(bagObject);
                     }
-                } else {
-                    Log.runtime(TAG, "没有需要使用的道具");
                 }
+            } else {
+                Log.runtime(TAG, "没有需要使用的道具");
             }
         } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
+            Log.printStackTrace(e);
         }
     }
 
+    /**
+     * 保护罩剩余时间判断
+     * 以整数 HHmm 指定保护罩续写阈值。
+     * 例如：2355 表示 23 小时 55 分钟，0955 可直接写为 955。
+     * 校验规则：0 ≤ HH ≤ 99，0 ≤ mm ≤ 59；非法值将回退为 23 小时。
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewShield(long shieldEnd, long nowMillis) {
+        int hours = 23, minutes = 0;
+        if (SHIELD_RENEW_THRESHOLD_HHMM >= 0 && SHIELD_RENEW_THRESHOLD_HHMM <= 9959) {
+            try {
+                int abs = Math.abs(SHIELD_RENEW_THRESHOLD_HHMM);
+                minutes = abs % 100;
+            } catch (Exception ignored) {}
+        }
+        long thresholdMs = hours * ONE_HOUR_MS + minutes * 60_000L;
+        if (shieldEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        long remain = shieldEnd - nowMillis;
+        Log.runtime(TAG, "[保护罩] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
+        boolean needRenew = remain <= thresholdMs;
+        Log.runtime(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
+        return needRenew;
+    }
+    
+    /**
+     * 炸弹卡剩余时间判断
+     * 当炸弹卡剩余时间低于3天时，需要续用
+     * 最多可续用到4天
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewEnergyBomb(long bombEnd, long nowMillis) {
+        // 炸弹卡最长有效期为4天
+        long MAX_BOMB_DURATION = 4 * ONE_DAY;
+        // 炸弹卡续用阈值为3天
+        long BOMB_RENEW_THRESHOLD = 3 * ONE_DAY;
+        if (bombEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[炸弹卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        long remain = bombEnd - nowMillis;
+        Log.runtime(TAG, "[炸弹卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(BOMB_RENEW_THRESHOLD));
+        
+        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        boolean needRenew = remain <= BOMB_RENEW_THRESHOLD && (bombEnd - nowMillis + remain) <= MAX_BOMB_DURATION;
+        Log.runtime(TAG, "[炸弹卡] 比较: " + remain + " <= " + BOMB_RENEW_THRESHOLD + " == " + needRenew + 
+                   ", 总时长检查: " + (bombEnd - nowMillis + remain) + " <= " + MAX_BOMB_DURATION);
+        return needRenew;
+    }
+    
+    /**
+     * 双击卡剩余时间判断
+     * 当双击卡剩余时间低于31天时，需要续用
+     * 最多可续用到31+31天，但不建议，因为平时有5分钟、3天、7天等短期双击卡
+     */
+    @SuppressLint("DefaultLocale")
+    private boolean shouldRenewDoubleCard(long doubleEnd, long nowMillis) {
+        // 双击卡最长有效期为62天（31+31）
+        long MAX_DOUBLE_DURATION = 62 * ONE_DAY;
+        // 双击卡续用阈值为31天
+        long DOUBLE_RENEW_THRESHOLD = 31 * ONE_DAY;
+        
+        if (doubleEnd <= nowMillis) { // 未生效或已过期
+            Log.runtime(TAG, "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            return true;
+        }
+        
+        long remain = doubleEnd - nowMillis;
+        Log.runtime(TAG, "[双击卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(DOUBLE_RENEW_THRESHOLD));
+        
+        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        boolean needRenew = remain <= DOUBLE_RENEW_THRESHOLD;
+        Log.runtime(TAG, "[双击卡] 比较: " + remain + " <= " + DOUBLE_RENEW_THRESHOLD + " == " + needRenew);
+        return needRenew;
+    }
+    
     /**
      * 检查当前时间是否在设置的使用双击卡时间内
      *
@@ -2739,6 +2816,8 @@ public class AntForest extends ModelTask {
                 jo = new JSONObject(AntForestRpcCall.consumeProp(propId, propType, true));
             }
 
+
+
             // -------------------------
             // 统一结果处理
             // -------------------------
@@ -2872,7 +2951,6 @@ public class AntForest extends ModelTask {
             JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE");
             if (jo == null) {
                 Log.runtime(TAG, "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型...");
-
                 if (youthPrivilege.getValue()) {
                     Log.runtime(TAG, "尝试通过青春特权获取保护罩...");
                     if (Privilege.INSTANCE.youthPrivilege()) {
@@ -2891,10 +2969,6 @@ public class AntForest extends ModelTask {
             if (jo == null) {
                 Log.runtime(TAG, "尝试限时保护罩(ENERGY_SHIELD)...");
                 jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD");
-            }
-            if (jo == null) {
-                Log.runtime(TAG, "尝试查找普通保护罩(ENERGY_SHIELD)...");
-                jo = findPropBag(bagObject, "ENERGY_SHIELD");
             }
             if (jo != null) {
                 Log.runtime(TAG, "找到保护罩，准备使用: " + jo);
