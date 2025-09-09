@@ -20,7 +20,7 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
  * 森林 RPC 调用类
  */
 public class AntForestRpcCall {
-    private static String VERSION = "";
+    private static String VERSION = "20250813";
 
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
@@ -28,7 +28,7 @@ public class AntForestRpcCall {
         try {
             switch (alipayVersion.getVersionString()) {
                 case "10.7.30.8000":
-                    VERSION = "20250108";  // 2025年版本
+                    VERSION = "20250813";  // 2025年版本
                     break;
                 case "10.5.88.8000":
                     VERSION = "20240403";  // 2024年版本
@@ -37,7 +37,7 @@ public class AntForestRpcCall {
                     VERSION = "20230501";  // 2023年版本
                     break;
                 default:
-                    VERSION = "20250108";
+                    VERSION = "20250813";
             }
             Log.record("AntForestRpcCall", "使用API版本: " + VERSION);
         } catch (Exception e) {
@@ -389,7 +389,8 @@ public class AntForestRpcCall {
         }
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
         jo.put("timezoneId", "Asia/Shanghai");
-        jo.put("version", "20250813"); // Hardcode version for consumeProp based on logs
+
+        jo.put("version", VERSION); // Hardcode version for consumeProp based on logs
         return jo;
     }
 
@@ -404,7 +405,7 @@ public class AntForestRpcCall {
      */
     public static String consumeProp(String propGroup, String propId, String propType, boolean secondConfirm) throws JSONException {
         JSONObject requestData = createConsumePropRequestData(propGroup, propId, propType, secondConfirm);
-        Log.record(TAG, "requestData: " + "["+requestData+"]");
+       // Log.record(TAG, "requestData: " + "["+requestData+"]");
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.consumeProp",
                 "["+requestData+"]"

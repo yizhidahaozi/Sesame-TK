@@ -130,7 +130,7 @@ public class AntForest extends ModelTask {
      */
     private static final long ONE_DAY = 24 * ONE_HOUR_MS;
     /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
-    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2358;
+    private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2359;
     private PriorityModelField collectEnergy;
     private BooleanModelField pkEnergy; // PK能量
     private BooleanModelField energyRain;
@@ -2783,7 +2783,7 @@ public class AntForest extends ModelTask {
                 }
 
                 String status = resData.optString("usePropStatus");
-                Log.record(TAG, "可续用道具状态检查成功, 状态: " + status);
+                Log.record(TAG, "查成功, 状态: " + status);
 
                 if ("NEED_CONFIRM_CAN_PROLONG".equals(status)) {
                     // 情况1: 需要二次确认 (真正的续写)
@@ -2792,11 +2792,7 @@ public class AntForest extends ModelTask {
                     String confirmResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
                     jo = new JSONObject(confirmResponseStr);
                    // Log.record(TAG, "发送确认请求: " + jo);
-                } else if ("SUCCESS".equals(resData.optString("resultCode")) && resData.has("userPropVO")) {
-                    // 情况2: 第一次请求直接成功 (首次使用)
-                    Log.record(TAG, "道具首次使用成功，无需二次确认。");
-                    jo = checkResponse;
-                } else {
+                }  else {
                     // 其他所有情况都视为最终结果，通常是失败
                     Log.record(TAG, "道具状态异常或使用失败。");
                     jo = checkResponse;
