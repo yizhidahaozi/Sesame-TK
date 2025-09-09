@@ -2776,7 +2776,7 @@ public class AntForest extends ModelTask {
                 // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
                 String checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false);
                 JSONObject checkResponse = new JSONObject(checkResponseStr);
-                Log.record(TAG, "发送检查请求: " + checkResponse);
+               // Log.record(TAG, "发送检查请求: " + checkResponse);
                 JSONObject resData = checkResponse.optJSONObject("resData");
                 if (resData == null) {
                     resData = checkResponse;
@@ -2791,7 +2791,7 @@ public class AntForest extends ModelTask {
                     GlobalThreadPools.sleep(2000);
                     String confirmResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
                     jo = new JSONObject(confirmResponseStr);
-                    Log.record(TAG, "发送确认请求: " + jo);
+                   // Log.record(TAG, "发送确认请求: " + jo);
                 } else if ("SUCCESS".equals(resData.optString("resultCode")) && resData.has("userPropVO")) {
                     // 情况2: 第一次请求直接成功 (首次使用)
                     Log.record(TAG, "道具首次使用成功，无需二次确认。");
