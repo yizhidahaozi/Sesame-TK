@@ -2784,9 +2784,9 @@ public class AntForest extends ModelTask {
                 String status = resData.optString("usePropStatus");
                 Log.runtime(TAG, "可续用道具状态检查成功, 状态: " + status);
                 
-                if ("NEED_CONFIRM_CAN_PROLONG".equals(status) || "NEED_CONFIRM_CAN_NOT_PROLONG".equals(status)) {
+                if ("NEED_CONFIRM_CAN_PROLONG".equals(status) ) {
                     // 第二步：发送确认请求(secondConfirm=true)
-                    GlobalThreadPools.sleep(400); // 等待一小段时间再发送确认请求
+                    GlobalThreadPools.sleep(1000); // 等待一小段时间再发送确认请求
                     String confirmResponse = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
                     jo = new JSONObject(confirmResponse);
                 } else {
