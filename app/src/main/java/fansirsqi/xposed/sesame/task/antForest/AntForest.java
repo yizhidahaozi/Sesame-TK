@@ -378,7 +378,7 @@ public class AntForest extends ModelTask {
         int hour = now.get(Calendar.HOUR_OF_DAY);
         int minute = now.get(Calendar.MINUTE);
 
-        boolean isEnergyTime = TaskCommon.IS_ENERGY_TIME || (hour == 7 && minute >= 0 && minute < 30);
+        boolean isEnergyTime = TaskCommon.IS_ENERGY_TIME || hour == 7 && minute < 30;
 
         if (isEnergyTime) {
             Log.record(TAG, "⏸ 当前为只收能量时间【07:00-07:30】，开始循环收取自己、好友和PK好友的能量");
