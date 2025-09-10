@@ -205,7 +205,7 @@ public class AntForest extends ModelTask {
     /**
      * 空森林缓存，用于记录在本轮任务中已经确认没有能量的好友。
      * 在每轮蚂蚁森林任务开始时清空（见run方法finally块）。
-     * “一轮任务”通常指由“执行间隔”触发的一次完整的好友遍历。
+     * “一轮任务”通常指由"执行间隔"触发的一次完整的好友遍历。
      */
     private final Map<String, Long> emptyForestCache = new ConcurrentHashMap<>();
     /**
@@ -419,10 +419,6 @@ public class AntForest extends ModelTask {
             Log.record(TAG, "只收能量时间循环结束");
             return false; // 只收能量期间不执行正常任务
         }
-
-        // -----------------------------
-        // 4️⃣ 正常任务执行
-        // -----------------------------
         return true;
     }
 
@@ -1223,7 +1219,17 @@ public class AntForest extends ModelTask {
                 case WAITING://此处适合增加加速卡的处理，但是需要注意 需要 userid==selfId
                     // 修改逻辑：蹲所有等待成熟的能量，不再限制时间范围
                     waitingBubbles.add(new Pair<>(bubbleId, produceTime));
-                    Log.debug(TAG, "用户[" + UserMap.getMaskName(userId) + "]能量id: [" + bubbleId + "]成熟时间: " + TimeUtil.getCommonDate(produceTime) + " 剩余时间: " + (produceTime - serverTime) + "ms");
+                    String userName = UserMap.getMaskName(userId);
+                    if (userName == null) {
+                        JSONObject userEnergy = userHomeObj.optJSONObject("userEnergy");
+                        if (userEnergy != null) {
+                            userName = userEnergy.optString("displayName");
+                        }
+                        if (userName == null || userName.isEmpty()) {
+                            userName = userId;
+                        }
+                    }
+                    Log.debug(TAG, "用户[" + userName + "]能量id: [" + bubbleId + "]成熟时间: " + TimeUtil.getCommonDate(produceTime) + " 剩余时间: " + (produceTime - serverTime) + "ms");
                     break;
             }
         }
@@ -2780,21 +2786,6 @@ public class AntForest extends ModelTask {
 
     }
 
-    /**
-     * 使用背包道具
-     *
-     * @param propJsonObj 道具对象
-     */
-    /**
-     * 使用背包道具
-     *
-     * @param propJsonObj 道具对象
-     */
-    /**
-     * 使用背包道具
-     *
-     * @param propJsonObj 道具对象
-     */
     /**
      * 使用背包道具
      *
