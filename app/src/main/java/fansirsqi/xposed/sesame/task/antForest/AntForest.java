@@ -86,10 +86,6 @@ public class AntForest extends ModelTask {
     private Integer tryCountInt;
     private Integer retryIntervalInt;
     private Integer advanceTimeInt;
-    /**
-     * 执行间隔-分钟
-     */
-    private Integer checkIntervalInt;
     private IntervalLimit collectIntervalEntity;
     private IntervalLimit doubleCollectIntervalEntity;
     /**
@@ -467,7 +463,8 @@ public class AntForest extends ModelTask {
         tryCountInt = tryCount.getValue();
         retryIntervalInt = retryInterval.getValue();
         advanceTimeInt = advanceTime.getValue();
-        checkIntervalInt = BaseModel.getCheckInterval().getValue();
+
+
         dsontCollectMap = dontCollectList.getValue();
 
         // 创建收取间隔实体
@@ -1205,7 +1202,7 @@ public class AntForest extends ModelTask {
         if (!userHomeObj.has("bubbles")) return;
         JSONArray jaBubbles = userHomeObj.getJSONArray("bubbles");
         if (jaBubbles.length() == 0) return;
-        int checkInterval = checkIntervalInt + checkIntervalInt / 2;
+       // int checkInterval = checkIntervalInt + checkIntervalInt / 2;
         for (int i = 0; i < jaBubbles.length(); i++) {
             JSONObject bubble = jaBubbles.getJSONObject(i);
             long bubbleId = bubble.getLong("id");
@@ -1337,7 +1334,6 @@ public class AntForest extends ModelTask {
                     Log.runtime(TAG, "pk好友排行榜为空，跳过");
                     return;
                 }
-                ;
                 List<String> pkIdList = new ArrayList<>();
                 for (int pos = 20; pos < totalData.length(); pos++) {
                     JSONObject pkFriend = totalData.getJSONObject(pos);
@@ -1516,7 +1512,7 @@ public class AntForest extends ModelTask {
     }
 
     private boolean isIsProtected(String userId) {
-        boolean isProtected = false;
+        boolean isProtected;
         // Log.forest("is_monday:"+_is_monday);
         if(_is_monday) {
             isProtected = alternativeAccountList.getValue().contains(userId);
@@ -2310,7 +2306,6 @@ public class AntForest extends ModelTask {
     @SuppressLint("DefaultLocale")
     private boolean shouldRenewDoubleCard(long doubleEnd, long nowMillis) {
         // 双击卡最长有效期为62天（31+31）
-        long MAX_DOUBLE_DURATION = 62 * ONE_DAY;
         // 双击卡续用阈值为31天
         long DOUBLE_RENEW_THRESHOLD = 31 * ONE_DAY;
 
@@ -2749,7 +2744,7 @@ public class AntForest extends ModelTask {
                 JSONObject forestPropVO = forestPropVOList.getJSONObject(i);
                 JSONObject propConfigVO = forestPropVO.getJSONObject("propConfigVO");
                 String currentPropType = propConfigVO.getString("propType");
-                String propName = propConfigVO.getString("propName");
+               // String propName = propConfigVO.getString("propName");
                 if (propType.equals(currentPropType)) {
                     return forestPropVO; // 找到后直接返回
                 }
@@ -2913,7 +2908,7 @@ public class AntForest extends ModelTask {
                     jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
                 }
                 if (jo != null) {
-                    Log.runtime(TAG, "找到双击卡，准备使用: " + jo.toString());
+                    Log.runtime(TAG, "找到双击卡，准备使用: " + jo);
                     if (usePropBag(jo)) {
                         doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
                         Status.DoubleToday();
@@ -2951,7 +2946,7 @@ public class AntForest extends ModelTask {
                 jo = findPropBag(bagObject, "STEALTH_CARD");
             }
             if (jo != null) {
-                Log.runtime(TAG, "找到隐身卡，准备使用: " + jo.toString());
+                Log.runtime(TAG, "找到隐身卡，准备使用: " + jo);
                 if (usePropBag(jo)) {
                     stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
                 }
@@ -3132,7 +3127,7 @@ public class AntForest extends ModelTask {
             }
 
             if (jo != null) {
-                Log.runtime(TAG, "找到炸弹卡，准备使用: " + jo.toString());
+                Log.runtime(TAG, "找到炸弹卡，准备使用: " + jo);
                 if (usePropBag(jo)) {
                     // 使用成功后刷新真实结束时间
                     updateSelfHomePage();
