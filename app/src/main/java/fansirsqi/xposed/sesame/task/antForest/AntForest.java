@@ -403,13 +403,9 @@ public class AntForest extends ModelTask {
                 collectPKEnergy();
 
                 // 循环间隔
-                try {
                     int sleepMillis = cycleinterval.getValue();
-                    Thread.sleep(sleepMillis);
-                } catch (InterruptedException e) {
-                    Log.printStackTrace(TAG, "收能量时发生错误", e);
-                    break;
-                }
+                    GlobalThreadPools.sleep(sleepMillis);
+
             }
 
             Log.record(TAG, "只收能量时间循环结束");
@@ -1627,16 +1623,6 @@ public class AntForest extends ModelTask {
     }
 
     private void collectEnergy(CollectEnergyEntity collectEnergyEntity) {
-        collectEnergy(collectEnergyEntity, true);
-    }
-
-    /**
-     * 收能量
-     *
-     * @param collectEnergyEntity 收能量实体
-     * @param joinThread          是否加入线程
-     */
-    private void collectEnergy(CollectEnergyEntity collectEnergyEntity, Boolean joinThread) {
         if (errorWait) {
             Log.record(TAG, "异常⌛等待中...不收取能量");
             return;
@@ -1693,7 +1679,7 @@ public class AntForest extends ModelTask {
                     }
                     if (tryCount < tryCountInt) {
                         collectEnergyEntity.setNeedRetry();
-                        collectEnergy(collectEnergyEntity, true);
+                        collectEnergy(collectEnergyEntity);
                     }
                     return;
                 }
@@ -1789,11 +1775,7 @@ public class AntForest extends ModelTask {
             }
         };
         taskCount.incrementAndGet();
-        if (joinThread) {
-            runnable.run();
-        } else {
-            addChildTask(new ChildModelTask("CE|" + collectEnergyEntity.getUserId() + "|" + runnable.hashCode(), "CE", runnable));
-        }
+        runnable.run();
     }
 
     private int getReturnCount(int collected) {
@@ -3189,7 +3171,7 @@ public class AntForest extends ModelTask {
                     }
                 }
                 Log.record(TAG, "执行蹲点收取⏰ 任务ID " + getId() + " [" + userName + "]" + "时差[" + averageInteger + "]ms" + "提前[" + advanceTimeInt + "]ms");
-                collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)), true);
+                collectEnergy(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)));
             };
         }
     }
