@@ -1149,7 +1149,7 @@ public class AntForest extends ModelTask {
 
             // 如果没有任何能量球（可收或待收），则标记为空林并直接返回
             if (availableBubbles.isEmpty() && waitingBubbles.isEmpty()) {
-                Log.record(TAG, "  - [" + userName + "] 白跑一趟，啥也没有，标记为空林。");
+             //   Log.record(TAG, "  - [" + userName + "] 白跑一趟，啥也没有，标记为空林。");
                 emptyForestCache.put(userId, System.currentTimeMillis());
                 return userHomeObj;
             }
@@ -1234,7 +1234,7 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 调度蹲点收取
+     * 调度蹲点收取 - 多线程版本
      *
      * @param userId         用户ID
      * @param waitingBubbles 等待成熟的能量球ID列表
@@ -1246,30 +1246,49 @@ public class AntForest extends ModelTask {
             return;
         }
         
-        Log.record(TAG, "开始为用户[" + userName + "]添加" + waitingBubbles.size() + "个蹲点任务");
+        final int bubbleCount = waitingBubbles.size();
+        Log.record(TAG, "开始为用户[" + userName + "]添加" + bubbleCount + "个蹲点任务");
         
+        // 创建计数器用于跟踪任务完成情况
+        final AtomicInteger completedTasks = new AtomicInteger(0);
+        final String finalUserName = userName; // 在lambda中使用的final变量
+        
+        // 并行处理所有等待的能量球
         for (Pair<Long, Long> pair : waitingBubbles) {
-            long bubbleId = pair.first();
-            long produceTime = pair.second();
-            String tid = AntForest.getEnergyTimerTid(userId, bubbleId);
-            long remainingTime = produceTime - System.currentTimeMillis();
+            final long bubbleId = pair.first();
+            final long produceTime = pair.second();
+            final String tid = AntForest.getEnergyTimerTid(userId, bubbleId);
+            final long remainingTime = produceTime - System.currentTimeMillis();
 
-            if (!hasChildTask(tid)) {
-                addChildTask(new EnergyTimerTask(userId, bubbleId, produceTime));
-                Log.record(TAG,
-                        "✅添加蹲点⏰ -> [" + userName + "]"
-                                + " bubble=" + bubbleId
-                                + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
-                                + " 剩余=" + (remainingTime / 1000) + "秒"
-                                + " tid=" + tid);
-            } else {
-                Log.record(TAG,
-                        "⚠️蹲点⏰已存在 -> [" + userName + "]"
-                                + " bubble=" + bubbleId
-                                + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
-                                + " 剩余=" + (remainingTime / 1000) + "秒"
-                                + " tid=" + tid);
-            }
+            // 使用线程池异步添加任务
+            GlobalThreadPools.execute(() -> {
+                try {
+                    if (!hasChildTask(tid)) {
+                        addChildTask(new EnergyTimerTask(userId, bubbleId, produceTime));
+                        Log.record(TAG,
+                                "✅添加蹲点⏰ -> [" + finalUserName + "]"
+                                        + " bubble=" + bubbleId
+                                        + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
+                                        + " 剩余=" + (remainingTime / 1000) + "秒"
+                                        + " tid=" + tid);
+                    } else {
+                        Log.record(TAG,
+                                "⚠️蹲点⏰已存在 -> [" + finalUserName + "]"
+                                        + " bubble=" + bubbleId
+                                        + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
+                                        + " 剩余=" + (remainingTime / 1000) + "秒"
+                                        + " tid=" + tid);
+                    }
+                } catch (Exception e) {
+                    Log.printStackTrace(TAG, "添加蹲点任务异常: ", e);
+                } finally {
+                    // 任务计数增加，用于统计完成情况
+                    int completed = completedTasks.incrementAndGet();
+                    if (completed == bubbleCount) {
+                        Log.record(TAG, "用户[" + finalUserName + "]的所有蹲点任务已并行添加完成");
+                    }
+                }
+            });
         }
     }
 
@@ -1437,7 +1456,7 @@ public class AntForest extends ModelTask {
                 userName = "PK榜好友|" + userName;
             }
 
-            Log.record(TAG, "  processEnergy 开始处理用户: [" + userName + "], 类型: " + (isPk ? "PK" : "普通"));
+          //  Log.record(TAG, "  processEnergy 开始处理用户: [" + userName + "], 类型: " + (isPk ? "PK" : "普通"));
 
             if (isPk) {
                 boolean needCollectEnergy = (collectEnergy.getValue() > 0) && pkEnergy.getValue();
