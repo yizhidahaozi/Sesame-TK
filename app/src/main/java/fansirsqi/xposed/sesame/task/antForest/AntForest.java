@@ -1143,12 +1143,12 @@ public class AntForest extends ModelTask {
             // 打印调试信息
             Log.record(TAG, "[" + userName + "] 📊能量统计: 可收取=" + availableBubbles.size() + "个, 等待成熟=" + waitingBubbles.size() + "个");
             if (!waitingBubbles.isEmpty()) {
-                Log.record(TAG, "[" + userName + "] 等待成熟的能量球列表:");
+               // Log.record(TAG, "[" + userName + "] 等待成熟的能量球列表:");
+
                 for (Pair<Long, Long> pair : waitingBubbles) {
                     long remainingTime = pair.second() - System.currentTimeMillis();
-                    Log.record(TAG, "  🔄 bubbleId=" + pair.first()
-                            + " 成熟时间=" + TimeUtil.getCommonDate(pair.second())
-                            + " 剩余=" + (remainingTime / 1000) + "秒");
+
+                   // Log.record(TAG, "  🔄 bubbleId=" + pair.first()+ " 成熟时间=" + TimeUtil.getCommonDate(pair.second()) + " 剩余=" + (remainingTime / 1000) + "秒");
                 }
             }
             // 5. 先添加蹲点任务（无论是否有保护罩都要蹲点，因为保护罩会过期）
@@ -1246,14 +1246,14 @@ public class AntForest extends ModelTask {
                 Log.record(TAG,
                         "✅添加蹲点⏰ -> [" + userName + "]"
                                 + " bubble=" + bubbleId
-                                + " 时间=" + TimeUtil.getCommonDate(produceTime)
+                                + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
                                 + " 剩余=" + (remainingTime / 1000) + "秒"
                                 + " tid=" + tid);
             } else {
                 Log.record(TAG,
                         "⚠️蹲点⏰已存在 -> [" + userName + "]"
                                 + " bubble=" + bubbleId
-                                + " 时间=" + TimeUtil.getCommonDate(produceTime)
+                                + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
                                 + " 剩余=" + (remainingTime / 1000) + "秒"
                                 + " tid=" + tid);
             }
@@ -1424,8 +1424,6 @@ public class AntForest extends ModelTask {
                     Log.record(TAG, "    PK好友: [" + userName + "], 不满足收取条件，跳过");
                     return;
                 }
-                // 只要开启了收能量，就进去看看，以便添加蹲点
-                Log.record(TAG, "    PK好友: [" + userName + "], 条件满足，进入森林检查");
                 collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk");
             } else { // 普通好友
                 boolean needCollectEnergy = (collectEnergy.getValue() > 0) && !dsontCollectMap.contains(userId);
