@@ -35,6 +35,7 @@ public abstract class ModelTask extends Model {
                     30L, TimeUnit.SECONDS,
                     new SynchronousQueue<>(),
                     new ThreadPoolExecutor.CallerRunsPolicy());
+    private static final String TAG = "ModelTask";
 
     private final Map<String, ChildModelTask> childTaskMap = new ConcurrentHashMap<>();
     private ChildTaskExecutor childTaskExecutor;
@@ -341,10 +342,10 @@ public abstract class ModelTask extends Model {
                 // 等待所有任务完成，设置最大等待时间
                 boolean allCompleted = latch.await(5, TimeUnit.MINUTES);
                 if (!allCompleted) {
-                    Log.record("部分任务执行超时，继续执行下一轮");
+                    Log.record(TAG,"部分任务执行超时，继续执行下一轮");
                 }
             } catch (InterruptedException e) {
-                Log.error("等待任务完成被中断: " + e.getMessage());
+                Log.error(TAG,"等待任务完成被中断: " + e.getMessage());
                 Thread.currentThread().interrupt();
             }
             
@@ -394,7 +395,7 @@ public abstract class ModelTask extends Model {
         
         try {
             for (int run_cnt = 1; run_cnt <= 2; run_cnt++) {
-                Log.record("第" + run_cnt + "轮开始 (顺序执行)");
+                Log.record(TAG,"第" + run_cnt + "轮开始 (顺序执行)");
                 for (Model model : getModelArray()) {
                     if (model != null && ModelType.TASK == model.getType()) {
                         ModelTask task = (ModelTask) model;
@@ -404,7 +405,7 @@ public abstract class ModelTask extends Model {
                         
                         if (run_cnt < model_priority) {
                             stats.recordSkipped(taskName);
-                            Log.record("模块[" + taskName + "]优先级:" + model_priority + " 第" + run_cnt + "轮跳过");
+                            Log.record(TAG,"模块[" + taskName + "]优先级:" + model_priority + " 第" + run_cnt + "轮跳过");
                             continue;
                         }
                         
@@ -416,16 +417,16 @@ public abstract class ModelTask extends Model {
                                 GlobalThreadPools.sleep(10);
                             }
                         } catch (Exception e) {
-                            Log.error("执行任务[" + taskName + "]时发生错误: " + e.getMessage());
+                            Log.error(TAG,"执行任务[" + taskName + "]时发生错误: " + e.getMessage());
                             Log.printStackTrace(e);
                             stats.recordTaskEnd(taskName, false);
                         }
                     }
                 }
-                Log.record("第" + run_cnt + "轮结束");
+                Log.record(TAG,"第" + run_cnt + "轮结束");
             }
         } catch (Exception e) {
-            Log.error("顺序启动任务时发生错误: " + e.getMessage());
+            Log.error(TAG,"顺序启动任务时发生错误: " + e.getMessage());
             Log.printStackTrace(e);
         } finally {
             stats.complete();
@@ -439,19 +440,17 @@ public abstract class ModelTask extends Model {
     public static void startAllTaskParallel(Boolean force) {
         Notify.setStatusTextExec();
         TaskExecutionStats stats = new TaskExecutionStats();
-        
         try {
             // 按优先级分组收集任务
             Map<Integer, List<ModelTask>> priorityGroups = collectTasksByPriorityGroups();
-            
             // 按优先级顺序执行任务组（优先级间串行，同优先级内并行）
             for (int run_cnt = 1; run_cnt <= 2; run_cnt++) {
-                Log.record("第" + run_cnt + "轮开始 (并行执行)");
+                Log.record(TAG,"第" + run_cnt + "轮开始 (并行执行)");
                 
                 List<ModelTask> currentRoundTasks = priorityGroups.getOrDefault(run_cnt, Collections.emptyList());
                 assert currentRoundTasks != null;
                 if (currentRoundTasks.isEmpty()) {
-                    Log.record("第" + run_cnt + "轮没有匹配的任务");
+                    Log.record(TAG,"第" + run_cnt + "轮没有匹配的任务");
                     continue;
                 }
                 
@@ -467,14 +466,14 @@ public abstract class ModelTask extends Model {
                             
                             if (finalRun_cnt < taskPriority) {
                                 stats.recordSkipped(taskName);
-                                Log.record("模块[" + taskName + "]优先级:" + taskPriority + " 第" + finalRun_cnt + "轮跳过");
+                                Log.record(TAG,"模块[" + taskName + "]优先级:" + taskPriority + " 第" + finalRun_cnt + "轮跳过");
                             } else {
                                 stats.recordTaskStart(taskName);
                                 boolean success = task.startTask(force);
                                 stats.recordTaskEnd(taskName, success);
                             }
                         } catch (Exception e) {
-                            Log.error("执行任务[" + taskName + "]时发生错误: " + e.getMessage());
+                            Log.error(TAG,"执行任务[" + taskName + "]时发生错误: " + e.getMessage());
                             Log.printStackTrace(e);
                             stats.recordTaskEnd(taskName, false);
                         } finally {
@@ -484,13 +483,16 @@ public abstract class ModelTask extends Model {
                 }
                 
                 try {
-                    latch.await(10, TimeUnit.MINUTES);
+                    boolean completed = latch.await(10, TimeUnit.MINUTES);
+                    if (!completed) {
+                        Log.error(TAG, "等待任务超过10分钟，部分任务可能未完成");
+                    }
                 } catch (InterruptedException e) {
-                    Log.error("等待任务完成被中断");
+                    Log.error(TAG,"等待任务完成被中断:" +e.getMessage() );
                     Thread.currentThread().interrupt();
                 }
                 
-                Log.record("第" + run_cnt + "轮结束");
+                Log.record(TAG,"第" + run_cnt + "轮结束");
             }
         } catch (Exception e) {
             Log.error("并行启动任务时发生错误: " + e.getMessage());
