@@ -1752,6 +1752,7 @@ public class AntForest extends ModelTask {
                         collectEnergy(collectEnergyEntity);
                         return;
                     }
+
                     JSONObject userHome = collectEnergyEntity.getUserHome();
                     if (userHome != null) {
                         String bizNo = userHome.optString("bizNo");

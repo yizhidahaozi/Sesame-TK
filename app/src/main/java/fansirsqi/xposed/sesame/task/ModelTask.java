@@ -211,6 +211,7 @@ public abstract class ModelTask extends Model {
                 Log.printStackTrace(e);
             }
         }
+
         if (childTaskExecutor != null) {
             childTaskExecutor.clearAllChildTask();
             childTaskExecutor = null; // 清理引用，避免旧实例残留
