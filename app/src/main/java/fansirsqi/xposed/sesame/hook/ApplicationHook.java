@@ -902,9 +902,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 // 有权限或者低版本Android，使用精确闹钟
                 // 使用最强力的闹钟设置方法
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-                Log.record(TAG, "已设置setExactAndAllowWhileIdle闹钟");
+               // Log.record(TAG, "已设置setExactAndAllowWhileIdle闹钟");
             }
-
             // 释放唤醒锁
             if (wakeLock != null && wakeLock.isHeld()) {
                 try {
@@ -913,7 +912,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
                 }
             }
-
             // 保存闹钟引用
             scheduledAlarms.put(requestCode, pendingIntent);
             // 更新通知显示下次执行时间
@@ -927,8 +925,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
             // 保存执行状态，以便在重启后恢复
             saveExecutionState(System.currentTimeMillis(), exactTimeMillis);
-
-            // 同时设置多重备份机制，确保任务一定会执行
 
             // 1. 使用Handler作为第一级备份，延迟稍长一些，避免重复执行
             if (mainHandler != null) {
@@ -957,7 +953,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     }
                 }, delayMillis + 40000); // 比预定时间晚40秒
             }
-
             // 3. 设置额外的闹钟备份，使用不同的请求码，以防主闹钟失败
             try {
                 int backupRequestCode = requestCode + 10000; // 使用不同的请求码
@@ -968,17 +963,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 backupIntent.putExtra("alarm_triggered", true);
                 backupIntent.putExtra("is_backup_alarm", true); // 标记为备份闹钟
                 backupIntent.setPackage(General.PACKAGE_NAME);
-
                 PendingIntent backupPendingIntent = PendingIntent.getBroadcast(
                         appContext,
                         backupRequestCode,
                         backupIntent,
                         getPendingIntentFlag()
                 );
-
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
                         exactTimeMillis + 20000, backupPendingIntent);
-
                 scheduledAlarms.put(backupRequestCode, backupPendingIntent);
                 Log.debug(TAG, "已设置备份闹钟: ID=" + backupRequestCode);
             } catch (Exception e) {
