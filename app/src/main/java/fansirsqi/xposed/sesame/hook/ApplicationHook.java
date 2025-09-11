@@ -493,12 +493,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             unsetWakenAtTimeAlarm();
 
             // 设置0点唤醒
-            Calendar calendar = Calendar.getInstance();
-            calendar.add(Calendar.DAY_OF_MONTH, 1);
-            calendar.set(Calendar.HOUR_OF_DAY, 0);
-            calendar.set(Calendar.MINUTE, 0);
-            calendar.set(Calendar.SECOND, 0);
-            calendar.set(Calendar.MILLISECOND, 0);
+                Calendar calendar = Calendar.getInstance();
+                calendar.add(Calendar.DAY_OF_MONTH, 1);
+                calendar.set(Calendar.HOUR_OF_DAY, 0);
+                calendar.set(Calendar.MINUTE, 0);
+                calendar.set(Calendar.SECOND, 0);
+                calendar.set(Calendar.MILLISECOND, 0);
 
             if (alarmScheduler != null) {
                 if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
