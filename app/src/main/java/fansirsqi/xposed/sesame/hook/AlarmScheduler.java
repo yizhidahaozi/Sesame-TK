@@ -14,10 +14,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import fansirsqi.xposed.sesame.data.General;
-import fansirsqi.xposed.sesame.hook.Toast;
+import fansirsqi.xposed.sesame.newutil.DataStore;
+import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import org.json.JSONObject;
 
 /**
  * 统一的闹钟调度管理器
@@ -35,9 +37,9 @@ public class AlarmScheduler {
     public static class Constants {
         public static final long WAKE_LOCK_SETUP_TIMEOUT = 5000L; // 5秒
         public static final long TEMP_WAKE_LOCK_TIMEOUT = 5 * 60 * 1000L; // 5分钟
-        public static final long FIRST_BACKUP_DELAY = 10000L; // 10秒
-        public static final long SECOND_BACKUP_DELAY = 40000L; // 40秒
-        public static final long BACKUP_ALARM_DELAY = 20000L; // 20秒
+        public static final long FIRST_BACKUP_DELAY = 40000L; // 40秒，给主闹钟更多时间
+        public static final long SECOND_BACKUP_DELAY = 90000L; // 90秒，进一步分散备份时间
+        public static final long BACKUP_ALARM_DELAY = 30000L; // 30秒，增加备份闹钟延迟，避免过于频繁的备份触发
         public static final int BACKUP_REQUEST_CODE_OFFSET = 10000;
         
         private Constants() {} // 防止实例化
@@ -111,40 +113,20 @@ public class AlarmScheduler {
     /**
      * 取消指定闹钟
      */
-    public boolean cancelAlarm(PendingIntent pendingIntent) {
+    public void cancelAlarm(PendingIntent pendingIntent) {
         try {
             if (pendingIntent != null) {
                 AlarmManager alarmManager = getAlarmManager();
                 if (alarmManager != null) {
                     alarmManager.cancel(pendingIntent);
-                    return true;
                 }
             }
         } catch (Exception e) {
             Log.error(TAG, "取消闹钟失败: " + e.getMessage());
             Log.printStackTrace(e);
         }
-        return false;
     }
-    
-    /**
-     * 取消所有已设置的闹钟
-     */
-    public void cancelAllAlarms() {
-        AlarmManager alarmManager = getAlarmManager();
-        if (alarmManager == null) return;
-        
-        for (Map.Entry<Integer, PendingIntent> entry : scheduledAlarms.entrySet()) {
-            try {
-                alarmManager.cancel(entry.getValue());
-                Log.record(TAG, "已取消闹钟: ID=" + entry.getKey());
-            } catch (Exception e) {
-                Log.error(TAG, "取消闹钟失败: " + e.getMessage());
-            }
-        }
-        scheduledAlarms.clear();
-    }
-    
+
     /**
      * 消费并取消一个已触发的闹钟
      * @param requestCode 闹钟的请求码
@@ -175,14 +157,15 @@ public class AlarmScheduler {
             // 获取临时唤醒锁
             try (WakeLockManager wakeLockManager = new WakeLockManager(context, Constants.WAKE_LOCK_SETUP_TIMEOUT)) {
                 // 根据Android版本和权限选择合适的闹钟类型
-                if (hasExactAlarmPermission()) {
-                    // 有精确闹钟权限，使用精确闹钟
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
-                } else {
-                    // 没有权限或不支持精确闹钟，使用非精确闹钟
-                    Log.record(TAG, "⚠️ 使用非精确闹钟作为退化方案");
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
-                }
+                // 使用setAlarmClock以获得最高优先级，避免被系统省电优化影响
+                AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(
+                    triggerAtMillis,
+                    // 创建一个用于显示闹钟设置界面的PendingIntent
+                    PendingIntent.getActivity(context, 0, new Intent(), PendingIntent.FLAG_IMMUTABLE)
+                );
+                alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
+                Log.record(TAG, String.format("已设置高优先级闹钟(AlarmClock): 预定时间=%s", 
+                    TimeUtil.getTimeStr(triggerAtMillis)));
                 
                 // 保存闹钟引用
                 scheduledAlarms.put(requestCode, pendingIntent);
@@ -203,9 +186,7 @@ public class AlarmScheduler {
             // 创建主闹钟
             PendingIntent pendingIntent = PendingIntent.getBroadcast(
                 context, requestCode, intent, getPendingIntentFlags() | PendingIntent.FLAG_CANCEL_CURRENT);
-            
             boolean success = setAlarm(exactTimeMillis, pendingIntent, requestCode);
-            
             if (success) {
                 // 设置备份机制
                 scheduleBackupMechanisms(exactTimeMillis, delayMillis, requestCode);
@@ -236,7 +217,7 @@ public class AlarmScheduler {
             mainHandler.postDelayed(() -> {
                 long currentTime = System.currentTimeMillis();
                 if (currentTime > exactTimeMillis + Constants.FIRST_BACKUP_DELAY) {
-                    Log.record(TAG, "闹钟可能未触发，使用Handler备份执行 (第一级备份)");
+                    Log.error(TAG, "闹钟可能未触发，使用Handler备份执行 (第一级备份)");
                     executeBackupTask();
                 }
             }, delayMillis + Constants.FIRST_BACKUP_DELAY);
@@ -245,7 +226,7 @@ public class AlarmScheduler {
             mainHandler.postDelayed(() -> {
                 long currentTime = System.currentTimeMillis();
                 if (currentTime > exactTimeMillis + Constants.SECOND_BACKUP_DELAY) {
-                    Log.record(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)");
+                    Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)");
                     executeBackupTask();
                 }
             }, delayMillis + Constants.SECOND_BACKUP_DELAY);
@@ -262,7 +243,8 @@ public class AlarmScheduler {
         try {
             int backupRequestCode = mainRequestCode + Constants.BACKUP_REQUEST_CODE_OFFSET;
             Intent backupIntent = new Intent(Actions.EXECUTE);
-            backupIntent.putExtra("execution_time", exactTimeMillis + Constants.BACKUP_ALARM_DELAY);
+            long backupTriggerTime = exactTimeMillis + Constants.BACKUP_ALARM_DELAY;
+            backupIntent.putExtra("execution_time", backupTriggerTime);
             backupIntent.putExtra("request_code", backupRequestCode);
             backupIntent.putExtra("scheduled_at", System.currentTimeMillis());
             backupIntent.putExtra("alarm_triggered", true);
@@ -274,10 +256,17 @@ public class AlarmScheduler {
             
             AlarmManager alarmManager = getAlarmManager();
             if (alarmManager != null) {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
-                    exactTimeMillis + Constants.BACKUP_ALARM_DELAY, backupPendingIntent);
+                // 备份闹钟也使用AlarmClock以确保可靠性
+                AlarmManager.AlarmClockInfo backupAlarmInfo = new AlarmManager.AlarmClockInfo(
+                    backupTriggerTime,
+                    PendingIntent.getActivity(context, 0, new Intent(), PendingIntent.FLAG_IMMUTABLE)
+                );
+                alarmManager.setAlarmClock(backupAlarmInfo, backupPendingIntent);
                 scheduledAlarms.put(backupRequestCode, backupPendingIntent);
-                Log.debug(TAG, "已设置备份闹钟: ID=" + backupRequestCode);
+                Log.record(TAG, String.format("已设置备份闹钟: ID=%d, 预定时间=%s (+%d秒)", 
+                    backupRequestCode, 
+                    TimeUtil.getTimeStr(backupTriggerTime),
+                    Constants.BACKUP_ALARM_DELAY / 1000));
             }
         } catch (Exception e) {
             Log.error(TAG, "设置备份闹钟失败: " + e.getMessage());
@@ -385,16 +374,24 @@ public class AlarmScheduler {
         try {
             // 通过反射调用ApplicationHook的方法，避免循环依赖
             Class<?> appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook");
-            java.lang.reflect.Method initMethod = appHookClass.getDeclaredMethod("initHandler", Boolean.class);
             java.lang.reflect.Method getTaskMethod = appHookClass.getDeclaredMethod("getMainTask");
-            
-            // 设置方法为可访问
-            initMethod.setAccessible(true);
             getTaskMethod.setAccessible(true);
+            Object mainTask = getTaskMethod.invoke(null);
+
+            // 检查主任务是否已在运行
+            if (mainTask != null) {
+                Thread taskThread = ((BaseTask) mainTask).getThread();
+                if (taskThread != null && taskThread.isAlive()) {
+                    Log.record(TAG, "主任务正在运行，备份任务跳过执行。");
+                    return;
+                }
+            }
+
+            java.lang.reflect.Method initMethod = appHookClass.getDeclaredMethod("initHandler", Boolean.class);
+            initMethod.setAccessible(true);
             
             Boolean initResult = (Boolean) initMethod.invoke(null, true);
             if (initResult != null && initResult) {
-                Object mainTask = getTaskMethod.invoke(null);
                 if (mainTask != null) {
                     java.lang.reflect.Method startTaskMethod = mainTask.getClass().getMethod("startTask", Boolean.class);
                     startTaskMethod.setAccessible(true);
@@ -406,7 +403,7 @@ public class AlarmScheduler {
             Log.error(TAG, "执行备份任务失败: " + e.getMessage());
         }
     }
-    
+
     /**
      * Handler备份执行
      */
@@ -434,13 +431,15 @@ public class AlarmScheduler {
      */
     private void saveExecutionState(long lastExecTime, long nextExecTime) {
         try {
-            // 通过反射调用ApplicationHook的saveExecutionState方法
-            Class<?> appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook");
-            java.lang.reflect.Method saveStateMethod = appHookClass.getDeclaredMethod("saveExecutionState", long.class, long.class);
-            saveStateMethod.setAccessible(true);
-            saveStateMethod.invoke(null, lastExecTime, nextExecTime);
+            JSONObject state = new JSONObject();
+            state.put("lastExecTime", lastExecTime);
+            state.put("nextExecTime", nextExecTime);
+            state.put("timestamp", System.currentTimeMillis());
+            String stateJson = state.toString();
+            DataStore.INSTANCE.put("execution_state", stateJson);
+            Log.record(TAG, "已保存执行状态: " + stateJson);
         } catch (Exception e) {
-            Log.debug(TAG, "保存执行状态失败，使用日志记录: lastExecTime=" + lastExecTime + ", nextExecTime=" + nextExecTime);
+            Log.error(TAG, "保存执行状态失败: " + e.getMessage());
         }
     }
     

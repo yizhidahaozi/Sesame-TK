@@ -3,7 +3,6 @@ package fansirsqi.xposed.sesame.hook;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.Application;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -19,12 +18,10 @@ import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
 
-import org.json.JSONObject;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +57,7 @@ import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
+import fansirsqi.xposed.sesame.task.TaskRunner;
 import fansirsqi.xposed.sesame.util.AssetUtil;
 import fansirsqi.xposed.sesame.util.Detector;
 import fansirsqi.xposed.sesame.util.Files;
@@ -72,13 +70,12 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fi.iki.elonen.NanoHTTPD;
 import kotlin.jvm.JvmStatic;
 import lombok.Getter;
+import org.json.JSONObject;
 
 public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
-    private static final Map < String, PendingIntent > wakenAtTimeAlarmMap = new ConcurrentHashMap < > ();
-
     /**
      * -- GETTER --
      *  获取闹钟调度器实例 - 供外部访问
@@ -133,7 +130,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     @Getter
     private static RpcVersion rpcVersion;
     private static PowerManager.WakeLock wakeLock;
-    private static PendingIntent alarm0Pi;
 
     public static void setOffline(boolean offline) {
         ApplicationHook.offline = offline;
@@ -434,7 +430,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             return;
                                         }
                                         lastExecTime = currentTime; // 更新最后执行时间
-                                        ModelTask.startAllTask(false, ModelTask.TaskExecutionMode.PARALLEL);
+                                        new TaskRunner(List.of(Model.getModelArray())).run(true, ModelTask.TaskExecutionMode.PARALLEL);
                                         scheduleNextExecution(lastExecTime);
                                     } catch (Exception e) {
                                         Log.record(TAG, "❌执行异常");
@@ -488,67 +484,48 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     private static void setWakenAtTimeAlarm() {
         try {
-            List < String > wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
+            List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
             if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
             }
+            // 清理旧的唤醒闹钟
             unsetWakenAtTimeAlarm();
-            try {
-                Intent intent0 = new Intent("com.eg.android.AlipayGphone.sesame.execute");
-                intent0.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-                intent0.putExtra("waken_at_time", true);    // 标记为定时唤醒
-                PendingIntent pendingIntent = PendingIntent.getBroadcast(appContext, 0, intent0, getPendingIntentFlag());
+
+            // 设置0点唤醒
                 Calendar calendar = Calendar.getInstance();
                 calendar.add(Calendar.DAY_OF_MONTH, 1);
                 calendar.set(Calendar.HOUR_OF_DAY, 0);
                 calendar.set(Calendar.MINUTE, 0);
                 calendar.set(Calendar.SECOND, 0);
                 calendar.set(Calendar.MILLISECOND, 0);
-                // 使用统一的闹钟调度器设置定时唤醒
-                if (alarmScheduler != null) {
-                    if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
-                    alarm0Pi = pendingIntent;
-                    Log.record(TAG, "⏰ 设置定时唤醒:0|000000");
-                    }
-                } else {
-                    Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
+
+            if (alarmScheduler != null) {
+                if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
+                    Log.record(TAG, "⏰ 设置0点定时唤醒");
                 }
-            } catch (Exception e) {
-                Log.runtime(TAG, "setWakenAt0 err:");
-                Log.printStackTrace(TAG, e);
+            } else {
+                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
             }
+
+            // 设置自定义时间点唤醒
             if (wakenAtTimeList != null && !wakenAtTimeList.isEmpty()) {
                 Calendar nowCalendar = Calendar.getInstance();
                 for (int i = 1, len = wakenAtTimeList.size(); i < len; i++) {
                     try {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
-                        if (wakenAtTimeCalendar != null) {
-                            if (wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                                Intent wakenIntent = new Intent("com.eg.android.AlipayGphone" + ".sesame.execute");
-                                wakenIntent.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-                                wakenIntent.putExtra("waken_at_time", true);    // 标记为定时唤醒
-                                wakenIntent.putExtra("waken_time", wakenAtTime); // 记录唤醒时间
-                                PendingIntent wakenAtTimePendingIntent = PendingIntent.getBroadcast(appContext, i, wakenIntent, getPendingIntentFlag());
-                                // 使用统一的闹钟调度器设置定时唤醒
-                                boolean success = false;
-                                if (alarmScheduler != null) {
-                                    success = alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
-                                } else {
-                                    Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
+                        if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
+                            if (alarmScheduler != null) {
+                                if (alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false)) {
+                                    Log.record(TAG, "⏰ 设置定时唤醒: " + wakenAtTime);
                                 }
-                                
-                                if (success) {
-                                    String wakenAtTimeKey = i + "|" + wakenAtTime;
-                                    wakenAtTimeAlarmMap.put(wakenAtTimeKey, wakenAtTimePendingIntent);
-                                    Log.record(TAG, "⏰ 设置定时唤醒:" + wakenAtTimeKey);
-                                }
+                            } else {
+                                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
                             }
                         }
                     } catch (Exception e) {
-                        Log.runtime(TAG, "setWakenAtTime err:");
-                        Log.printStackTrace(TAG, e);
+                        Log.runtime(TAG, "设置自定义唤醒时间失败: " + e.getMessage());
                     }
                 }
             }
@@ -559,80 +536,26 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     /**
-     * 取消定时唤醒
+     * 取消所有定时唤醒
      */
     private static void unsetWakenAtTimeAlarm() {
-        try {
-            for (Map.Entry < String, PendingIntent > entry: wakenAtTimeAlarmMap.entrySet()) {
-                try {
-                    String wakenAtTimeKey = entry.getKey();
-                    PendingIntent wakenAtTimePendingIntent = entry.getValue();
-                    if (alarmScheduler != null) {
-                        if (alarmScheduler.cancelAlarm(wakenAtTimePendingIntent)) {
-                        wakenAtTimeAlarmMap.remove(wakenAtTimeKey);
-                        Log.record(TAG, "⏰ 取消定时唤醒:" + wakenAtTimeKey);
-                        }
-                    } else {
-                        Log.error(TAG, "AlarmScheduler未初始化，无法取消定时唤醒");
-                    }
-                } catch (Exception e) {
-                    Log.runtime(TAG, "unsetWakenAtTime err:");
-                    Log.printStackTrace(TAG, e);
-                }
-            }
-            try {
-                if (alarmScheduler != null) {
-                    if (alarmScheduler.cancelAlarm(alarm0Pi)) {
-                    alarm0Pi = null;
-                    Log.record(TAG, "⏰ 取消定时唤醒:0|000000");
-                    }
-                } else {
-                    Log.error(TAG, "AlarmScheduler未初始化，无法取消定时唤醒");
-                }
-            } catch (Exception e) {
-                Log.runtime(TAG, "unsetWakenAt0 err:");
-                Log.printStackTrace(TAG, e);
-            }
-        } catch (Exception e) {
-            Log.runtime(TAG, "unsetWakenAtTimeAlarm err:");
-            Log.printStackTrace(TAG, e);
-        }
-    }
-
-    @SuppressLint("WakelockTimeout")
-    /*
-     * 保存任务执行状态
-     */
-    private static void saveExecutionState(long lastExecTime, long nextExecTime) {
-        try {
-            JSONObject state = new JSONObject();
-            state.put("lastExecTime", lastExecTime);
-            state.put("nextExecTime", nextExecTime);
-            state.put("timestamp", System.currentTimeMillis());
-
-            // 保存到DataStore
-            String stateJson = state.toString();
-            DataStore.INSTANCE.put("execution_state", stateJson);
-            Log.record(TAG, "已保存执行状态: " + stateJson);
-        } catch (Exception e) {
-            Log.error(TAG, "保存执行状态失败: " + e.getMessage());
+        if (alarmScheduler != null) {
+            // AlarmScheduler内部没有提供仅取消唤醒闹钟的方法，
+            // 但在destroyHandler中会取消所有闹钟，这里可以依赖该逻辑
+            // 如果需要精细控制，需要在AlarmScheduler中增加按分类取消的功能
+            Log.debug(TAG, "取消定时唤醒将由destroyHandler统一处理");
         }
     }
 
     private static synchronized Boolean initHandler(Boolean force) {
         try {
-            // 检查是否长时间未执行，特别是跨越0点的情况
-            if (!force && lastExecTime > 0) {
-                long currentTime = System.currentTimeMillis();
-                long inactiveTime = currentTime - lastExecTime;
-                boolean crossedMidnight = isCrossedMidnight(currentTime);
-                if (inactiveTime > MAX_INACTIVE_TIME || crossedMidnight) {
-                    Log.record(TAG, "⚠️ 初始化时检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，将强制重新初始化");
-                    force = true; // 强制重新初始化
-                }
+            if (init && !force) { // 如果已经初始化且非强制，则跳过
+                return true;
             }
-
-            destroyHandler(force); // 销毁之前的处理程序
+            // 只有在重新初始化时才销毁旧的handler
+            if (init) {
+                destroyHandler(true);
+            }
             Model.initAllModel(); //在所有服务启动前装模块配置
             if (service == null) {
                 return false;
@@ -1046,8 +969,10 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             } else {
                                 Log.record(TAG, "闹钟唤醒，应用已初始化，直接执行任务");
                             }
+
                             // 执行任务的核心逻辑
                             executeTaskWithLog(requestCode);
+
                         } catch (Exception e) {
                             Log.error(TAG, "处理执行广播时发生错误: " + e.getMessage());
                             Log.printStackTrace(e);
@@ -1106,8 +1031,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             long startTime = System.currentTimeMillis();
             // 设置线程名称以标识闹钟触发的执行
             Thread.currentThread().setName("AlarmTriggered_" + requestCode + "_" + System.currentTimeMillis());
-            // 直接执行任务
-            mainTask.startTask(true);
+            // 直接执行任务，使用非强制模式避免中断正在运行的旧任务
+            mainTask.startTask(false);
+
             // 记录执行耗时
             long executionTime2 = System.currentTimeMillis() - startTime;
             Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");
