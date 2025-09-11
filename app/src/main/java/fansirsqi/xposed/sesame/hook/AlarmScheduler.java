@@ -146,6 +146,22 @@ public class AlarmScheduler {
     }
     
     /**
+     * 消费并取消一个已触发的闹钟
+     * @param requestCode 闹钟的请求码
+     */
+    public void consumeAlarm(int requestCode) {
+        if (requestCode == -1) {
+            return;
+        }
+        PendingIntent pendingIntent = scheduledAlarms.get(requestCode);
+        if (pendingIntent != null) {
+            cancelAlarm(pendingIntent);
+            scheduledAlarms.remove(requestCode);
+            Log.record(TAG, "已消费并取消闹钟: ID=" + requestCode);
+        }
+    }
+    
+    /**
      * 核心闹钟设置方法
      */
     private boolean setAlarm(long triggerAtMillis, PendingIntent pendingIntent, int requestCode) {
@@ -193,13 +209,10 @@ public class AlarmScheduler {
             if (success) {
                 // 设置备份机制
                 scheduleBackupMechanisms(exactTimeMillis, delayMillis, requestCode);
-                
-                // 更新通知
+                                // 更新通知
                 updateNotification(exactTimeMillis);
-                
                 // 保存执行状态
                 saveExecutionState(System.currentTimeMillis(), exactTimeMillis);
-                
                 Log.record(TAG, "已设置闹钟唤醒执行，ID=" + requestCode +
                     "，时间：" + TimeUtil.getCommonDate(exactTimeMillis) +
                     "，延迟：" + delayMillis / 1000 + "秒");
@@ -383,7 +396,7 @@ public class AlarmScheduler {
             if (initResult != null && initResult) {
                 Object mainTask = getTaskMethod.invoke(null);
                 if (mainTask != null) {
-                    java.lang.reflect.Method startTaskMethod = mainTask.getClass().getDeclaredMethod("startTask", Boolean.class);
+                    java.lang.reflect.Method startTaskMethod = mainTask.getClass().getMethod("startTask", Boolean.class);
                     startTaskMethod.setAccessible(true);
                     startTaskMethod.invoke(mainTask, true);
                 }
