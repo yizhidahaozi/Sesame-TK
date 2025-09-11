@@ -37,9 +37,9 @@ public class AlarmScheduler {
     public static class Constants {
         public static final long WAKE_LOCK_SETUP_TIMEOUT = 5000L; // 5秒
         public static final long TEMP_WAKE_LOCK_TIMEOUT = 5 * 60 * 1000L; // 5分钟
-        public static final long FIRST_BACKUP_DELAY = 40000L; // 40秒，给主闹钟更多时间
-        public static final long SECOND_BACKUP_DELAY = 90000L; // 90秒，进一步分散备份时间
-        public static final long BACKUP_ALARM_DELAY = 30000L; // 30秒，增加备份闹钟延迟，避免过于频繁的备份触发
+        public static final long FIRST_BACKUP_DELAY = 20000L; // 20秒，缩短第一级备份延迟
+        public static final long SECOND_BACKUP_DELAY = 50000L; // 50秒，缩短第二级备份延迟
+        public static final long BACKUP_ALARM_DELAY = 15000L; // 15秒，缩短备份闹钟延迟
         public static final int BACKUP_REQUEST_CODE_OFFSET = 10000;
         
         private Constants() {} // 防止实例化
@@ -157,15 +157,33 @@ public class AlarmScheduler {
             // 获取临时唤醒锁
             try (WakeLockManager wakeLockManager = new WakeLockManager(context, Constants.WAKE_LOCK_SETUP_TIMEOUT)) {
                 // 根据Android版本和权限选择合适的闹钟类型
-                // 使用setAlarmClock以获得最高优先级，避免被系统省电优化影响
+                // 1. 使用setAlarmClock以获得最高优先级
                 AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(
                     triggerAtMillis,
                     // 创建一个用于显示闹钟设置界面的PendingIntent
                     PendingIntent.getActivity(context, 0, new Intent(), PendingIntent.FLAG_IMMUTABLE)
                 );
                 alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
-                Log.record(TAG, String.format("已设置高优先级闹钟(AlarmClock): 预定时间=%s", 
-                    TimeUtil.getTimeStr(triggerAtMillis)));
+
+                // 2. 同时设置一个备用的精确闹钟
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    );
+                }
+
+                // 3. 获取PowerManager.WakeLock
+                PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "Sesame:AlarmWakeLock:" + requestCode
+                );
+                wakeLock.acquire(5000); // 持有5秒钟以确保闹钟设置成功
+
+                Log.record(TAG, String.format("已设置多重保护闹钟: ID=%d, 预定时间=%s", 
+                    requestCode, TimeUtil.getTimeStr(triggerAtMillis)));
                 
                 // 保存闹钟引用
                 scheduledAlarms.put(requestCode, pendingIntent);
