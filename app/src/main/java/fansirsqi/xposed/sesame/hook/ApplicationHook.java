@@ -344,6 +344,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                     ((Activity) param.thisObject).finish();
                                     Log.runtime(TAG, "Activity reLogin");
                                 }
+                                // 如果所有特殊情况都未命中，执行一次常规任务检查
+                                execHandler();
                                 Log.runtime(TAG, "hook onResume after end");
                             }
                         });
@@ -611,7 +613,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             // 保存到DataStore
             String stateJson = state.toString();
             DataStore.INSTANCE.put("execution_state", stateJson);
-            Log.debug(TAG, "已保存执行状态: " + stateJson);
+            Log.record(TAG, "已保存执行状态: " + stateJson);
         } catch (Exception e) {
             Log.error(TAG, "保存执行状态失败: " + e.getMessage());
         }

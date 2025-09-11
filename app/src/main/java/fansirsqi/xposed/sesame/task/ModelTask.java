@@ -554,14 +554,15 @@ public abstract class ModelTask extends Model {
     /**
      * 等待任务完成，最多等待10分钟
      */
+
     private static void waitForTaskCompletion(int runCount, CountDownLatch latch) {
         Thread currentThread = Thread.currentThread();
         String threadName = currentThread.getName();
+        @SuppressWarnings("deprecation")
         long threadId = currentThread.getId();
         Log.error(TAG, "开始等待第" + runCount + "轮任务完成，线程信息: [ID=" + threadId + ", Name=" + threadName + "]");
         try {
             boolean completed = latch.await(10, TimeUnit.MINUTES);
-            
             if (!completed) {
                 Log.error(TAG, "等待任务超过10分钟，部分任务可能未完成，线程信息: [ID=" + threadId + ", Name=" + threadName + "]");
             } else {
