@@ -375,11 +375,16 @@ public class AlarmScheduler {
             java.lang.reflect.Method initMethod = appHookClass.getDeclaredMethod("initHandler", Boolean.class);
             java.lang.reflect.Method getTaskMethod = appHookClass.getDeclaredMethod("getMainTask");
             
+            // 设置方法为可访问
+            initMethod.setAccessible(true);
+            getTaskMethod.setAccessible(true);
+            
             Boolean initResult = (Boolean) initMethod.invoke(null, true);
             if (initResult != null && initResult) {
                 Object mainTask = getTaskMethod.invoke(null);
                 if (mainTask != null) {
                     java.lang.reflect.Method startTaskMethod = mainTask.getClass().getDeclaredMethod("startTask", Boolean.class);
+                    startTaskMethod.setAccessible(true);
                     startTaskMethod.invoke(mainTask, true);
                 }
             }
@@ -419,6 +424,7 @@ public class AlarmScheduler {
             // 通过反射调用ApplicationHook的saveExecutionState方法
             Class<?> appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook");
             java.lang.reflect.Method saveStateMethod = appHookClass.getDeclaredMethod("saveExecutionState", long.class, long.class);
+            saveStateMethod.setAccessible(true);
             saveStateMethod.invoke(null, lastExecTime, nextExecTime);
         } catch (Exception e) {
             Log.debug(TAG, "保存执行状态失败，使用日志记录: lastExecTime=" + lastExecTime + ", nextExecTime=" + nextExecTime);

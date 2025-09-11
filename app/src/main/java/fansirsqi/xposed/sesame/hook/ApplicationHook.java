@@ -506,8 +506,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 // 使用统一的闹钟调度器设置定时唤醒
                 if (alarmScheduler != null) {
                     if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
-                        alarm0Pi = pendingIntent;
-                        Log.record(TAG, "⏰ 设置定时唤醒:0|000000");
+                    alarm0Pi = pendingIntent;
+                    Log.record(TAG, "⏰ 设置定时唤醒:0|000000");
                     }
                 } else {
                     Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
@@ -567,8 +567,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     PendingIntent wakenAtTimePendingIntent = entry.getValue();
                     if (alarmScheduler != null) {
                         if (alarmScheduler.cancelAlarm(wakenAtTimePendingIntent)) {
-                            wakenAtTimeAlarmMap.remove(wakenAtTimeKey);
-                            Log.record(TAG, "⏰ 取消定时唤醒:" + wakenAtTimeKey);
+                        wakenAtTimeAlarmMap.remove(wakenAtTimeKey);
+                        Log.record(TAG, "⏰ 取消定时唤醒:" + wakenAtTimeKey);
                         }
                     } else {
                         Log.error(TAG, "AlarmScheduler未初始化，无法取消定时唤醒");
@@ -581,8 +581,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             try {
                 if (alarmScheduler != null) {
                     if (alarmScheduler.cancelAlarm(alarm0Pi)) {
-                        alarm0Pi = null;
-                        Log.record(TAG, "⏰ 取消定时唤醒:0|000000");
+                    alarm0Pi = null;
+                    Log.record(TAG, "⏰ 取消定时唤醒:0|000000");
                     }
                 } else {
                     Log.error(TAG, "AlarmScheduler未初始化，无法取消定时唤醒");
@@ -816,7 +816,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
                 Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，尝试重新登录");
                 reLogin();
-        }
+            }
         } catch (Exception e) {
             Log.runtime(TAG, "checkInactiveTime err:" + e.getMessage());
             Log.printStackTrace(TAG, e);

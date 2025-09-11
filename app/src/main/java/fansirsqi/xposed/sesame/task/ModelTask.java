@@ -498,11 +498,9 @@ public abstract class ModelTask extends Model {
      */
     private static void executeTaskRoundsParallel(Boolean force, TaskExecutionStats stats) {
         Map<Integer, List<ModelTask>> priorityGroups = collectTasksByPriorityGroups();
-        
         for (int runCount = 1; runCount <= 2; runCount++) {
             Log.record(TAG,"第" + runCount + "轮开始 (并行执行)");
             executeTasksInRoundParallel(runCount, priorityGroups, force, stats);
-            Log.record(TAG,"第" + runCount + "轮结束");
         }
     }
 
@@ -567,7 +565,7 @@ public abstract class ModelTask extends Model {
             if (!completed) {
                 Log.error(TAG, "等待任务超过10分钟，部分任务可能未完成，线程信息: [ID=" + threadId + ", Name=" + threadName + "]");
             } else {
-                Log.debug(TAG, "第" + runCount + "轮所有任务已完成，线程信息: [ID=" + threadId + ", Name=" + threadName + "]");
+                Log.record(TAG, "第" + runCount + "轮所有任务已完成，线程信息: [ID=" + threadId + ", Name=" + threadName + "]");
             }
         } catch (InterruptedException e) {
             Log.error(TAG, "第" + runCount + "轮任务等待被中断: " + e.getMessage() + 
