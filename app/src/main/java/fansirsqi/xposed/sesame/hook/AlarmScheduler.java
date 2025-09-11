@@ -14,9 +14,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import fansirsqi.xposed.sesame.data.General;
+import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import org.json.JSONObject;
 
 /**
  * 统一的闹钟调度管理器
@@ -217,7 +219,7 @@ public class AlarmScheduler {
             mainHandler.postDelayed(() -> {
                 long currentTime = System.currentTimeMillis();
                 if (currentTime > exactTimeMillis + Constants.FIRST_BACKUP_DELAY) {
-                    Log.record(TAG, "闹钟可能未触发，使用Handler备份执行 (第一级备份)");
+                    Log.error(TAG, "闹钟可能未触发，使用Handler备份执行 (第一级备份)");
                     executeBackupTask();
                 }
             }, delayMillis + Constants.FIRST_BACKUP_DELAY);
@@ -226,7 +228,7 @@ public class AlarmScheduler {
             mainHandler.postDelayed(() -> {
                 long currentTime = System.currentTimeMillis();
                 if (currentTime > exactTimeMillis + Constants.SECOND_BACKUP_DELAY) {
-                    Log.record(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)");
+                    Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)");
                     executeBackupTask();
                 }
             }, delayMillis + Constants.SECOND_BACKUP_DELAY);
@@ -366,16 +368,28 @@ public class AlarmScheduler {
         try {
             // 通过反射调用ApplicationHook的方法，避免循环依赖
             Class<?> appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook");
-            java.lang.reflect.Method initMethod = appHookClass.getDeclaredMethod("initHandler", Boolean.class);
             java.lang.reflect.Method getTaskMethod = appHookClass.getDeclaredMethod("getMainTask");
-            
-            // 设置方法为可访问
-            initMethod.setAccessible(true);
             getTaskMethod.setAccessible(true);
+            Object mainTask = getTaskMethod.invoke(null);
+
+            // 检查主任务是否已在运行
+            if (mainTask != null) {
+                java.lang.reflect.Field runningFutureField = mainTask.getClass().getSuperclass().getDeclaredField("runningFuture");
+                runningFutureField.setAccessible(true);
+                Object runningFuture = runningFutureField.get(mainTask);
+                if (runningFuture instanceof java.util.concurrent.Future) {
+                    if (!((java.util.concurrent.Future<?>) runningFuture).isDone()) {
+                        Log.record(TAG, "主任务正在运行，备份任务跳过执行。");
+                        return;
+                    }
+                }
+            }
+
+            java.lang.reflect.Method initMethod = appHookClass.getDeclaredMethod("initHandler", Boolean.class);
+            initMethod.setAccessible(true);
             
             Boolean initResult = (Boolean) initMethod.invoke(null, true);
             if (initResult != null && initResult) {
-                Object mainTask = getTaskMethod.invoke(null);
                 if (mainTask != null) {
                     java.lang.reflect.Method startTaskMethod = mainTask.getClass().getMethod("startTask", Boolean.class);
                     startTaskMethod.setAccessible(true);
@@ -415,13 +429,15 @@ public class AlarmScheduler {
      */
     private void saveExecutionState(long lastExecTime, long nextExecTime) {
         try {
-            // 通过反射调用ApplicationHook的saveExecutionState方法
-            Class<?> appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook");
-            java.lang.reflect.Method saveStateMethod = appHookClass.getDeclaredMethod("saveExecutionState", long.class, long.class);
-            saveStateMethod.setAccessible(true);
-            saveStateMethod.invoke(null, lastExecTime, nextExecTime);
+            JSONObject state = new JSONObject();
+            state.put("lastExecTime", lastExecTime);
+            state.put("nextExecTime", nextExecTime);
+            state.put("timestamp", System.currentTimeMillis());
+            String stateJson = state.toString();
+            DataStore.INSTANCE.put("execution_state", stateJson);
+            Log.record(TAG, "已保存执行状态: " + stateJson);
         } catch (Exception e) {
-            Log.debug(TAG, "保存执行状态失败，使用日志记录: lastExecTime=" + lastExecTime + ", nextExecTime=" + nextExecTime);
+            Log.error(TAG, "保存执行状态失败: " + e.getMessage());
         }
     }
     
