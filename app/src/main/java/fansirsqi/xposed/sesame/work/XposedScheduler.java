@@ -27,9 +27,9 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
  * 4. 【故障恢复】：JobService失败时自动回退到Handler
  * 🔧 调度策略：
  * - HANDLER_ONLY：仅使用Handler（快速响应，依赖进程存活）
- * - JOBSERVICE_ONLY：仅使用JobService（系统级调度，高可靠性）【默认】
+ * - JOBSERVICE_ONLY：仅使用JobService（系统级调度，高可靠性）
  * - HYBRID：混合模式（JobService优先，极短延迟用Handler）
- * - AUTO：自动模式（根据系统状态智能选择）
+ * - AUTO：自动模式（根据系统状态智能选择）【默认】
  * 🚀 核心优势：
  * - 利用支付宝JobService基础设施，提升调度可靠性
  * - 保持Handler的快速响应能力
@@ -88,7 +88,7 @@ public class XposedScheduler {
     private static final ConcurrentHashMap<Integer, Runnable> scheduledTasks = new ConcurrentHashMap<>();
     private static Handler mainHandler;
     private static boolean initialized = false;
-    private static String currentStrategy = ScheduleStrategy.HYBRID;
+    private static String currentStrategy = ScheduleStrategy.AUTO;
     
     /**
      * 初始化调度器
@@ -200,8 +200,18 @@ public class XposedScheduler {
                 return;
             }
             
-            Log.record(TAG, String.format("调度定时唤醒任务，唤醒时间=%s，延迟=%d小时，策略=%s", 
-                wakenTime, delayMillis / (1000 * 60 * 60), currentStrategy));
+            // 详细的时间调试信息
+            long delayMinutes = delayMillis / (1000 * 60);
+            long delayHours = delayMillis / (1000 * 60 * 60);
+            String currentTimeStr = TimeUtil.getCommonDate(currentTime);
+            String targetTimeStr = TimeUtil.getCommonDate(triggerAtMillis);
+            
+            Log.record(TAG, "调度定时唤醒任务详情:");
+            Log.record(TAG, String.format("  ├─ 唤醒时间配置: %s", wakenTime));
+            Log.record(TAG, String.format("  ├─ 当前时间: %s (%d)", currentTimeStr, currentTime));
+            Log.record(TAG, String.format("  ├─ 目标时间: %s (%d)", targetTimeStr, triggerAtMillis));
+            Log.record(TAG, String.format("  ├─ 延迟时间: %d毫秒 = %d分钟 = %d小时", delayMillis, delayMinutes, delayHours));
+            Log.record(TAG, String.format("  └─ 调度策略: %s", currentStrategy));
             
             // 优先使用JobService进行唤醒任务调度
             boolean useJobService = shouldUseJobService(delayMillis);
@@ -363,7 +373,12 @@ public class XposedScheduler {
             }
             
             int checkInterval = BaseModel.getCheckInterval().getValue();
-            Log.record(TAG, String.format("🔄 开始调度下次执行，间隔=%d秒", checkInterval / 1000));
+            String configValue = BaseModel.getCheckInterval().getConfigValue();
+            Log.record(TAG, "🔄 下次执行调度详情:");
+            Log.record(TAG, String.format("  ├─ 用户配置: %s分钟", configValue));
+            Log.record(TAG, String.format("  ├─ 实际值: %d毫秒", checkInterval));
+            Log.record(TAG, String.format("  ├─ 转换: %d秒 = %.1f分钟", checkInterval / 1000, checkInterval / 60000.0));
+            Log.record(TAG, String.format("  └─ 开始调度下次执行"));
             
             scheduleDelayedExecution(context, checkInterval);
             
