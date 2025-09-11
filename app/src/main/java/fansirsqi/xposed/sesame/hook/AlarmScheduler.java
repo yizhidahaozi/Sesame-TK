@@ -41,7 +41,6 @@ public class AlarmScheduler {
         public static final long SECOND_BACKUP_DELAY = 50000L; // 50秒，缩短第二级备份延迟
         public static final long BACKUP_ALARM_DELAY = 15000L; // 15秒，缩短备份闹钟延迟
         public static final int BACKUP_REQUEST_CODE_OFFSET = 10000;
-        
         private Constants() {} // 防止实例化
     }
     
@@ -49,7 +48,6 @@ public class AlarmScheduler {
     public static class Actions {
         public static final String EXECUTE = "com.eg.android.AlipayGphone.sesame.execute";
         public static final String ALARM_CATEGORY = "fansirsqi.xposed.sesame.ALARM_CATEGORY";
-        
         private Actions() {} // 防止实例化
     }
     
@@ -69,10 +67,8 @@ public class AlarmScheduler {
     public void scheduleDelayedExecution(long delayMillis) {
         long exactTimeMillis = System.currentTimeMillis() + delayMillis;
         int requestCode = generateRequestCode(exactTimeMillis + 1); // +1避免与其他闹钟ID冲突
-        
         Intent intent = createExecutionIntent(exactTimeMillis, requestCode);
         intent.putExtra("delayed_execution", true);
-
         scheduleAlarmWithBackup(exactTimeMillis, intent, requestCode, delayMillis);
     }
     
