@@ -195,7 +195,9 @@ public class TaskRunner {
                          if (mainTask != null) {
                              Thread taskThread = mainTask.getThread();
                              if (taskThread != null && taskThread.isAlive()) {
-                                 taskStatus = "⚡正在执行";
+                                // 计算任务已执行时间
+                                long taskStartTime = System.currentTimeMillis() - task.getStartTime();
+                                taskStatus = String.format("⚡正在执行 (%d秒)", TimeUnit.MILLISECONDS.toSeconds(taskStartTime));
                              } else if (taskThread == null) {
                                  // 计算下次执行时间
                                  long nextExecTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(BaseModel.taskWaitTime.getValue());
@@ -205,7 +207,9 @@ public class TaskRunner {
                                      TimeUnit.MILLISECONDS.toSeconds(nextExecTime) % 60);
                                  taskStatus = String.format("⏰等待执行 (下次: %s)", nextTimeStr);
                              } else {
-                                 taskStatus = "✅已完成";
+                                // 显示任务完成用时
+                                long taskDuration = task.getEndTime() - task.getStartTime();
+                                taskStatus = String.format("✅已完成 (用时%d秒)", TimeUnit.MILLISECONDS.toSeconds(taskDuration));
                              }
                          } else {
                              taskStatus = "❓状态未知";

@@ -73,6 +73,14 @@ public abstract class ModelTask extends Model {
     /** 任务运行次数计数器 */
     private int run_cents = 0;
 
+    /** 任务开始时间 */
+    @Getter
+    private long startTime = 0;
+
+    /** 任务结束时间 */
+    @Getter
+    private long endTime = 0;
+
     /** 主任务运行器，包装任务执行逻辑并处理异常 */
     @Getter
     private final Runnable mainRunnable = new Runnable() {
@@ -89,8 +97,12 @@ public abstract class ModelTask extends Model {
             try {
                 // 更新状态显示
                 Notify.setStatusTextExec(task.getName());
+                // 记录开始时间
+                startTime = System.currentTimeMillis();
                 // 执行具体任务逻辑
                 task.run();
+                // 记录结束时间
+                endTime = System.currentTimeMillis();
             } catch (Exception e) {
                 // 记录异常信息
                 Log.printStackTrace(e);
