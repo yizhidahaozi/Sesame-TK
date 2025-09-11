@@ -370,12 +370,6 @@ public class AntMember extends ModelTask {
    * @throws JSONException JSON解析异常，上抛处理
    */
   private static void joinAndFinishSesameTask(JSONArray taskList) throws JSONException {
-    try {
-      // Log.record(TAG, "芝麻信用💳[任务列表]#" + taskList.toString());
-    } catch (Throwable t) {
-      Log.printStackTrace(TAG + ".joinAndFinishSesameTask", t);
-    }
-
     for (int i = 0; i < taskList.length(); i++) {
       JSONObject task = taskList.getJSONObject(i);
       // 添加检查，确保templateId存在

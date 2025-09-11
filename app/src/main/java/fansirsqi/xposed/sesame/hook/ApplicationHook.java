@@ -895,130 +895,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static class AlipayBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
-            if (action != null) {
-                switch (action) {
-                    case "com.eg.android.AlipayGphone.sesame.restart":
-                        String userId = intent.getStringExtra("userId");
-                        if (StringUtil.isEmpty(userId) || Objects.equals(UserMap.getCurrentUid(), userId)) {
-                            initHandler(true);
-                        }
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.execute":
-                        // 获取临时唤醒锁，确保任务执行不会被中断
-                        PowerManager.WakeLock tempWakeLock = null;
-                        try {
-                            // 获取闹钟相关信息
-                            int requestCode = intent.getIntExtra("request_code", -1);
-                            // 闹钟触发后立即消费掉，防止重复执行或干扰
-                            if (alarmScheduler != null) {
-                                alarmScheduler.consumeAlarm(requestCode);
-                            }
-                            long executionTime = intent.getLongExtra("execution_time", 0);
-                            long currentTime = System.currentTimeMillis();
-                            long delayMillis = currentTime - executionTime;
-                            boolean isAlarmTriggered = intent.getBooleanExtra("alarm_triggered", false);
-                            boolean isWakenAtTime = intent.getBooleanExtra("waken_at_time", false);
-                            boolean isDelayedExecution = intent.getBooleanExtra("delayed_execution", false);
-                            boolean isBackupAlarm = intent.getBooleanExtra("is_backup_alarm", false);
-                            String wakenTime = intent.getStringExtra("waken_time");
-                            String uniqueId = intent.getStringExtra("unique_id");
-                            String logInfo = "收到执行广播，闹钟ID=" + requestCode +
-                                    "，预定时间=" + TimeUtil.getCommonDate(executionTime) +
-                                    "，当前时间=" + TimeUtil.getCommonDate(currentTime) +
-                                    "，延迟=" + delayMillis + "ms" +
-                                    "，闹钟触发=" + (isAlarmTriggered ? "是" : "否");
-
-                            if (isWakenAtTime) {
-                                logInfo += "，定时唤醒=" + (wakenTime != null ? wakenTime : "0点");
-                            }
-                            if (isDelayedExecution) {
-                                logInfo += "，延迟执行=是";
-                            }
-                            if (isBackupAlarm) {
-                                logInfo += "，备份闹钟=是";
-                            }
-
-                            if (uniqueId != null) {
-                                logInfo += "，唯一ID=" + uniqueId;
-                            }
-
-                            // 记录闹钟触发信息到日志文件
-                            Log.record(TAG, logInfo);
-
-                            // 获取临时唤醒锁
-                            PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
-                            tempWakeLock = pm.newWakeLock(
-                                    PowerManager.PARTIAL_WAKE_LOCK,
-                                    ApplicationHook.class.getName() + ":executeTask"
-                            );
-                            tempWakeLock.acquire(5 * 60 * 1000L); // 最多持有5分钟
-
-                            // 强制设置上次执行时间为更早一点的时间
-                            // 确保闹钟触发的执行不会被间隔检查阻止
-                            lastExecTime = currentTime - 10000; // 设置为10秒前
-
-                            // 闹钟唤醒时，仅在应用未初始化的情况下才执行完整的初始化流程
-                            // 如果应用已在运行，则直接执行任务，避免破坏现有状态
-                            if (!init || service == null) {
-                                Log.record(TAG, "闹钟唤醒，应用未初始化，执行强制初始化");
-                                if (!initHandler(true)) {
-                                    return; // 初始化失败，提前退出
-                                }
-                            } else {
-                                Log.record(TAG, "闹钟唤醒，应用已初始化，直接执行任务");
-                            }
-
-                            // 执行任务的核心逻辑
-                            executeTaskWithLog(requestCode);
-
-                        } catch (Exception e) {
-                            Log.error(TAG, "处理执行广播时发生错误: " + e.getMessage());
-                            Log.printStackTrace(e);
-                        } finally {
-                            // 释放唤醒锁
-                            if (tempWakeLock != null && tempWakeLock.isHeld()) {
-                                try {
-                                    tempWakeLock.release();
-                                } catch (Exception e) {
-                                    Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
-                                }
-                            }
-                        }
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.reLogin":
-                        reLogin();
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.status":
-                        try {
-                            if (ViewAppInfo.getRunType() == RunType.DISABLE) {
-                                Intent replyIntent = new Intent("fansirsqi.xposed.sesame.status");
-                                replyIntent.putExtra("EXTRA_RUN_TYPE", RunType.ACTIVE.getNickName());
-                                replyIntent.setPackage(General.MODULE_PACKAGE_NAME);
-                                context.sendBroadcast(replyIntent);
-                                Log.system(TAG, "Replied with status: " + RunType.ACTIVE.getNickName());
-                            }
-                        } catch (Throwable th) {
-                            Log.runtime(TAG, "sesame sendBroadcast status err:");
-                            Log.printStackTrace(TAG, th);
-                        }
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.rpctest":
-                        try {
-                            String method = intent.getStringExtra("method");
-                            String data = intent.getStringExtra("data");
-                            String type = intent.getStringExtra("type");
-                            DebugRpc rpcInstance = new DebugRpc(); // 创建实例
-                            rpcInstance.start(method, data, type); // 通过实例调用非静态方法
-                        } catch (Throwable th) {
-                            Log.runtime(TAG, "sesame 测试RPC请求失败:");
-                            Log.printStackTrace(TAG, th);
-                        }
-                        break;
-                    default:
-                        throw new IllegalStateException("Unexpected value: " + action);
+            try {
+                if (alarmScheduler != null) {
+                    alarmScheduler.handleAlarmTrigger();
                 }
+                int requestCode = intent.getIntExtra("request_code", -1);
+                alarmScheduler.consumeAlarm(requestCode);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, "AlipayBroadcastReceiver.onReceive err:", t);
             }
         }
 
