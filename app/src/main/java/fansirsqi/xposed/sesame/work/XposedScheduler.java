@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.work;
 
+import static fansirsqi.xposed.sesame.work.XposedScheduler.TaskType.*;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Handler;
@@ -26,7 +28,7 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
  * 🔧 调度策略：
  * - HANDLER_ONLY：仅使用Handler（快速响应，依赖进程存活）
  * - JOBSERVICE_ONLY：仅使用JobService（系统级调度，高可靠性）【默认】
- * - HYBRID：混合模式（短延迟用Handler，长延迟用JobService）
+ * - HYBRID：混合模式（JobService优先，极短延迟用Handler）
  * - AUTO：自动模式（根据系统状态智能选择）
  * 🚀 核心优势：
  * - 利用支付宝JobService基础设施，提升调度可靠性
@@ -136,7 +138,7 @@ public class XposedScheduler {
             int taskId = taskIdCounter.incrementAndGet();
             Runnable task = () -> {
                 scheduledTasks.remove(taskId);
-                executeTask(TaskType.DELAYED, taskId);
+                executeTask(DELAYED, taskId);
             };
             
             scheduledTasks.put(taskId, task);
@@ -170,7 +172,7 @@ public class XposedScheduler {
             int taskId = taskIdCounter.incrementAndGet();
             Runnable task = () -> {
                 scheduledTasks.remove(taskId);
-                executeTask(TaskType.PERIODIC, taskId);
+                executeTask(PERIODIC, taskId);
             };
             
             scheduledTasks.put(taskId, task);
@@ -214,7 +216,7 @@ public class XposedScheduler {
             int taskId = taskIdCounter.incrementAndGet();
             Runnable task = () -> {
                 scheduledTasks.remove(taskId);
-                executeTask(TaskType.WAKEUP, taskId);
+                executeTask(WAKEUP, taskId);
             };
             
             scheduledTasks.put(taskId, task);
@@ -236,7 +238,7 @@ public class XposedScheduler {
             Log.record(TAG, "立即执行手动任务");
             
             // 在新线程中执行，避免阻塞主线程
-            new Thread(() -> executeTask(TaskType.MANUAL, 0)).start();
+            new Thread(() -> executeTask(MANUAL, 0)).start();
         } catch (Exception e) {
             Log.error(TAG, "执行手动任务失败: " + e.getMessage());
         }
@@ -253,7 +255,7 @@ public class XposedScheduler {
             Log.record(TAG, "立即执行延迟任务（时间已过的精确执行）");
             
             // 在新线程中执行，使用DELAYED类型确保会调度下次执行
-            new Thread(() -> executeTask(TaskType.DELAYED, 0)).start();
+            new Thread(() -> executeTask(DELAYED, 0)).start();
         } catch (Exception e) {
             Log.error(TAG, "立即执行延迟任务失败: " + e.getMessage());
         }
@@ -312,7 +314,7 @@ public class XposedScheduler {
             ApplicationHook.getMainTask().startTask(false);
             
             // 调度下一次执行（仅对周期性任务）
-            if (TaskType.PERIODIC.equals(taskType) || TaskType.DELAYED.equals(taskType)) {
+            if (PERIODIC.equals(taskType) || DELAYED.equals(taskType)) {
                 scheduleNextExecution();
                 
                 // 抗假死机制：额外调度一个备用任务（时间间隔x2）
@@ -326,7 +328,7 @@ public class XposedScheduler {
                 taskType, getTaskTypeDescription(taskType), taskId, executionTime));
                 
             // 记录调度下次执行的情况
-            if (TaskType.PERIODIC.equals(taskType) || TaskType.DELAYED.equals(taskType)) {
+            if (PERIODIC.equals(taskType) || DELAYED.equals(taskType)) {
                 Log.record(TAG, "🔄 准备调度下次执行...");
             } else {
                 Log.record(TAG, String.format("⏹️ 任务类型 %s（%s）不需要调度下次执行", taskType, getTaskTypeDescription(taskType)));
@@ -399,7 +401,7 @@ public class XposedScheduler {
                 Runnable backupTask = () -> {
                     scheduledTasks.remove(taskId);
                     Log.record(TAG, "🔄 备用任务触发 - 检测到可能的假死，尝试恢复");
-                    executeTask(TaskType.DELAYED, taskId);
+                    executeTask(DELAYED, taskId);
                 };
                 
                 scheduledTasks.put(taskId, backupTask);
@@ -438,10 +440,10 @@ public class XposedScheduler {
      */
     private static String getTaskTypeDescription(String taskType) {
         return switch (taskType) {
-            case TaskType.PERIODIC -> "周期性任务，执行完会调度下次";
-            case TaskType.DELAYED -> "延迟执行任务，执行完会调度下次";
-            case TaskType.WAKEUP -> "定时唤醒任务，单次执行";
-            case TaskType.MANUAL -> "手动执行任务，一次性执行";
+            case PERIODIC -> "周期性任务，执行完会调度下次";
+            case DELAYED -> "延迟执行任务，执行完会调度下次";
+            case WAKEUP -> "定时唤醒任务，单次执行";
+            case MANUAL -> "手动执行任务，一次性执行";
             default -> "未知任务类型";
         };
     }
@@ -456,7 +458,7 @@ public class XposedScheduler {
         return switch (strategy) {
             case ScheduleStrategy.HANDLER_ONLY -> "仅使用Handler，快速响应";
             case ScheduleStrategy.JOBSERVICE_ONLY -> "仅使用JobService，高可靠性";
-            case ScheduleStrategy.HYBRID -> "混合模式，24小时抗假死";
+            case ScheduleStrategy.HYBRID -> "混合模式，JobService优先+抗假死";
             case ScheduleStrategy.AUTO -> "自动模式，智能选择";
             default -> "未知策略";
         };
@@ -492,8 +494,8 @@ public class XposedScheduler {
      *    - 适合后台保活场景
      * <p>
      * 3. HYBRID：混合模式
-     *    - 短延迟(<1分钟)用Handler（快速响应）
-     *    - 长延迟(>1分钟)用JobService（可靠性）
+     *    - 极短延迟(<10秒)用Handler（快速响应）
+     *    - 其他延迟优先用JobService（高可靠性）
      * <p>
      * 4. AUTO：自动模式
      *    - 根据延迟时间和系统负载智能选择
@@ -517,30 +519,25 @@ public class XposedScheduler {
                 return available;
                 
             case ScheduleStrategy.HYBRID:
-                // 混合模式：抗假死优化调度策略
-                // 策略1：短延迟(<30秒)用Handler（快速响应）
-                // 策略2：中延迟(30秒-5分钟)根据系统状态选择
-                // 策略3：长延迟(>5分钟)优先JobService（抗假死）
+                // 混合模式：JobService优先，抗假死优化调度策略
+                // 策略1：优先使用JobService（系统级调度，高可靠性）
+                // 策略2：仅在极短延迟(<10秒)时使用Handler（快速响应）
+                // 策略3：JobService不可用时回退到Handler
                 if (!JobServiceHook.isJobServiceAvailable()) {
+                    Log.record(TAG, "混合模式 - JobService不可用，回退到Handler");
                     return false;
                 }
                 
-                // 短延迟：快速响应，使用Handler
-                if (delayMillis < 30000) {
-                    Log.record(TAG, "混合模式 - 短延迟使用Handler，快速响应");
+                // 极短延迟：快速响应优先，使用Handler
+                if (delayMillis < 10000) { // 10秒
+                    Log.record(TAG, "混合模式 - 极短延迟(<10秒)使用Handler，快速响应优先");
                     return false;
                 }
                 
-                // 长延迟：抗假死，强制使用JobService
-                if (delayMillis > 300000) { // 5分钟
-                    Log.record(TAG, "混合模式 - 长延迟使用JobService，抗假死保障");
-                    return true;
-                }
-                // 中延迟：根据Handler负载决策（防止Handler阻塞）
-                boolean useJobService = scheduledTasks.size() > 2;
-                Log.record(TAG, String.format("混合模式 - 中延迟智能选择: %s (Handler任务数=%d)", 
-                    useJobService ? "JobService" : "Handler", scheduledTasks.size()));
-                return useJobService;
+                // 其他所有情况：优先使用JobService，提供最佳可靠性
+                Log.record(TAG, String.format("混合模式 - 延迟=%d秒，优先使用JobService提供高可靠性", 
+                    delayMillis / 1000));
+                return true;
             case ScheduleStrategy.AUTO:
             default:
                 // 自动模式：智能选择最佳策略

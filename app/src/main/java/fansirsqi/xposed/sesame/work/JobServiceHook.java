@@ -84,7 +84,6 @@ public class JobServiceHook {
     private static void hookChargingJobService(ClassLoader classLoader) {
         try {
             Class<?> chargingJobServiceClass = XposedHelpers.findClass(CHARGING_JOB_SERVICE, classLoader);
-            
             // Hook onStartJob 方法
             XposedHelpers.findAndHookMethod(chargingJobServiceClass, "onStartJob",
                 android.app.job.JobParameters.class, new XC_MethodHook() {
@@ -145,7 +144,6 @@ public class JobServiceHook {
     
     /**
      * 调度JobService任务
-     * 
      * 核心思路：
      * 1. 使用Android JobScheduler API主动调度支付宝的JobService
      * 2. 优先尝试ChargingJobService（exported=true，更容易调用）
@@ -166,7 +164,6 @@ public class JobServiceHook {
                 Log.error(TAG, "无法获取JobScheduler服务");
                 return false;
             }
-            
             // 生成唯一的Job ID（避免与支付宝现有Job冲突）
             int jobId = jobIdCounter.incrementAndGet();
             // 策略1：优先尝试使用ChargingJobService
@@ -176,6 +173,8 @@ public class JobServiceHook {
             if (result == JobScheduler.RESULT_SUCCESS) {
                 Log.record(TAG, String.format("✓ ChargingJobService调度成功, JobID=%d, 延迟=%d秒", 
                     jobId, delayMillis / 1000));
+                Log.record(TAG, String.format("🎯 任务将在 %d秒 后由系统执行，届时Hook会拦截并执行Sesame任务", 
+                    delayMillis / 1000));
                 return true;
             } else {
                 Log.record(TAG, String.format("ChargingJobService调度失败(结果码=%d), 尝试通用JobService", result));
@@ -188,6 +187,8 @@ public class JobServiceHook {
                 if (fallbackResult == JobScheduler.RESULT_SUCCESS) {
                     Log.record(TAG, String.format("✓ 通用JobService调度成功, JobID=%d, 延迟=%d秒", 
                         jobId, delayMillis / 1000));
+                    Log.record(TAG, String.format("🎯 任务将在 %d秒 后由系统执行，届时Hook会拦截并执行Sesame任务", 
+                        delayMillis / 1000));
                     return true;
                 } else {
                     Log.error(TAG, String.format("所有JobService调度失败, ChargingJobService结果=%d, 通用JobService结果=%d", 
@@ -246,14 +247,14 @@ public class JobServiceHook {
      * @param jobComponent JobService组件名
      * @return 配置好的JobInfo.Builder
      */
+    @SuppressLint("DefaultLocale")
     private static JobInfo.Builder getBuilder(long delayMillis, int jobId, ComponentName jobComponent) {
         JobInfo.Builder jobBuilder = new JobInfo.Builder(jobId, jobComponent)
             .setMinimumLatency(delayMillis)              // 最小延迟时间
             .setOverrideDeadline(delayMillis + 60000)    // 最大延迟时间（+1分钟容错）
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_NONE) // 不需要网络连接
-            .setPersisted(true)                         // 持久化（避免重启后执行）
+            .setPersisted(false)                         // 不持久化（避免重启后执行）
             .setBackoffCriteria(30000, JobInfo.BACKOFF_POLICY_LINEAR); // 失败退避：30秒线性
-            
         // Android 8.0+ 需要额外设置系统状态要求
         // 设置为false表示不需要这些条件，任何时候都可以执行
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -261,6 +262,8 @@ public class JobServiceHook {
                      .setRequiresCharging(false)          // 不要求充电状态
                      .setRequiresDeviceIdle(false)        // 不要求设备空闲
                      .setRequiresStorageNotLow(false);    // 不要求存储空间充足
+        } else {
+            Log.record(TAG, String.format("📱 Android %d 无需额外系统状态配置", Build.VERSION.SDK_INT));
         }
         return jobBuilder;
     }
@@ -331,7 +334,7 @@ public class JobServiceHook {
                     Log.printStackTrace(TAG, e);
                 }
             }).start();
-            
+
         } catch (Exception e) {
             Log.error(TAG, "启动Sesame任务失败: " + e.getMessage());
         }
@@ -353,7 +356,6 @@ public class JobServiceHook {
     
     /**
      * 检查JobService是否可用
-     * 
      * 可用性判断：
      * - Hook已安装：确保能够拦截JobService调用
      * - 不需要等待支付宝主动触发：我们主动调度
@@ -369,9 +371,8 @@ public class JobServiceHook {
      */
     @SuppressLint("DefaultLocale")
     public static void logStatus() {
-        Log.record(TAG, String.format("JobService Hook状态: Hook已安装=%s, 支付宝JobService已触发=%s, 可用性=%s, SDK版本=%d", 
+        Log.record(TAG, String.format("JobService Hook状态: Hook已安装=%s, 可用性=%s, SDK版本=%d", 
             hookInstalled.get(), 
-            jobServiceAvailable.get(), 
             isJobServiceAvailable(),
             Build.VERSION.SDK_INT));
     }
