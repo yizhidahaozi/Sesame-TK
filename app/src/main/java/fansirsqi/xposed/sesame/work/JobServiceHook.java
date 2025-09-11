@@ -205,7 +205,6 @@ public class JobServiceHook {
 
     /**
      * 创建JobInfo对象
-     * 
      * 关键点：
      * 1. 使用运行时的真实包名（支付宝的包名），而不是硬编码
      * 2. 创建指向支付宝JobService的ComponentName
@@ -252,7 +251,7 @@ public class JobServiceHook {
             .setMinimumLatency(delayMillis)              // 最小延迟时间
             .setOverrideDeadline(delayMillis + 60000)    // 最大延迟时间（+1分钟容错）
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_NONE) // 不需要网络连接
-            .setPersisted(false)                         // 不持久化（避免重启后执行）
+            .setPersisted(true)                         // 持久化（避免重启后执行）
             .setBackoffCriteria(30000, JobInfo.BACKOFF_POLICY_LINEAR); // 失败退避：30秒线性
             
         // Android 8.0+ 需要额外设置系统状态要求

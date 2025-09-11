@@ -78,7 +78,7 @@ public class XposedScheduler {
     public static class ScheduleStrategy {
         public static final String AUTO = "auto";        // 自动选择
         public static final String HANDLER_ONLY = "handler";  // 仅使用Handler
-        public static final String JOBSERVER_ONLY = "jobservice"; // 仅使用JobService
+        public static final String JOBSERVICE_ONLY = "jobservice"; // 仅使用JobService
         public static final String HYBRID = "hybrid";    // 混合模式
     }
     
@@ -106,7 +106,8 @@ public class XposedScheduler {
                 }
                 
                 initialized = true;
-                Log.record(TAG, "Xposed混合调度器初始化成功 - 当前策略: HYBRID混合模式（24小时抗假死优化）");
+                Log.record(TAG, String.format("Xposed混合调度器初始化成功 - 当前策略: %s (%s)", 
+                    currentStrategy, getStrategyDescription(currentStrategy)));
                 logStatus();
             }
         } catch (Exception e) {
@@ -121,8 +122,8 @@ public class XposedScheduler {
     public static void scheduleDelayedExecution(Context context, long delayMillis) {
         try {
             ensureInitialized(context);
-            Log.record(TAG, String.format("调度延迟执行任务，延迟=%d秒，策略=%s", 
-                delayMillis / 1000, currentStrategy));
+            Log.record(TAG, String.format("调度延迟执行任务，延迟=%d秒，策略=%s (%s)", 
+                delayMillis / 1000, currentStrategy, getStrategyDescription(currentStrategy)));
             // 选择最佳调度策略
             boolean useJobService = shouldUseJobService(delayMillis);
             if (useJobService && JobServiceHook.scheduleJobServiceTask(context, delayMillis)) {
@@ -155,7 +156,7 @@ public class XposedScheduler {
         try {
             ensureInitialized(context);
             
-            Log.record(TAG, String.format("调度精确执行任务，目标时间=%s", 
+            Log.record(TAG, String.format("调度精确执行任务，目标时间=%s",
                 TimeUtil.getCommonDate(exactTimeMillis)));
             
             // 优先使用JobService进行精确调度
@@ -436,18 +437,13 @@ public class XposedScheduler {
      * @return 任务类型的中文描述
      */
     private static String getTaskTypeDescription(String taskType) {
-        switch (taskType) {
-            case TaskType.PERIODIC:
-                return "周期性任务，执行完会调度下次";
-            case TaskType.DELAYED:
-                return "延迟执行任务，执行完会调度下次";
-            case TaskType.WAKEUP:
-                return "定时唤醒任务，单次执行";
-            case TaskType.MANUAL:
-                return "手动执行任务，一次性执行";
-            default:
-                return "未知任务类型";
-        }
+        return switch (taskType) {
+            case TaskType.PERIODIC -> "周期性任务，执行完会调度下次";
+            case TaskType.DELAYED -> "延迟执行任务，执行完会调度下次";
+            case TaskType.WAKEUP -> "定时唤醒任务，单次执行";
+            case TaskType.MANUAL -> "手动执行任务，一次性执行";
+            default -> "未知任务类型";
+        };
     }
     
     /**
@@ -457,18 +453,13 @@ public class XposedScheduler {
      * @return 策略的中文描述
      */
     private static String getStrategyDescription(String strategy) {
-        switch (strategy) {
-            case ScheduleStrategy.HANDLER_ONLY:
-                return "仅使用Handler，快速响应";
-            case ScheduleStrategy.JOBSERVER_ONLY:
-                return "仅使用JobService，高可靠性";
-            case ScheduleStrategy.HYBRID:
-                return "混合模式，24小时抗假死";
-            case ScheduleStrategy.AUTO:
-                return "自动模式，智能选择";
-            default:
-                return "未知策略";
-        }
+        return switch (strategy) {
+            case ScheduleStrategy.HANDLER_ONLY -> "仅使用Handler，快速响应";
+            case ScheduleStrategy.JOBSERVICE_ONLY -> "仅使用JobService，高可靠性";
+            case ScheduleStrategy.HYBRID -> "混合模式，24小时抗假死";
+            case ScheduleStrategy.AUTO -> "自动模式，智能选择";
+            default -> "未知策略";
+        };
     }
     
     /**
@@ -518,7 +509,7 @@ public class XposedScheduler {
             case ScheduleStrategy.HANDLER_ONLY:
                 // 强制使用Handler模式
                 return false;
-            case ScheduleStrategy.JOBSERVER_ONLY:
+            case ScheduleStrategy.JOBSERVICE_ONLY:
                 // JobService优先模式：只要JobService可用就使用
                 boolean available = JobServiceHook.isJobServiceAvailable();
                 Log.record(TAG, String.format("JobService优先模式 - JobService可用性: %s, 延迟: %d秒", 
@@ -569,12 +560,13 @@ public class XposedScheduler {
     public static void logStatus() {
         try {
             String strategyDescription = getStrategyDescription(currentStrategy);
-            String status = String.format("【Xposed混合调度器状态】\n" +
-                "├─ 初始化状态: %s\n" +
-                "├─ 当前策略: %s (%s)\n" +
-                "├─ Handler任务数: %d\n" +
-                "├─ JobService可用性: %s\n" +
-                "└─ 24小时运行: %s", 
+            String status = String.format("""
+                            【Xposed混合调度器状态】
+                            ├─ 初始化状态: %s
+                            ├─ 当前策略: %s (%s)
+                            ├─ Handler任务数: %d
+                            ├─ JobService可用性: %s
+                            └─ 24小时运行: %s""",
                 initialized ? "✓已初始化" : "✗未初始化", 
                 currentStrategy,
                 strategyDescription,
