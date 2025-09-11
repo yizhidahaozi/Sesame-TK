@@ -1046,8 +1046,10 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             } else {
                                 Log.record(TAG, "闹钟唤醒，应用已初始化，直接执行任务");
                             }
+
                             // 执行任务的核心逻辑
                             executeTaskWithLog(requestCode);
+
                         } catch (Exception e) {
                             Log.error(TAG, "处理执行广播时发生错误: " + e.getMessage());
                             Log.printStackTrace(e);
@@ -1106,8 +1108,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             long startTime = System.currentTimeMillis();
             // 设置线程名称以标识闹钟触发的执行
             Thread.currentThread().setName("AlarmTriggered_" + requestCode + "_" + System.currentTimeMillis());
-            // 直接执行任务
-            mainTask.startTask(true);
+            // 直接执行任务，使用非强制模式避免中断正在运行的旧任务
+            mainTask.startTask(false);
+
             // 记录执行耗时
             long executionTime2 = System.currentTimeMillis() - startTime;
             Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");

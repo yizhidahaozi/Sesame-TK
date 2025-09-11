@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import fansirsqi.xposed.sesame.data.General;
-import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -126,25 +125,7 @@ public class AlarmScheduler {
         }
         return false;
     }
-    
-    /**
-     * 取消所有已设置的闹钟
-     */
-    public void cancelAllAlarms() {
-        AlarmManager alarmManager = getAlarmManager();
-        if (alarmManager == null) return;
-        
-        for (Map.Entry<Integer, PendingIntent> entry : scheduledAlarms.entrySet()) {
-            try {
-                alarmManager.cancel(entry.getValue());
-                Log.record(TAG, "已取消闹钟: ID=" + entry.getKey());
-            } catch (Exception e) {
-                Log.error(TAG, "取消闹钟失败: " + e.getMessage());
-            }
-        }
-        scheduledAlarms.clear();
-    }
-    
+
     /**
      * 消费并取消一个已触发的闹钟
      * @param requestCode 闹钟的请求码
