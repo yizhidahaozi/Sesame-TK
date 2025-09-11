@@ -381,7 +381,8 @@ public class AntMember extends ModelTask {
       // 添加检查，确保templateId存在
       if (!task.has("templateId")) {
         String taskTitle = task.has("title") ? task.getString("title") : "未知任务";
-        Log.error(TAG, "芝麻信用💳[任务缺少templateId字段]#任务标题:" + taskTitle);
+        // Log.error(TAG, "芝麻信用💳[任务缺少templateId字段]#任务标题:" + taskTitle);
+        //  Log.error(TAG, "芝麻信用💳[任务列表]#" + taskList);
         continue;  // 跳过这个任务
       }
       String taskTemplateId = task.getString("templateId");
