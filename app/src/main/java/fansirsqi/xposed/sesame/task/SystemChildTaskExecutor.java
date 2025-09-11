@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.task;
 
-import android.os.Handler;
-
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
@@ -23,66 +21,60 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class SystemChildTaskExecutor implements ChildTaskExecutor {
     private static final String TAG = "SystemChildTaskExecutor";
-    private final Handler handler;
 
-    private final Map<String, ThreadPoolExecutor> groupChildTaskExecutorMap = new ConcurrentHashMap<>();
+    /**
+     * 用于存储按组分类的子任务的Future。
+     * 结构: Map<groupName, Map<taskId, Future<?>>>
+     */
+    private final Map<String, Map<String, Future<?>>> groupChildTaskFuturesMap = new ConcurrentHashMap<>();
 
     public SystemChildTaskExecutor() {
-        handler = ApplicationHook.getMainHandler();
+        // Handler不再需要，因为调度将由全局调度器处理
     }
 
     @Override
     public Boolean addChildTask(ModelTask.ChildModelTask childTask) {
-        long execTime = childTask.getExecTime();
-        Runnable runnable = () -> {
-            if (childTask.getIsCancel()) {
-                return;
-            }
+        String group = childTask.getGroup();
+        String taskId = childTask.getId();
 
-            ThreadPoolExecutor threadPoolExecutor = getChildGroupHandler(childTask.getGroup());
-            Future<?> future = threadPoolExecutor.submit((Callable<Void>) () -> {
-                try {
-                    long delay = execTime - System.currentTimeMillis();
-                    if (delay > 0) {
-                        try {
-                            Thread.sleep(delay);
-                        } catch (InterruptedException e) {
-                            Log.runtime(TAG, "延迟中断，任务可能已取消: " + childTask.getId());
-                            Thread.currentThread().interrupt(); // 恢复中断状态
-                            return null;
-                        }
-                    }
-
-                    childTask.run();
-
-                } catch (Throwable t) {
-                    Log.printStackTrace(TAG, "子任务执行异常: " + childTask.getId(), t);
-                } finally {
-                    // 可选：根据业务决定是否移除
-                    childTask.getModelTask().removeChildTask(childTask.getId());
+        Runnable executionRunnable = () -> {
+            try {
+                if (childTask.getIsCancel()) {
+                    return;
                 }
-                return null;
-            });
-
-            childTask.setCancelTask(() -> future.cancel(true));
+                // 内部不再需要sleep，延迟已由调度器处理
+                childTask.run();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, "子任务执行异常: " + taskId, t);
+            } finally {
+                cleanupTask(group, taskId, childTask);
+            }
         };
 
-        if (execTime > 0) {
-            long delayMillis = execTime - System.currentTimeMillis();
-            if (delayMillis > 3000) {
-                handler.postDelayed(runnable, delayMillis - 2500);
-                childTask.setCancelTask(() -> handler.removeCallbacks(runnable));
-            } else {
-                // 防止负数或过小 delay
-                delayMillis = Math.max(0, delayMillis);
-                childTask.setCancelTask(() -> handler.removeCallbacks(runnable));
-                handler.postDelayed(runnable, delayMillis);
-            }
+        long delay = childTask.getExecTime() - System.currentTimeMillis();
+        Future<?> future;
+
+        if (delay > 0) {
+            future = GlobalThreadPools.schedule(executionRunnable, delay, TimeUnit.MILLISECONDS);
         } else {
-            handler.post(runnable);
+            future = GlobalThreadPools.submit(executionRunnable);
         }
 
-        return true;
+        if (future != null) {
+            groupChildTaskFuturesMap.computeIfAbsent(group, k -> new ConcurrentHashMap<>()).put(taskId, future);
+            childTask.setCancelTask(() -> future.cancel(true));
+            return true;
+        }
+
+        return false;
+    }
+
+    private void cleanupTask(String group, String taskId, ModelTask.ChildModelTask childTask) {
+        Map<String, Future<?>> taskFutures = groupChildTaskFuturesMap.get(group);
+        if (taskFutures != null) {
+            taskFutures.remove(taskId);
+        }
+        childTask.getModelTask().removeChildTask(taskId);
     }
 
     @Override
@@ -92,65 +84,23 @@ public class SystemChildTaskExecutor implements ChildTaskExecutor {
 
     @Override
     public Boolean clearGroupChildTask(String group) {
-        ThreadPoolExecutor pool = groupChildTaskExecutorMap.get(group);
-        if (pool != null) {
-            GlobalThreadPools.shutdownAndAwaitTermination(pool, 3, group);
-            groupChildTaskExecutorMap.remove(group);
+        Map<String, Future<?>> taskFutures = groupChildTaskFuturesMap.get(group);
+        if (taskFutures != null) {
+            for (Future<?> future : taskFutures.values()) {
+                future.cancel(true);
+            }
+            taskFutures.clear();
         }
         return true;
     }
 
     @Override
     public void clearAllChildTask() {
-        for (Map.Entry<String, ThreadPoolExecutor> entry : groupChildTaskExecutorMap.entrySet()) {
-            GlobalThreadPools.shutdownAndAwaitTermination(entry.getValue(), 3, entry.getKey());
+        for (Map<String, Future<?>> taskFutures : groupChildTaskFuturesMap.values()) {
+            for (Future<?> future : taskFutures.values()) {
+                future.cancel(true);
+            }
         }
-        groupChildTaskExecutorMap.clear();
-    }
-
-    private ThreadPoolExecutor getChildGroupHandler(String group) {
-        return getOrCreateThreadPool(group);
-    }
-
-    /**
-     * 获取或创建一个线程池
-     */
-    private synchronized ThreadPoolExecutor getOrCreateThreadPool(String group) {
-        ThreadPoolExecutor existing = groupChildTaskExecutorMap.get(group);
-        if (existing != null && !existing.isShutdown()) {
-            return existing;
-        }
-
-        ThreadPoolExecutor newPool = new ThreadPoolExecutor(
-                0,
-                Integer.MAX_VALUE,
-                30L,
-                TimeUnit.SECONDS,
-                new SynchronousQueue<>(),
-                new NamedThreadFactory("TaskGroup-" + group),
-                new ThreadPoolExecutor.CallerRunsPolicy()
-        );
-
-        groupChildTaskExecutorMap.put(group, newPool);
-        return newPool;
-    }
-
-    /**
-     * 自定义线程工厂，设置线程名前缀
-     */
-    private static class NamedThreadFactory implements ThreadFactory {
-        private final String namePrefix;
-        private final AtomicInteger threadNumber = new AtomicInteger(1);
-
-        public NamedThreadFactory(String namePrefix) {
-            this.namePrefix = namePrefix;
-        }
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, namePrefix + "-thread-" + threadNumber.getAndIncrement());
-            t.setDaemon(false); // 根据需要调整
-            return t;
-        }
+        groupChildTaskFuturesMap.clear();
     }
 }
