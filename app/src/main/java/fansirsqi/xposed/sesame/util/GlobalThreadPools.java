@@ -69,16 +69,16 @@ public class GlobalThreadPools {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            Log.error(TAG, "Thread sleep interrupted1 " + e.getMessage());
+            Log.error(TAG, "Thread sleep interrupted " + e.getMessage());
             Thread.currentThread().interrupt();
         } catch (Exception e1) {
             Log.printStackTrace(e1);
 //            Thread.currentThread().interrupt();
-            Log.error(TAG, "Thread sleep interrupted2 " + e1.getMessage());
+            Log.error(TAG, "Thread sleep interrupted " + e1.getMessage());
         } catch (Throwable t) {
             Log.printStackTrace(t);
 //            Thread.currentThread().interrupt();
-            Log.error(TAG, "Thread sleep interrupted3 " + t.getMessage());
+            Log.error(TAG, "Thread sleep interrupted " + t.getMessage());
         }
     }
 
