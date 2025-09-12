@@ -31,6 +31,12 @@ public class ResChecker {
             if ("SUCCESS".equalsIgnoreCase(jo.optString("memo", ""))) {
                 return true;
             }
+
+            // 特殊情况：如果是“人数过多”的系统错误，我们认为这不是一个需要记录的“失败”
+            String resultDesc = jo.optString("resultDesc", "");
+            if (resultDesc.contains("当前参与人数过多") || resultDesc.contains("请稍后再试")) {
+                return false; // 返回false，但不打印错误日志
+            }
             // 获取调用栈信息以确定错误来源
             StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
             String callerInfo = getString(stackTrace);

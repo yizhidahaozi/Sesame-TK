@@ -31,8 +31,8 @@ public class BaseModel extends Model {
             new IntegerModelField.MultiplyIntegerModelField("checkInterval", "执行间隔(分钟)", 50, 1, 12 * 60, 60_000);//此处调整至30分钟执行一次，可能会比平常耗电一点。。
 
     @Getter
-    public static final IntegerModelField.MultiplyIntegerModelField taskWaitTime =
-            new IntegerModelField.MultiplyIntegerModelField("taskWaitTime", "任务等待时间(分钟)", 10, 1, 12 * 60, 60_000);
+    public static final IntegerModelField taskWaitTime =
+            new IntegerModelField("taskWaitTime", "任务等待时间(-1:无限)", 10, -1, 12 * 60);
 
     /**
      * 定时执行的时间点列表
