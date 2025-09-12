@@ -196,14 +196,8 @@ public class TaskRunner {
                              Thread taskThread = mainTask.getThread();
                              if (taskThread != null && taskThread.isAlive()) {
                                 // 计算任务已执行时间
-                                long currentTime = System.currentTimeMillis();
-                                long taskStartTime = mainTask.getTaskStartTime();
-                                if (taskStartTime > 0 && taskStartTime <= currentTime) {
-                                    long duration = currentTime - taskStartTime;
-                                    taskStatus = String.format("⚡正在执行 (%d秒)", TimeUnit.MILLISECONDS.toSeconds(duration));
-                                } else {
-                                    taskStatus = "⚡正在执行";
-                                }
+                                long taskStartTime = System.currentTimeMillis() - task.getStartTime();
+                                taskStatus = String.format("⚡正在执行 (%d秒)", TimeUnit.MILLISECONDS.toSeconds(taskStartTime));
                              } else if (taskThread == null) {
                                  // 计算下次执行时间
                                  long nextExecTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(BaseModel.taskWaitTime.getValue());
@@ -214,14 +208,8 @@ public class TaskRunner {
                                  taskStatus = String.format("⏰等待执行 (下次: %s)", nextTimeStr);
                              } else {
                                 // 显示任务完成用时
-                                long taskStartTime = mainTask.getTaskStartTime();
-                                long taskEndTime = mainTask.getTaskEndTime();
-                                if (taskStartTime > 0 && taskEndTime > taskStartTime) {
-                                    long duration = taskEndTime - taskStartTime;
-                                    taskStatus = String.format("✅已完成 (用时%d秒)", TimeUnit.MILLISECONDS.toSeconds(duration));
-                                } else {
-                                    taskStatus = "✅已完成";
-                                }
+                                long taskDuration = task.getEndTime() - task.getStartTime();
+                                taskStatus = String.format("✅已完成 (用时%d秒)", TimeUnit.MILLISECONDS.toSeconds(taskDuration));
                              }
                          } else {
                              taskStatus = "❓状态未知";
