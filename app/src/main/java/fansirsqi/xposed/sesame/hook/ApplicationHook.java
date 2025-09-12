@@ -19,13 +19,14 @@ import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
 
-import org.json.JSONObject;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,7 +77,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
-    private static final Map < String, PendingIntent > wakenAtTimeAlarmMap = new ConcurrentHashMap < > ();
+    private static final Map<String, PendingIntent> wakenAtTimeAlarmMap = new ConcurrentHashMap<>();
     @Getter
     private static ClassLoader classLoader = null;
     @Getter
@@ -124,12 +125,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         ApplicationHook.offline = offline;
     }
 
-    private static volatile long lastExecTime = 0; // 添加为类成员变量
+    private volatile long lastExecTime = 0; // 添加为类成员变量
     private static final long MAX_INACTIVE_TIME = 3600000; // 最大不活动时间：1小时
 
     private XC_LoadPackage.LoadPackageParam modelLoadPackageParam;
 
-    private static XC_LoadPackage.LoadPackageParam appLloadPackageParam;
+    private XC_LoadPackage.LoadPackageParam appLloadPackageParam;
 
     static {
         dayCalendar = Calendar.getInstance();
@@ -151,9 +152,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         deoptimizeMethod = m;
     }
 
-    static void deoptimizeMethod(Class < ? > c) throws InvocationTargetException, IllegalAccessException {
-        for (Method m: c.getDeclaredMethods()) {
-            if (deoptimizeMethod != null && m.getName().equals("makeApplicationInner")) {
+    static void deoptimizeMethod(Class<?> c, String n) throws InvocationTargetException, IllegalAccessException {
+        for (Method m : c.getDeclaredMethods()) {
+            if (deoptimizeMethod != null && m.getName().equals(n)) {
                 deoptimizeMethod.invoke(null, m);
                 if (BuildConfig.DEBUG)
                     XposedBridge.log("D/" + TAG + " Deoptimized " + m.getName());
@@ -170,28 +171,23 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         try {
             // 检查长时间未执行的情况
             checkInactiveTime();
-
+            
             int checkInterval = BaseModel.getCheckInterval().getValue();
-            List < String > execAtTimeList = BaseModel.getExecAtTimeList().getValue();
+            List<String> execAtTimeList = BaseModel.getExecAtTimeList().getValue();
             if (execAtTimeList != null && execAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时执行未开启");
                 return;
             }
-
-            long delayMillis = checkInterval; // 默认使用配置的检查间隔
-            long targetTime = 0;
-
             try {
                 if (execAtTimeList != null) {
                     Calendar lastExecTimeCalendar = TimeUtil.getCalendarByTimeMillis(lastExecTime);
                     Calendar nextExecTimeCalendar = TimeUtil.getCalendarByTimeMillis(lastExecTime + checkInterval);
-                    for (String execAtTime: execAtTimeList) {
+                    for (String execAtTime : execAtTimeList) {
                         Calendar execAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(execAtTime);
                         if (execAtTimeCalendar != null && lastExecTimeCalendar.compareTo(execAtTimeCalendar) < 0 && nextExecTimeCalendar.compareTo(execAtTimeCalendar) > 0) {
                             Log.record(TAG, "设置定时执行:" + execAtTime);
-                            targetTime = execAtTimeCalendar.getTimeInMillis();
-                            delayMillis = targetTime - lastExecTime;
-                            break;
+                            execDelayedHandler(execAtTimeCalendar.getTimeInMillis() - lastExecTime);
+                            return;
                         }
                     }
                 }
@@ -199,9 +195,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.runtime(TAG, "execAtTime err:：" + e.getMessage());
                 Log.printStackTrace(TAG, e);
             }
-
-            // 使用新的可靠执行方法
-            scheduleNextExecutionWithAlarm(delayMillis, targetTime > 0 ? targetTime : (lastExecTime + delayMillis));
+            execDelayedHandler(checkInterval);
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -229,7 +223,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         if (General.MODULE_PACKAGE_NAME.equals(loadPackageParam.packageName)) {
             try {
-                Class < ? > applicationClass = loadPackageParam.classLoader.loadClass("android.app.Application");
+                Class<?> applicationClass = loadPackageParam.classLoader.loadClass("android.app.Application");
                 XposedHelpers.findAndHookMethod(applicationClass, "onCreate", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
@@ -248,8 +242,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 classLoader = appLloadPackageParam.classLoader;
                 // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
                 try {
-                    @SuppressLint("PrivateApi") Class < ? > loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
-                    deoptimizeMethod(loadedApkClass);
+                    Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
+                    deoptimizeMethod(loadedApkClass, "makeApplicationInner");
                 } catch (Throwable t) {
                     Log.runtime(TAG, "deoptimize makeApplicationInner err:");
                     Log.printStackTrace(TAG, t);
@@ -313,7 +307,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         Toast.show("用户已切换");
                                         return;
                                     }
-                                    //                                    UserMap.initUser(targetUid);
+//                                    UserMap.initUser(targetUid);
                                     HookUtil.INSTANCE.hookUser(appLloadPackageParam);
                                 }
                                 if (offline) {
@@ -347,8 +341,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                     Detector.INSTANCE.dangerous(appContext);
                                     return;
                                 }
+                                String packageName = loadPackageParam.packageName;
                                 String apkPath = loadPackageParam.appInfo.sourceDir;
-                                try (DexKitBridge ignored = DexKitBridge.create(apkPath)) {
+                                try (DexKitBridge bridge = DexKitBridge.create(apkPath)) {
                                     // Other use cases
                                     Log.runtime(TAG, "hook dexkit successfully");
                                 }
@@ -365,18 +360,10 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         }
                                         Log.record(TAG, "开始执行");
                                         long currentTime = System.currentTimeMillis();
-
-                                        // 检查是否是闹钟触发的执行
-                                        boolean isAlarmTriggered = Thread.currentThread().getName().contains("AlarmTriggered");
-                                        // 只有在非闹钟触发的情况下才检查执行间隔
-                                        if (lastExecTime + 2000 > currentTime && !isAlarmTriggered) {
-                                            Log.record(TAG, "执行间隔较短 (" + (currentTime - lastExecTime) + "ms)，跳过执行");
-                                            execDelayedWithAlarm(BaseModel.getCheckInterval().getValue());
+                                        if (lastExecTime + 2000 > currentTime) {
+                                            Log.record(TAG, "执行间隔较短，跳过执行");
+                                            execDelayedHandler(BaseModel.getCheckInterval().getValue());
                                             return;
-                                        }
-
-                                        if (isAlarmTriggered) {
-                                            Log.record(TAG, "闹钟触发执行，忽略间隔时间检查");
                                         }
                                         String currentUid = UserMap.getCurrentUid();
                                         String targetUid = HookUtil.INSTANCE.getUserId(appLloadPackageParam.classLoader);
@@ -386,7 +373,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             return;
                                         }
                                         lastExecTime = currentTime; // 更新最后执行时间
-                                        ModelTask.startAllTask(false, ModelTask.TaskExecutionMode.PARALLEL);
+                                        ModelTask.startAllTask(false);
                                         scheduleNextExecution(lastExecTime);
                                     } catch (Exception e) {
                                         Log.record(TAG, "❌执行异常");
@@ -440,17 +427,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     private static void setWakenAtTimeAlarm() {
         try {
-            List < String > wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
+            List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
             if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
             }
             unsetWakenAtTimeAlarm();
             try {
-                Intent intent0 = new Intent("com.eg.android.AlipayGphone.sesame.execute");
-                intent0.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-                intent0.putExtra("waken_at_time", true);    // 标记为定时唤醒
-                PendingIntent pendingIntent = PendingIntent.getBroadcast(appContext, 0, intent0, getPendingIntentFlag());
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(appContext, 0, new Intent("com.eg.android.AlipayGphone.sesame.execute"), getPendingIntentFlag());
                 Calendar calendar = Calendar.getInstance();
                 calendar.add(Calendar.DAY_OF_MONTH, 1);
                 calendar.set(Calendar.HOUR_OF_DAY, 0);
@@ -473,11 +457,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null) {
                             if (wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                                Intent wakenIntent = new Intent("com.eg.android.AlipayGphone" + ".sesame.execute");
-                                wakenIntent.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-                                wakenIntent.putExtra("waken_at_time", true);    // 标记为定时唤醒
-                                wakenIntent.putExtra("waken_time", wakenAtTime); // 记录唤醒时间
-                                PendingIntent wakenAtTimePendingIntent = PendingIntent.getBroadcast(appContext, i, wakenIntent, getPendingIntentFlag());
+                                PendingIntent wakenAtTimePendingIntent = PendingIntent.getBroadcast(appContext, i, new Intent("com.eg.android.AlipayGphone" + ".sesame.execute"), getPendingIntentFlag());
                                 if (setAlarmTask(wakenAtTimeCalendar.getTimeInMillis(), wakenAtTimePendingIntent)) {
                                     String wakenAtTimeKey = i + "|" + wakenAtTime;
                                     wakenAtTimeAlarmMap.put(wakenAtTimeKey, wakenAtTimePendingIntent);
@@ -502,7 +482,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     private static void unsetWakenAtTimeAlarm() {
         try {
-            for (Map.Entry < String, PendingIntent > entry: wakenAtTimeAlarmMap.entrySet()) {
+            for (Map.Entry<String, PendingIntent> entry : wakenAtTimeAlarmMap.entrySet()) {
                 try {
                     String wakenAtTimeKey = entry.getKey();
                     PendingIntent wakenAtTimePendingIntent = entry.getValue();
@@ -531,38 +511,28 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     @SuppressLint("WakelockTimeout")
-    /*
-     * 保存任务执行状态
-     */
-    private static void saveExecutionState(long lastExecTime, long nextExecTime) {
-        try {
-            JSONObject state = new JSONObject();
-            state.put("lastExecTime", lastExecTime);
-            state.put("nextExecTime", nextExecTime);
-            state.put("timestamp", System.currentTimeMillis());
-
-            // 保存到DataStore
-            String stateJson = state.toString();
-            DataStore.INSTANCE.put("execution_state", stateJson);
-            Log.debug(TAG, "已保存执行状态: " + stateJson);
-        } catch (Exception e) {
-            Log.error(TAG, "保存执行状态失败: " + e.getMessage());
-        }
-    }
-
-    private static synchronized Boolean initHandler(Boolean force) {
+    private synchronized Boolean initHandler(Boolean force) {
         try {
             // 检查是否长时间未执行，特别是跨越0点的情况
             if (!force && lastExecTime > 0) {
                 long currentTime = System.currentTimeMillis();
                 long inactiveTime = currentTime - lastExecTime;
-                boolean crossedMidnight = isCrossedMidnight(currentTime);
+                
+                Calendar lastExecCalendar = Calendar.getInstance();
+                lastExecCalendar.setTimeInMillis(lastExecTime);
+                
+                Calendar currentCalendar = Calendar.getInstance();
+                currentCalendar.setTimeInMillis(currentTime);
+                
+                boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
+                                         lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
+                
                 if (inactiveTime > MAX_INACTIVE_TIME || crossedMidnight) {
-                    Log.record(TAG, "⚠️ 初始化时检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，将强制重新初始化");
+                    Log.record(TAG, "⚠️ 初始化时检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，将强制重新初始化");
                     force = true; // 强制重新初始化
                 }
             }
-
+            
             destroyHandler(force); // 销毁之前的处理程序
             Model.initAllModel(); //在所有服务启动前装模块配置
             if (service == null) {
@@ -580,7 +550,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.record(TAG, startMsg);
                 Log.record(TAG, "⚙️模块版本：" + modelVersion);
                 Log.record(TAG, "📦应用版本：" + alipayVersion.getVersionString());
-                Config.load(userId); //加载配置
+                Config.load(userId);//加载配置
                 if (!Config.isLoaded()) {
                     Log.record(TAG, "用户模块配置加载失败");
                     Toast.show("用户模块配置加载失败");
@@ -629,7 +599,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     try {
                         PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
                         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
-                        wakeLock.acquire(10*60*1000L /*10 minutes*/); // 确保唤醒锁在前台服务启动前
+                        wakeLock.acquire(); // 确保唤醒锁在前台服务启动前
                     } catch (Throwable t) {
                         Log.record(TAG, "唤醒锁申请失败:");
                         Log.printStackTrace(t);
@@ -668,15 +638,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
     }
 
-    private static boolean isCrossedMidnight(long currentTime) {
-        Calendar lastExecCalendar = Calendar.getInstance();
-        lastExecCalendar.setTimeInMillis(lastExecTime);
-        Calendar currentCalendar = Calendar.getInstance();
-        currentCalendar.setTimeInMillis(currentTime);
-        return lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
-                lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
-    }
-
     /**
      * 销毁处理程序
      *
@@ -685,8 +646,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static synchronized void destroyHandler(Boolean force) {
         try {
             if (force) {
-                // 取消所有已设置的闹钟
-                cancelAllScheduledAlarms();
                 if (service != null) {
                     stopHandler();
                     BaseModel.destroyData();
@@ -715,187 +674,29 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     static void execHandler() {
-        // 这里不需要强制初始化，因为调用此方法的地方已经完成了初始化
-        // 例如在initHandler方法的末尾调用
         mainTask.startTask(false);
     }
 
     /**
      * 安排主任务在指定的延迟时间后执行，并更新通知中的下次执行时间。
-     * 使用AlarmManager设置闹钟，确保即使在设备休眠时也能执行任务。
      *
      * @param delayMillis 延迟执行的毫秒数
      */
-    static void execDelayedWithAlarm(long delayMillis) {
+    static void execDelayedHandler(long delayMillis) {
+        if (mainHandler == null) {
+            return;
+        }
+        mainHandler.postDelayed(() -> mainTask.startTask(true), delayMillis);
         try {
-            long exactTimeMillis = System.currentTimeMillis() + delayMillis;
-            // 生成唯一请求码
-            int requestCode = (int)((exactTimeMillis + 1) % 10000); // +1避免与其他闹钟ID冲突
-            // 创建用于执行任务的PendingIntent
-            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.execute");
-            // 添加唯一标识，避免PendingIntent复用
-            intent.putExtra("execution_time", exactTimeMillis);
-            intent.putExtra("request_code", requestCode);
-            intent.putExtra("scheduled_at", System.currentTimeMillis());
-            intent.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-            intent.putExtra("delayed_execution", true); // 标记为延迟执行
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(
-                    appContext,
-                    requestCode,
-                    intent,
-                    getPendingIntentFlag()
-            );
-            // 获取AlarmManager服务
-            AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-            // 设置精确闹钟，确保在Doze模式下也能触发
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager != null && !alarmManager.canScheduleExactAlarms()) {
-                // 如果没有权限，使用普通闹钟作为退化方案
-                Log.record(TAG, "⚠️ 使用非精确闹钟作为退化方案，可能会延迟触发");
-                alarmManager.set(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-            } else {
-                // 有权限或者低版本Android，使用精确闹钟
-                assert alarmManager != null;
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-            }
-            // 保存闹钟引用
-            scheduledAlarms.put(requestCode, pendingIntent);
-            // 更新通知显示下次执行时间
-            String nt = "⏰ 下次执行(Alarm) " + TimeUtil.getTimeStr(exactTimeMillis);
-            Notify.updateNextExecText(exactTimeMillis);
+            long nextExecTime = System.currentTimeMillis() + delayMillis;
+            String nt = nextExecTime > 0 ? "⏰ 下次执行 " + TimeUtil.getTimeStr(nextExecTime) : "";
+            Notify.updateNextExecText(nextExecTime);
             Toast.show(nt);
-            
-            Log.record(TAG, "已设置延迟执行闹钟，ID=" + requestCode + "，时间：" + TimeUtil.getCommonDate(exactTimeMillis));
         } catch (Exception e) {
-            Log.error(TAG, "设置延迟执行闹钟失败：" + e.getMessage());
             Log.printStackTrace(e);
-            
-            // 闹钟设置失败时，退回到Handler方式作为最后备份
-            if (mainHandler != null) {
-                mainHandler.postDelayed(() -> {
-                    Log.record(TAG, "闹钟设置失败，使用Handler备份执行");
-                    if (initHandler(true)) {  // 强制初始化
-                        mainTask.startTask(true);
-                    }
-                }, delayMillis);
-            }
         }
     }
-
-    /**
-     * 使用AlarmManager设置下次执行的闹钟，确保即使在设备休眠时也能执行任务
-     *
-     * @param delayMillis 延迟执行的毫秒数
-     * @param exactTimeMillis 精确的执行时间点（毫秒时间戳）
-     */
-    static void scheduleNextExecutionWithAlarm(long delayMillis, long exactTimeMillis) {
-        // 检查是否有设置精确闹钟的权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-            if (alarmManager != null && !alarmManager.canScheduleExactAlarms()) {
-                Log.record(TAG, "没有设置精确闹钟的权限，尝试请求权限");
-                // 请求权限
-                try {
-                    // 在Android 12及以上版本，需要引导用户到设置页面授予权限
-                    Intent intent = new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-                    intent.setData(android.net.Uri.parse("package:" + General.PACKAGE_NAME));
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    appContext.startActivity(intent);
-                    Toast.show("请授予支付宝设置精确闹钟的权限，这对于定时任务执行非常重要");
-                    
-                    // 记录权限请求事件
-                    Log.record(TAG, "已发送精确闹钟权限请求，等待用户授权");
-                    
-                    // 添加通知提醒
-                    Notify.updateStatusText("请授予精确闹钟权限以确保定时任务正常执行");
-                } catch (Exception e) {
-                    Log.error(TAG, "请求精确闹钟权限失败: " + e.getMessage());
-                    Log.printStackTrace(TAG, e);
-                }
-                // 退回到Handler方式
-                execDelayedWithAlarm(delayMillis);
-                return;
-            }
-        }
-
-        // 生成唯一请求码
-        int requestCode = (int)(exactTimeMillis % 10000);
-
-        try {
-            // 先取消之前的同ID闹钟（如果有）
-            PendingIntent oldPendingIntent = scheduledAlarms.get(requestCode);
-            if (oldPendingIntent != null) {
-                AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-                alarmManager.cancel(oldPendingIntent);
-                scheduledAlarms.remove(requestCode);
-                Log.debug(TAG, "已取消旧闹钟: ID=" + requestCode);
-            }
-
-            // 创建用于执行任务的PendingIntent
-            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.execute");
-            // 添加唯一标识，避免PendingIntent复用
-            intent.putExtra("execution_time", exactTimeMillis);
-            intent.putExtra("request_code", requestCode);
-            intent.putExtra("scheduled_at", System.currentTimeMillis());
-            intent.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(
-                    appContext,
-                    requestCode,
-                    intent,
-                    getPendingIntentFlag()
-            );
-
-            // 获取AlarmManager服务
-            AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-
-            // 设置精确闹钟，确保在Doze模式下也能触发
-            // 在Android 12+上，已经在前面检查了权限，这里可以安全调用
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                // 如果没有权限，使用普通闹钟作为退化方案
-                Log.record(TAG, "⚠️ 使用非精确闹钟作为退化方案，可能会延迟触发");
-                alarmManager.set(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-            } else {
-                // 有权限或者低版本Android，使用精确闹钟
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-            }
-
-            // 保存闹钟引用
-            scheduledAlarms.put(requestCode, pendingIntent);
-
-            // 更新通知显示下次执行时间
-            String nt = "⏰ 下次执行(Alarm) " + TimeUtil.getTimeStr(exactTimeMillis);
-            Notify.updateNextExecText(exactTimeMillis);
-            Toast.show(nt);
-
-            Log.record(TAG, "已设置闹钟唤醒执行，ID=" + requestCode + "，时间：" + TimeUtil.getCommonDate(exactTimeMillis));
-
-            // 保存执行状态，以便在重启后恢复
-            saveExecutionState(System.currentTimeMillis(), exactTimeMillis);
-
-            // 同时设置Handler作为备份机制，但延迟稍长一些，避免重复执行
-            if (mainHandler != null) {
-                mainHandler.postDelayed(() -> {
-                    // 检查是否已经由闹钟触发执行
-                    long currentTime = System.currentTimeMillis();
-                    if (currentTime > exactTimeMillis + 10000) { // 如果已经超过预定时间10秒
-                        Log.record(TAG, "闹钟可能未触发，使用Handler备份执行");
-                        // 确保在备份执行前也进行初始化
-                        if (initHandler(true)) {  // 强制初始化
-                            mainTask.startTask(true);
-                        }
-                    }
-                }, delayMillis + 10000); // 比预定时间晚10秒
-            }
-
-        } catch (Exception e) {
-            Log.error(TAG, "设置执行闹钟失败：" + e.getMessage());
-            Log.printStackTrace(e);
-
-            // 闹钟设置失败时，退回到Handler方式作为备份
-            execDelayedWithAlarm(delayMillis);
-        }
-    }
-
+    
     /**
      * 检查长时间未执行的情况，如果超过阈值则自动重启
      * 特别针对0点后可能出现的执行中断情况
@@ -905,24 +706,24 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             if (lastExecTime == 0) {
                 return; // 首次执行，跳过检查
             }
-
+            
             long currentTime = System.currentTimeMillis();
             long inactiveTime = currentTime - lastExecTime;
-
+            
             // 检查是否经过了0点
             Calendar lastExecCalendar = Calendar.getInstance();
             lastExecCalendar.setTimeInMillis(lastExecTime);
-
+            
             Calendar currentCalendar = Calendar.getInstance();
             currentCalendar.setTimeInMillis(currentTime);
-
-            boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
-                    lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
-
+            
+            boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
+                                     lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
+            
             // 如果超过最大不活动时间或者跨越了0点但已经过了一段时间
-            if (inactiveTime > MAX_INACTIVE_TIME ||
-                    (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
-                Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，尝试重新登录");
+            if (inactiveTime > MAX_INACTIVE_TIME || 
+                (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
+                Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，尝试重新登录");
                 reLogin();
             }
         } catch (Exception e) {
@@ -971,30 +772,16 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
     }
 
-    @SuppressLint({
-            "ObsoleteSdkInt"
-    })
+    @SuppressLint({"ScheduleExactAlarm", "ObsoleteSdkInt", "MissingPermission"})
     private static Boolean setAlarmTask(long triggerAtMillis, PendingIntent operation) {
         try {
             AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-            
-            // 检查Android 12+上的精确闹钟权限
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager != null) {
-                if (!alarmManager.canScheduleExactAlarms()) {
-                    // 没有权限，记录日志但不尝试请求权限（避免重复请求）
-                    Log.record(TAG, "⚠️ 缺少精确闹钟权限，闹钟可能不会准时触发");
-                    // 使用非精确闹钟作为退化方案
-                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation);
-                    return true;
-                }
-            }
-            // 有权限或低版本Android，使用精确闹钟
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                assert alarmManager != null;
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation);
             } else {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation);
             }
+            Log.runtime(TAG, "setAlarmTask triggerAtMillis:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(triggerAtMillis) + " operation:" + operation);
             return true;
         } catch (Throwable th) {
             Log.runtime(TAG, "setAlarmTask err:");
@@ -1047,7 +834,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public static Object getMicroApplicationContext() {
         if (microApplicationContextObject == null) {
             try {
-                Class < ? > alipayApplicationClass = XposedHelpers.findClass(
+                Class<?> alipayApplicationClass = XposedHelpers.findClass(
                         "com.alipay.mobile.framework.AlipayApplication", classLoader
                 );
                 Object alipayApplicationInstance = XposedHelpers.callStaticMethod(
@@ -1093,6 +880,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public static String getUserId() {
         try {
             Object userObject = getUserObject();
+            Log.runtime(TAG, "getUserObject:" + userObject);
             if (userObject != null) {
                 return (String) XposedHelpers.getObjectField(userObject, "userId");
             }
@@ -1107,9 +895,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         mainHandler.post(
                 () -> {
                     if (reLoginCount.get() < 5) {
-                        execDelayedWithAlarm(reLoginCount.getAndIncrement() * 5000L);
+                        execDelayedHandler(reLoginCount.getAndIncrement() * 5000L);
                     } else {
-                        execDelayedWithAlarm(Math.max(BaseModel.getCheckInterval().getValue(), 180_000));
+                        execDelayedHandler(Math.max(BaseModel.getCheckInterval().getValue(), 180_000));
                     }
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
@@ -1119,28 +907,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 });
     }
 
-    // 存储当前设置的所有闹钟，便于管理和取消
-    private static final Map < Integer, PendingIntent > scheduledAlarms = new ConcurrentHashMap < > ();
-
-    /**
-     * 取消所有已设置的闹钟
-     */
-    private static void cancelAllScheduledAlarms() {
-        AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-        if (alarmManager == null) return;
-
-        for (Map.Entry < Integer, PendingIntent > entry: scheduledAlarms.entrySet()) {
-            try {
-                alarmManager.cancel(entry.getValue());
-                Log.record(TAG, "已取消闹钟: ID=" + entry.getKey());
-            } catch (Exception e) {
-                Log.error(TAG, "取消闹钟失败: " + e.getMessage());
-            }
-        }
-        scheduledAlarms.clear();
-    }
-
-    static class AlipayBroadcastReceiver extends BroadcastReceiver {
+    class AlipayBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
@@ -1154,82 +921,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         }
                         break;
                     case "com.eg.android.AlipayGphone.sesame.execute":
-                        // 获取临时唤醒锁，确保任务执行不会被中断
-                        PowerManager.WakeLock tempWakeLock = null;
-                        try {
-                            // 获取闹钟相关信息
-                            int requestCode = intent.getIntExtra("request_code", -1);
-                            long executionTime = intent.getLongExtra("execution_time", 0);
-                            long currentTime = System.currentTimeMillis();
-                            long delayMillis = currentTime - executionTime;
-                            boolean isAlarmTriggered = intent.getBooleanExtra("alarm_triggered", false);
-                            boolean isWakenAtTime = intent.getBooleanExtra("waken_at_time", false);
-                            boolean isDelayedExecution = intent.getBooleanExtra("delayed_execution", false);
-                            String wakenTime = intent.getStringExtra("waken_time");
-
-                            String logInfo = "收到执行广播，闹钟ID=" + requestCode +
-                                    "，预定时间=" + TimeUtil.getCommonDate(executionTime) +
-                                    "，当前时间=" + TimeUtil.getCommonDate(currentTime) +
-                                    "，延迟=" + delayMillis + "ms" +
-                                    "，闹钟触发=" + (isAlarmTriggered ? "是" : "否");
-                            
-                            if (isWakenAtTime) {
-                                logInfo += "，定时唤醒=" + (wakenTime != null ? wakenTime : "0点");
-                            }
-                            
-                            if (isDelayedExecution) {
-                                logInfo += "，延迟执行=是";
-                            }
-                            
-                            Log.record(TAG, logInfo);
-
-                            // 从管理集合中移除已触发的闹钟
-                            if (requestCode >= 0) {
-                                scheduledAlarms.remove(requestCode);
-                            }
-
-                            // 获取临时唤醒锁
-                            PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
-                            tempWakeLock = pm.newWakeLock(
-                                    PowerManager.PARTIAL_WAKE_LOCK,
-                                    ApplicationHook.class.getName() + ":executeTask"
-                            );
-                            tempWakeLock.acquire(5 * 60 * 1000L); // 最多持有5分钟
-
-                            // 强制设置上次执行时间为更早一点的时间
-                            // 确保闹钟触发的执行不会被间隔检查阻止
-                            lastExecTime = currentTime - 10000; // 设置为10秒前
-
-                            // 根据是否为闹钟触发决定是否进行强制初始化
-                            if (isAlarmTriggered) {
-                                Log.record(TAG, "闹钟唤醒，执行强制初始化");
-                            } else {
-                                Log.record(TAG, "非闹钟唤醒，检查是否需要初始化");
-                            }
-                            if (initHandler(isAlarmTriggered)) {  // 根据闹钟触发状态决定是否强制初始化
-                                // 记录执行开始时间
-                                long startTime = System.currentTimeMillis();
-
-                                // 直接执行任务
-                                mainTask.startTask(true);
-
-                                // 记录执行耗时
-                                long executionTime2 = System.currentTimeMillis() - startTime;
-                                Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");
-                            }
-                        } catch (Exception e) {
-                            Log.error(TAG, "处理执行广播时发生错误: " + e.getMessage());
-                            Log.printStackTrace(e);
-                        } finally {
-                            // 释放唤醒锁
-                            if (tempWakeLock != null && tempWakeLock.isHeld()) {
-                                try {
-                                    tempWakeLock.release();
-                                } catch (Exception e) {
-                                    Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
-                                }
-                            }
-                        }
+                        initHandler(false);
                         break;
                     case "com.eg.android.AlipayGphone.sesame.reLogin":
                         reLogin();
