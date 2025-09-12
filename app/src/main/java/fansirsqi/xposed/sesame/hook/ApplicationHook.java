@@ -387,29 +387,29 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
                                             return;
                                         }
-                                        String threadName = Thread.currentThread().getName();
-                                        boolean isAlarmTriggered = threadName.startsWith("AlarmTriggered_");
-                                        if (isAlarmTriggered) {
-                                            try {
-                                                String alarmId = threadName.split("_")[1];
-                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发, ID: " + alarmId + ")");
-                                            } catch (Exception e) {
-                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
-                                            }
-                                        } else {
-                                            Log.record(TAG, "▶️ 开始新一轮任务 (手动触发)");
-                                        }
+                                        Log.record(TAG, "开始执行");
                                         long currentTime = System.currentTimeMillis();
+
+                                        // 检查是否是闹钟触发的执行
+                                        // 通过线程名称或当前调用栈来判断
+                                        boolean isAlarmTriggered = Thread.currentThread().getName().contains("AlarmTriggered") ||
+                                                Thread.currentThread().getStackTrace().length > 0 &&
+                                                        Arrays.toString(Thread.currentThread().getStackTrace()).contains("AlipayBroadcastReceiver");
+
                                         // 获取最小执行间隔（2秒）
                                         final long MIN_EXEC_INTERVAL = 2000;
+
                                         // 计算距离上次执行的时间间隔
                                         long timeSinceLastExec = currentTime - lastExecTime;
+
                                         // 检查执行条件
                                         boolean isIntervalTooShort = timeSinceLastExec < MIN_EXEC_INTERVAL;
                                         boolean shouldSkipExecution = isIntervalTooShort && !isAlarmTriggered;
+
                                         // 记录执行间隔信息（无论是否跳过）
                                         Log.record(TAG, "执行间隔: " + timeSinceLastExec + "ms，最小间隔: " + MIN_EXEC_INTERVAL +
                                                 "ms，闹钟触发: " + (isAlarmTriggered ? "是" : "否"));
+
                                         // 只有在非闹钟触发且间隔太短的情况下才跳过执行
                                         if (shouldSkipExecution) {
                                             Log.record(TAG, "⚠️ 执行间隔较短，跳过执行，安排下次执行");
@@ -754,6 +754,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static synchronized void destroyHandler(Boolean force) {
         try {
             if (force) {
+                // 使用统一的闹钟调度器取消所有闹钟
+                if (alarmScheduler != null) {
+                    alarmScheduler.cancelAllAlarms();
+                } else {
+                    Log.error(TAG, "AlarmScheduler未初始化，无法取消所有闹钟");
+                }
                 if (service != null) {
                     stopHandler();
                     BaseModel.destroyData();
@@ -782,6 +788,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     static void execHandler() {
+        // 这里不需要强制初始化，因为调用此方法的地方已经完成了初始化
+        // 例如在initHandler方法的末尾调用
         mainTask.startTask(false);
     }
 
@@ -988,10 +996,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         try {
                             // 获取闹钟相关信息
                             int requestCode = intent.getIntExtra("request_code", -1);
-                            // 闹钟触发后立即消费掉，防止重复执行或干扰
-                            if (alarmScheduler != null) {
-                                alarmScheduler.consumeAlarm(requestCode);
-                            }
                             long executionTime = intent.getLongExtra("execution_time", 0);
                             long currentTime = System.currentTimeMillis();
                             long delayMillis = currentTime - executionTime;
@@ -1001,6 +1005,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             boolean isBackupAlarm = intent.getBooleanExtra("is_backup_alarm", false);
                             String wakenTime = intent.getStringExtra("waken_time");
                             String uniqueId = intent.getStringExtra("unique_id");
+
                             String logInfo = "收到执行广播，闹钟ID=" + requestCode +
                                     "，预定时间=" + TimeUtil.getCommonDate(executionTime) +
                                     "，当前时间=" + TimeUtil.getCommonDate(currentTime) +
@@ -1010,9 +1015,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             if (isWakenAtTime) {
                                 logInfo += "，定时唤醒=" + (wakenTime != null ? wakenTime : "0点");
                             }
+
                             if (isDelayedExecution) {
                                 logInfo += "，延迟执行=是";
                             }
+
                             if (isBackupAlarm) {
                                 logInfo += "，备份闹钟=是";
                             }
@@ -1022,7 +1029,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             }
 
                             // 记录闹钟触发信息到日志文件
+
+
                             Log.record(TAG, logInfo);
+
+                            // 闹钟触发后会由AlarmScheduler自动管理生命周期
 
                             // 获取临时唤醒锁
                             PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
@@ -1036,18 +1047,24 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             // 确保闹钟触发的执行不会被间隔检查阻止
                             lastExecTime = currentTime - 10000; // 设置为10秒前
 
-                            // 闹钟唤醒时，仅在应用未初始化的情况下才执行完整的初始化流程
-                            // 如果应用已在运行，则直接执行任务，避免破坏现有状态
-                            if (!init || service == null) {
-                                Log.record(TAG, "闹钟唤醒，应用未初始化，执行强制初始化");
-                                if (!initHandler(true)) {
-                                    return; // 初始化失败，提前退出
-                                }
+                            // 根据是否为闹钟触发决定是否进行强制初始化
+                            if (isAlarmTriggered) {
+                                Log.record(TAG, "闹钟唤醒，执行强制初始化");
                             } else {
-                                Log.record(TAG, "闹钟唤醒，应用已初始化，直接执行任务");
+                                Log.record(TAG, "非闹钟唤醒，检查是否需要初始化");
                             }
-                            // 执行任务的核心逻辑
-                            executeTaskWithLog(requestCode);
+                            if (initHandler(isAlarmTriggered)) {  // 根据闹钟触发状态决定是否强制初始化
+                                // 记录执行开始时间
+                                long startTime = System.currentTimeMillis();
+                                // 设置线程名称以标识闹钟触发的执行
+                                Thread.currentThread().setName("AlarmTriggered_" + System.currentTimeMillis());
+                                // 直接执行任务
+                                mainTask.startTask(true);
+
+                                // 记录执行耗时
+                                long executionTime2 = System.currentTimeMillis() - startTime;
+                                Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");
+                            }
                         } catch (Exception e) {
                             Log.error(TAG, "处理执行广播时发生错误: " + e.getMessage());
                             Log.printStackTrace(e);
@@ -1095,22 +1112,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         throw new IllegalStateException("Unexpected value: " + action);
                 }
             }
-        }
-
-        /**
-         * 提取出的执行任务的公共方法，包含日志记录。
-         * @param requestCode 闹钟请求码，用于日志记录和线程命名
-         */
-        private void executeTaskWithLog(int requestCode) {
-            // 记录执行开始时间
-            long startTime = System.currentTimeMillis();
-            // 设置线程名称以标识闹钟触发的执行
-            Thread.currentThread().setName("AlarmTriggered_" + requestCode + "_" + System.currentTimeMillis());
-            // 直接执行任务
-            mainTask.startTask(true);
-            // 记录执行耗时
-            long executionTime2 = System.currentTimeMillis() - startTime;
-            Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");
         }
     }
 
