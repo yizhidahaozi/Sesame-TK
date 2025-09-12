@@ -3,7 +3,6 @@ package fansirsqi.xposed.sesame.hook;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.Application;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -23,13 +22,8 @@ import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.lang.reflect.Method;
 import java.lang.reflect.Member;
@@ -44,15 +38,12 @@ import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
-import fansirsqi.xposed.sesame.data.RunType;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.OldRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
-import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServer;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -60,15 +51,16 @@ import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
+import fansirsqi.xposed.sesame.task.TaskRunner;
 import fansirsqi.xposed.sesame.util.AssetUtil;
 import fansirsqi.xposed.sesame.util.Detector;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
-import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
+import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fi.iki.elonen.NanoHTTPD;
 import kotlin.jvm.JvmStatic;
 import lombok.Getter;
@@ -77,7 +69,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
-    private static final Map<String, PendingIntent> wakenAtTimeAlarmMap = new ConcurrentHashMap<>();
+    /**
+     * -- GETTER --
+     *  获取闹钟调度器实例 - 供外部访问
+     */
+    // 统一的闹钟调度器
+    @SuppressLint("StaticFieldLeak")
+    @Getter
+    private static AlarmScheduler alarmScheduler;
     @Getter
     private static ClassLoader classLoader = null;
     @Getter
@@ -114,23 +113,27 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static Service service;
     @Getter
     static Handler mainHandler;
+    /**
+     * -- GETTER --
+     *  获取主任务实例 - 供AlarmScheduler使用
+     */
+    @Getter
     static BaseTask mainTask;
     static RpcBridge rpcBridge;
     @Getter
     private static RpcVersion rpcVersion;
     private static PowerManager.WakeLock wakeLock;
-    private static PendingIntent alarm0Pi;
 
     public static void setOffline(boolean offline) {
         ApplicationHook.offline = offline;
     }
 
-    private volatile long lastExecTime = 0; // 添加为类成员变量
+    private static volatile long lastExecTime = 0; // 添加为类成员变量
     private static final long MAX_INACTIVE_TIME = 3600000; // 最大不活动时间：1小时
 
     private XC_LoadPackage.LoadPackageParam modelLoadPackageParam;
 
-    private XC_LoadPackage.LoadPackageParam appLloadPackageParam;
+    private static XC_LoadPackage.LoadPackageParam appLloadPackageParam;
 
     static {
         dayCalendar = Calendar.getInstance();
@@ -152,9 +155,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         deoptimizeMethod = m;
     }
 
-    static void deoptimizeMethod(Class<?> c, String n) throws InvocationTargetException, IllegalAccessException {
-        for (Method m : c.getDeclaredMethods()) {
-            if (deoptimizeMethod != null && m.getName().equals(n)) {
+    static void deoptimizeMethod(Class < ? > c) throws InvocationTargetException, IllegalAccessException {
+        for (Method m: c.getDeclaredMethods()) {
+            if (deoptimizeMethod != null && m.getName().equals("makeApplicationInner")) {
                 deoptimizeMethod.invoke(null, m);
                 if (BuildConfig.DEBUG)
                     XposedBridge.log("D/" + TAG + " Deoptimized " + m.getName());
@@ -171,23 +174,27 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         try {
             // 检查长时间未执行的情况
             checkInactiveTime();
-            
             int checkInterval = BaseModel.getCheckInterval().getValue();
-            List<String> execAtTimeList = BaseModel.getExecAtTimeList().getValue();
+            List < String > execAtTimeList = BaseModel.getExecAtTimeList().getValue();
             if (execAtTimeList != null && execAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时执行未开启");
                 return;
             }
+
+            long delayMillis = checkInterval; // 默认使用配置的检查间隔
+            long targetTime = 0;
+
             try {
                 if (execAtTimeList != null) {
                     Calendar lastExecTimeCalendar = TimeUtil.getCalendarByTimeMillis(lastExecTime);
                     Calendar nextExecTimeCalendar = TimeUtil.getCalendarByTimeMillis(lastExecTime + checkInterval);
-                    for (String execAtTime : execAtTimeList) {
+                    for (String execAtTime: execAtTimeList) {
                         Calendar execAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(execAtTime);
                         if (execAtTimeCalendar != null && lastExecTimeCalendar.compareTo(execAtTimeCalendar) < 0 && nextExecTimeCalendar.compareTo(execAtTimeCalendar) > 0) {
                             Log.record(TAG, "设置定时执行:" + execAtTime);
-                            execDelayedHandler(execAtTimeCalendar.getTimeInMillis() - lastExecTime);
-                            return;
+                            targetTime = execAtTimeCalendar.getTimeInMillis();
+                            delayMillis = targetTime - lastExecTime;
+                            break;
                         }
                     }
                 }
@@ -195,7 +202,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.runtime(TAG, "execAtTime err:：" + e.getMessage());
                 Log.printStackTrace(TAG, e);
             }
-            execDelayedHandler(checkInterval);
+
+            // 使用统一的闹钟调度器
+            long l = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
+            if (alarmScheduler != null) {
+                alarmScheduler.scheduleExactExecution(delayMillis, l);
+            } else {
+                Log.error(TAG, "AlarmScheduler未初始化，无法设置闹钟");
+            }
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -223,7 +237,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         if (General.MODULE_PACKAGE_NAME.equals(loadPackageParam.packageName)) {
             try {
-                Class<?> applicationClass = loadPackageParam.classLoader.loadClass("android.app.Application");
+                Class < ? > applicationClass = loadPackageParam.classLoader.loadClass("android.app.Application");
                 XposedHelpers.findAndHookMethod(applicationClass, "onCreate", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
@@ -242,8 +256,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 classLoader = appLloadPackageParam.classLoader;
                 // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
                 try {
-                    Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
-                    deoptimizeMethod(loadedApkClass, "makeApplicationInner");
+                    @SuppressLint("PrivateApi") Class < ? > loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
+                    deoptimizeMethod(loadedApkClass);
                 } catch (Throwable t) {
                     Log.runtime(TAG, "deoptimize makeApplicationInner err:");
                     Log.printStackTrace(TAG, t);
@@ -253,6 +267,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                         mainHandler = new Handler(Looper.getMainLooper());
                         appContext = (Context) param.args[0];
+                        
+                        // 初始化闹钟调度器
+                        alarmScheduler = new AlarmScheduler(appContext, mainHandler);
                         PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(appContext.getPackageName(), 0);
                         assert pInfo.versionName != null;
                         alipayVersion = new AlipayVersion(pInfo.versionName);
@@ -307,7 +324,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         Toast.show("用户已切换");
                                         return;
                                     }
-//                                    UserMap.initUser(targetUid);
+                                    //                                    UserMap.initUser(targetUid);
                                     HookUtil.INSTANCE.hookUser(appLloadPackageParam);
                                 }
                                 if (offline) {
@@ -316,6 +333,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                     ((Activity) param.thisObject).finish();
                                     Log.runtime(TAG, "Activity reLogin");
                                 }
+                                // 如果所有特殊情况都未命中，执行一次常规任务检查
+                                execHandler();
                                 Log.runtime(TAG, "hook onResume after end");
                             }
                         });
@@ -341,9 +360,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                     Detector.INSTANCE.dangerous(appContext);
                                     return;
                                 }
-                                String packageName = loadPackageParam.packageName;
                                 String apkPath = loadPackageParam.appInfo.sourceDir;
-                                try (DexKitBridge bridge = DexKitBridge.create(apkPath)) {
+                                try (DexKitBridge ignored = DexKitBridge.create(apkPath)) {
                                     // Other use cases
                                     Log.runtime(TAG, "hook dexkit successfully");
                                 }
@@ -358,12 +376,44 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
                                             return;
                                         }
-                                        Log.record(TAG, "开始执行");
+                                        String threadName = Thread.currentThread().getName();
+                                        boolean isAlarmTriggered = threadName.startsWith("AlarmTriggered_");
+                                        if (isAlarmTriggered) {
+                                            try {
+                                                String alarmId = threadName.split("_")[1];
+                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发, ID: " + alarmId + ")");
+                                            } catch (Exception e) {
+                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
+                                            }
+                                        } else {
+                                            Log.record(TAG, "▶️ 开始新一轮任务 (手动触发)");
+                                        }
                                         long currentTime = System.currentTimeMillis();
-                                        if (lastExecTime + 2000 > currentTime) {
-                                            Log.record(TAG, "执行间隔较短，跳过执行");
-                                            execDelayedHandler(BaseModel.getCheckInterval().getValue());
+                                        // 获取最小执行间隔（2秒）
+                                        final long MIN_EXEC_INTERVAL = 2000;
+                                        // 计算距离上次执行的时间间隔
+                                        long timeSinceLastExec = currentTime - lastExecTime;
+                                        // 检查执行条件
+                                        boolean isIntervalTooShort = timeSinceLastExec < MIN_EXEC_INTERVAL;
+                                        boolean shouldSkipExecution = isIntervalTooShort && !isAlarmTriggered;
+                                        // 记录执行间隔信息（无论是否跳过）
+                                        Log.record(TAG, "执行间隔: " + timeSinceLastExec + "ms，最小间隔: " + MIN_EXEC_INTERVAL +
+                                                "ms，闹钟触发: " + (isAlarmTriggered ? "是" : "否"));
+                                        // 只有在非闹钟触发且间隔太短的情况下才跳过执行
+                                        if (shouldSkipExecution) {
+                                            Log.record(TAG, "⚠️ 执行间隔较短，跳过执行，安排下次执行");
+                                            // 使用统一的闹钟调度器
+                                            if (alarmScheduler != null) {
+                                                alarmScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
+                                            } else {
+                                                Log.error(TAG, "AlarmScheduler未初始化，无法设置延迟执行");
+                                            }
                                             return;
+                                        }
+
+                                        // 闹钟触发的执行总是允许的
+                                        if (isAlarmTriggered) {
+                                            Log.record(TAG, "闹钟触发执行，忽略间隔时间检查");
                                         }
                                         String currentUid = UserMap.getCurrentUid();
                                         String targetUid = HookUtil.INSTANCE.getUserId(appLloadPackageParam.classLoader);
@@ -373,7 +423,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             return;
                                         }
                                         lastExecTime = currentTime; // 更新最后执行时间
-                                        ModelTask.startAllTask(false);
+                                        new TaskRunner(List.of(Model.getModelArray())).run(true, ModelTask.TaskExecutionMode.PARALLEL);
                                         scheduleNextExecution(lastExecTime);
                                     } catch (Exception e) {
                                         Log.record(TAG, "❌执行异常");
@@ -432,42 +482,43 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
             }
+            // 清理旧的唤醒闹钟
             unsetWakenAtTimeAlarm();
-            try {
-                PendingIntent pendingIntent = PendingIntent.getBroadcast(appContext, 0, new Intent("com.eg.android.AlipayGphone.sesame.execute"), getPendingIntentFlag());
+
+            // 设置0点唤醒
                 Calendar calendar = Calendar.getInstance();
                 calendar.add(Calendar.DAY_OF_MONTH, 1);
                 calendar.set(Calendar.HOUR_OF_DAY, 0);
                 calendar.set(Calendar.MINUTE, 0);
                 calendar.set(Calendar.SECOND, 0);
                 calendar.set(Calendar.MILLISECOND, 0);
-                if (setAlarmTask(calendar.getTimeInMillis(), pendingIntent)) {
-                    alarm0Pi = pendingIntent;
-                    Log.record(TAG, "⏰ 设置定时唤醒:0|000000");
+
+            if (alarmScheduler != null) {
+                if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
+                    Log.record(TAG, "⏰ 设置0点定时唤醒");
                 }
-            } catch (Exception e) {
-                Log.runtime(TAG, "setWakenAt0 err:");
-                Log.printStackTrace(TAG, e);
+            } else {
+                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
             }
+
+            // 设置自定义时间点唤醒
             if (wakenAtTimeList != null && !wakenAtTimeList.isEmpty()) {
                 Calendar nowCalendar = Calendar.getInstance();
                 for (int i = 1, len = wakenAtTimeList.size(); i < len; i++) {
                     try {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
-                        if (wakenAtTimeCalendar != null) {
-                            if (wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                                PendingIntent wakenAtTimePendingIntent = PendingIntent.getBroadcast(appContext, i, new Intent("com.eg.android.AlipayGphone" + ".sesame.execute"), getPendingIntentFlag());
-                                if (setAlarmTask(wakenAtTimeCalendar.getTimeInMillis(), wakenAtTimePendingIntent)) {
-                                    String wakenAtTimeKey = i + "|" + wakenAtTime;
-                                    wakenAtTimeAlarmMap.put(wakenAtTimeKey, wakenAtTimePendingIntent);
-                                    Log.record(TAG, "⏰ 设置定时唤醒:" + wakenAtTimeKey);
+                        if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
+                            if (alarmScheduler != null) {
+                                if (alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false)) {
+                                    Log.record(TAG, "⏰ 设置定时唤醒: " + wakenAtTime);
                                 }
+                            } else {
+                                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
                             }
                         }
                     } catch (Exception e) {
-                        Log.runtime(TAG, "setWakenAtTime err:");
-                        Log.printStackTrace(TAG, e);
+                        Log.runtime(TAG, "设置自定义唤醒时间失败: " + e.getMessage());
                     }
                 }
             }
@@ -478,62 +529,26 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     }
 
     /**
-     * 取消定时唤醒
+     * 取消所有定时唤醒
      */
     private static void unsetWakenAtTimeAlarm() {
-        try {
-            for (Map.Entry<String, PendingIntent> entry : wakenAtTimeAlarmMap.entrySet()) {
-                try {
-                    String wakenAtTimeKey = entry.getKey();
-                    PendingIntent wakenAtTimePendingIntent = entry.getValue();
-                    if (unsetAlarmTask(wakenAtTimePendingIntent)) {
-                        wakenAtTimeAlarmMap.remove(wakenAtTimeKey);
-                        Log.record(TAG, "⏰ 取消定时唤醒:" + wakenAtTimeKey);
-                    }
-                } catch (Exception e) {
-                    Log.runtime(TAG, "unsetWakenAtTime err:");
-                    Log.printStackTrace(TAG, e);
-                }
-            }
-            try {
-                if (unsetAlarmTask(alarm0Pi)) {
-                    alarm0Pi = null;
-                    Log.record(TAG, "⏰ 取消定时唤醒:0|000000");
-                }
-            } catch (Exception e) {
-                Log.runtime(TAG, "unsetWakenAt0 err:");
-                Log.printStackTrace(TAG, e);
-            }
-        } catch (Exception e) {
-            Log.runtime(TAG, "unsetWakenAtTimeAlarm err:");
-            Log.printStackTrace(TAG, e);
+        if (alarmScheduler != null) {
+            // AlarmScheduler内部没有提供仅取消唤醒闹钟的方法，
+            // 但在destroyHandler中会取消所有闹钟，这里可以依赖该逻辑
+            // 如果需要精细控制，需要在AlarmScheduler中增加按分类取消的功能
+            Log.debug(TAG, "取消定时唤醒将由destroyHandler统一处理");
         }
     }
 
-    @SuppressLint("WakelockTimeout")
-    private synchronized Boolean initHandler(Boolean force) {
+    private static synchronized Boolean initHandler(Boolean force) {
         try {
-            // 检查是否长时间未执行，特别是跨越0点的情况
-            if (!force && lastExecTime > 0) {
-                long currentTime = System.currentTimeMillis();
-                long inactiveTime = currentTime - lastExecTime;
-                
-                Calendar lastExecCalendar = Calendar.getInstance();
-                lastExecCalendar.setTimeInMillis(lastExecTime);
-                
-                Calendar currentCalendar = Calendar.getInstance();
-                currentCalendar.setTimeInMillis(currentTime);
-                
-                boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
-                                         lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
-                
-                if (inactiveTime > MAX_INACTIVE_TIME || crossedMidnight) {
-                    Log.record(TAG, "⚠️ 初始化时检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，将强制重新初始化");
-                    force = true; // 强制重新初始化
-                }
+            if (init && !force) { // 如果已经初始化且非强制，则跳过
+                return true;
             }
-            
-            destroyHandler(force); // 销毁之前的处理程序
+            // 只有在重新初始化时才销毁旧的handler
+            if (init) {
+                destroyHandler(true);
+            }
             Model.initAllModel(); //在所有服务启动前装模块配置
             if (service == null) {
                 return false;
@@ -550,7 +565,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.record(TAG, startMsg);
                 Log.record(TAG, "⚙️模块版本：" + modelVersion);
                 Log.record(TAG, "📦应用版本：" + alipayVersion.getVersionString());
-                Config.load(userId);//加载配置
+                Config.load(userId); //加载配置
                 if (!Config.isLoaded()) {
                     Log.record(TAG, "用户模块配置加载失败");
                     Toast.show("用户模块配置加载失败");
@@ -599,7 +614,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     try {
                         PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
                         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
-                        wakeLock.acquire(); // 确保唤醒锁在前台服务启动前
+                        wakeLock.acquire(10*60*1000L /*10 minutes*/); // 确保唤醒锁在前台服务启动前
                     } catch (Throwable t) {
                         Log.record(TAG, "唤醒锁申请失败:");
                         Log.printStackTrace(t);
@@ -636,6 +651,15 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             Toast.show("芝麻粒加载失败 🎃");
             return false;
         }
+    }
+
+    private static boolean isCrossedMidnight(long currentTime) {
+        Calendar lastExecCalendar = Calendar.getInstance();
+        lastExecCalendar.setTimeInMillis(lastExecTime);
+        Calendar currentCalendar = Calendar.getInstance();
+        currentCalendar.setTimeInMillis(currentTime);
+        return lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
+                lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
     }
 
     /**
@@ -677,26 +701,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         mainTask.startTask(false);
     }
 
-    /**
-     * 安排主任务在指定的延迟时间后执行，并更新通知中的下次执行时间。
-     *
-     * @param delayMillis 延迟执行的毫秒数
-     */
-    static void execDelayedHandler(long delayMillis) {
-        if (mainHandler == null) {
-            return;
-        }
-        mainHandler.postDelayed(() -> mainTask.startTask(true), delayMillis);
-        try {
-            long nextExecTime = System.currentTimeMillis() + delayMillis;
-            String nt = nextExecTime > 0 ? "⏰ 下次执行 " + TimeUtil.getTimeStr(nextExecTime) : "";
-            Notify.updateNextExecText(nextExecTime);
-            Toast.show(nt);
-        } catch (Exception e) {
-            Log.printStackTrace(e);
-        }
-    }
-    
+
+
     /**
      * 检查长时间未执行的情况，如果超过阈值则自动重启
      * 特别针对0点后可能出现的执行中断情况
@@ -706,24 +712,19 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             if (lastExecTime == 0) {
                 return; // 首次执行，跳过检查
             }
-            
             long currentTime = System.currentTimeMillis();
             long inactiveTime = currentTime - lastExecTime;
-            
             // 检查是否经过了0点
             Calendar lastExecCalendar = Calendar.getInstance();
             lastExecCalendar.setTimeInMillis(lastExecTime);
-            
             Calendar currentCalendar = Calendar.getInstance();
             currentCalendar.setTimeInMillis(currentTime);
-            
-            boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) || 
-                                     lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
-            
+            boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
+                    lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
             // 如果超过最大不活动时间或者跨越了0点但已经过了一段时间
-            if (inactiveTime > MAX_INACTIVE_TIME || 
-                (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
-                Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime/60000) + "分钟)，可能跨越0点，尝试重新登录");
+            if (inactiveTime > MAX_INACTIVE_TIME ||
+                    (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
+                Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，尝试重新登录");
                 reLogin();
             }
         } catch (Exception e) {
@@ -772,37 +773,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
     }
 
-    @SuppressLint({"ScheduleExactAlarm", "ObsoleteSdkInt", "MissingPermission"})
-    private static Boolean setAlarmTask(long triggerAtMillis, PendingIntent operation) {
-        try {
-            AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation);
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation);
-            }
-            Log.runtime(TAG, "setAlarmTask triggerAtMillis:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(triggerAtMillis) + " operation:" + operation);
-            return true;
-        } catch (Throwable th) {
-            Log.runtime(TAG, "setAlarmTask err:");
-            Log.printStackTrace(TAG, th);
-        }
-        return false;
-    }
-
-    private static Boolean unsetAlarmTask(PendingIntent operation) {
-        try {
-            if (operation != null) {
-                AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-                alarmManager.cancel(operation);
-            }
-            return true;
-        } catch (Throwable th) {
-            Log.runtime(TAG, "unsetAlarmTask err:");
-            Log.printStackTrace(TAG, th);
-        }
-        return false;
-    }
 
     public static void reLoginByBroadcast() {
         try {
@@ -834,7 +804,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public static Object getMicroApplicationContext() {
         if (microApplicationContextObject == null) {
             try {
-                Class<?> alipayApplicationClass = XposedHelpers.findClass(
+                Class < ? > alipayApplicationClass = XposedHelpers.findClass(
                         "com.alipay.mobile.framework.AlipayApplication", classLoader
                 );
                 Object alipayApplicationInstance = XposedHelpers.callStaticMethod(
@@ -880,7 +850,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public static String getUserId() {
         try {
             Object userObject = getUserObject();
-            Log.runtime(TAG, "getUserObject:" + userObject);
             if (userObject != null) {
                 return (String) XposedHelpers.getObjectField(userObject, "userId");
             }
@@ -894,10 +863,18 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     public static void reLogin() {
         mainHandler.post(
                 () -> {
+                    long delayMillis;
                     if (reLoginCount.get() < 5) {
-                        execDelayedHandler(reLoginCount.getAndIncrement() * 5000L);
+                        delayMillis = reLoginCount.getAndIncrement() * 5000L;
                     } else {
-                        execDelayedHandler(Math.max(BaseModel.getCheckInterval().getValue(), 180_000));
+                        delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
+                    }
+                    
+                    // 使用统一的闹钟调度器
+                    if (alarmScheduler != null) {
+                        alarmScheduler.scheduleDelayedExecution(delayMillis);
+                    } else {
+                        Log.error(TAG, "AlarmScheduler未初始化，无法设置延迟执行");
                     }
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
@@ -907,54 +884,53 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 });
     }
 
-    class AlipayBroadcastReceiver extends BroadcastReceiver {
+
+    static class AlipayBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
-            if (action != null) {
-                switch (action) {
-                    case "com.eg.android.AlipayGphone.sesame.restart":
-                        String userId = intent.getStringExtra("userId");
-                        if (StringUtil.isEmpty(userId) || Objects.equals(UserMap.getCurrentUid(), userId)) {
+            try {
+                String action = intent.getAction();
+                Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
+                if (action != null) {
+                    switch (action) {
+                        case "com.eg.android.AlipayGphone.sesame.restart":
                             initHandler(true);
-                        }
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.execute":
-                        initHandler(false);
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.reLogin":
-                        reLogin();
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.status":
-                        try {
-                            if (ViewAppInfo.getRunType() == RunType.DISABLE) {
-                                Intent replyIntent = new Intent("fansirsqi.xposed.sesame.status");
-                                replyIntent.putExtra("EXTRA_RUN_TYPE", RunType.ACTIVE.getNickName());
-                                replyIntent.setPackage(General.MODULE_PACKAGE_NAME);
-                                context.sendBroadcast(replyIntent);
-                                Log.system(TAG, "Replied with status: " + RunType.ACTIVE.getNickName());
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.execute":
+                            initHandler(false);
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.reLogin":
+                            reLogin();
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.status":
+                            // 状态查询处理
+                            Log.system(TAG, "收到状态查询广播");
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.rpctest":
+                            try {
+                                String method = intent.getStringExtra("method");
+                                String data = intent.getStringExtra("data");
+                                String type = intent.getStringExtra("type");
+                                Log.runtime(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
+                                DebugRpc rpcInstance = new DebugRpc();
+                                rpcInstance.start(method, data, type);
+                            } catch (Throwable th) {
+                                Log.runtime(TAG, "sesame 测试RPC请求失败:");
+                                Log.printStackTrace(TAG, th);
                             }
-                        } catch (Throwable th) {
-                            Log.runtime(TAG, "sesame sendBroadcast status err:");
-                            Log.printStackTrace(TAG, th);
-                        }
-                        break;
-                    case "com.eg.android.AlipayGphone.sesame.rpctest":
-                        try {
-                            String method = intent.getStringExtra("method");
-                            String data = intent.getStringExtra("data");
-                            String type = intent.getStringExtra("type");
-                            DebugRpc rpcInstance = new DebugRpc(); // 创建实例
-                            rpcInstance.start(method, data, type); // 通过实例调用非静态方法
-                        } catch (Throwable th) {
-                            Log.runtime(TAG, "sesame 测试RPC请求失败:");
-                            Log.printStackTrace(TAG, th);
-                        }
-                        break;
-                    default:
-                        throw new IllegalStateException("Unexpected value: " + action);
+                            break;
+                        default:
+                            // 处理闹钟相关的广播
+                            if (alarmScheduler != null) {
+                                alarmScheduler.handleAlarmTrigger();
+                                int requestCode = intent.getIntExtra("request_code", -1);
+                                alarmScheduler.consumeAlarm(requestCode);
+                            }
+                            break;
+                    }
                 }
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, "AlipayBroadcastReceiver.onReceive err:", t);
             }
         }
     }
