@@ -24,7 +24,6 @@ import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -368,33 +367,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         long currentTime = System.currentTimeMillis();
 
                                         // 检查是否是闹钟触发的执行
-                                        // 通过线程名称或当前调用栈来判断
-                                        boolean isAlarmTriggered = Thread.currentThread().getName().contains("AlarmTriggered") ||
-                                                Thread.currentThread().getStackTrace().length > 0 &&
-                                                        Arrays.toString(Thread.currentThread().getStackTrace()).contains("AlipayBroadcastReceiver");
-
-                                        // 获取最小执行间隔（2秒）
-                                        final long MIN_EXEC_INTERVAL = 2000;
-
-                                        // 计算距离上次执行的时间间隔
-                                        long timeSinceLastExec = currentTime - lastExecTime;
-
-                                        // 检查执行条件
-                                        boolean isIntervalTooShort = timeSinceLastExec < MIN_EXEC_INTERVAL;
-                                        boolean shouldSkipExecution = isIntervalTooShort && !isAlarmTriggered;
-
-                                        // 记录执行间隔信息（无论是否跳过）
-                                        Log.record(TAG, "执行间隔: " + timeSinceLastExec + "ms，最小间隔: " + MIN_EXEC_INTERVAL +
-                                                "ms，闹钟触发: " + (isAlarmTriggered ? "是" : "否"));
-
-                                        // 只有在非闹钟触发且间隔太短的情况下才跳过执行
-                                        if (shouldSkipExecution) {
-                                            Log.record(TAG, "⚠️ 执行间隔较短，跳过执行，安排下次执行");
+                                        boolean isAlarmTriggered = Thread.currentThread().getName().contains("AlarmTriggered");
+                                        // 只有在非闹钟触发的情况下才检查执行间隔
+                                        if (lastExecTime + 2000 > currentTime && !isAlarmTriggered) {
+                                            Log.record(TAG, "执行间隔较短 (" + (currentTime - lastExecTime) + "ms)，跳过执行");
                                             execDelayedWithAlarm(BaseModel.getCheckInterval().getValue());
                                             return;
                                         }
 
-                                        // 闹钟触发的执行总是允许的
                                         if (isAlarmTriggered) {
                                             Log.record(TAG, "闹钟触发执行，忽略间隔时间检查");
                                         }
@@ -783,13 +763,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             String nt = "⏰ 下次执行(Alarm) " + TimeUtil.getTimeStr(exactTimeMillis);
             Notify.updateNextExecText(exactTimeMillis);
             Toast.show(nt);
-
+            
             Log.record(TAG, "已设置延迟执行闹钟，ID=" + requestCode + "，时间：" + TimeUtil.getCommonDate(exactTimeMillis));
-            Log.record(TAG, nt);
         } catch (Exception e) {
             Log.error(TAG, "设置延迟执行闹钟失败：" + e.getMessage());
             Log.printStackTrace(e);
-
+            
             // 闹钟设置失败时，退回到Handler方式作为最后备份
             if (mainHandler != null) {
                 mainHandler.postDelayed(() -> {
@@ -822,10 +801,10 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     appContext.startActivity(intent);
                     Toast.show("请授予支付宝设置精确闹钟的权限，这对于定时任务执行非常重要");
-
+                    
                     // 记录权限请求事件
                     Log.record(TAG, "已发送精确闹钟权限请求，等待用户授权");
-
+                    
                     // 添加通知提醒
                     Notify.updateStatusText("请授予精确闹钟权限以确保定时任务正常执行");
                 } catch (Exception e) {
@@ -838,8 +817,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             }
         }
 
-        // 生成唯一请求码，结合时间戳和随机数，避免冲突
-        int requestCode = (int)((exactTimeMillis % 10000) * 10 + (int)(Math.random() * 10));
+        // 生成唯一请求码
+        int requestCode = (int)(exactTimeMillis % 10000);
 
         try {
             // 先取消之前的同ID闹钟（如果有）
@@ -858,123 +837,54 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             intent.putExtra("request_code", requestCode);
             intent.putExtra("scheduled_at", System.currentTimeMillis());
             intent.putExtra("alarm_triggered", true);  // 标记为闹钟触发的执行
-            intent.putExtra("unique_id", System.currentTimeMillis() + "_" + requestCode); // 添加绝对唯一ID
-
-            // 设置组件以确保Intent的明确性
-            intent.setPackage(General.PACKAGE_NAME);
-            // 添加类别以增加Intent的特异性
-            intent.addCategory("fansirsqi.xposed.sesame.ALARM_CATEGORY");
-
-            // 使用FLAG_CANCEL_CURRENT确保旧的PendingIntent被取消
-            int flags = getPendingIntentFlag() | PendingIntent.FLAG_CANCEL_CURRENT;
 
             PendingIntent pendingIntent = PendingIntent.getBroadcast(
                     appContext,
                     requestCode,
                     intent,
-                    flags
+                    getPendingIntentFlag()
             );
 
             // 获取AlarmManager服务
             AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-
-            // 确保设备在闹钟触发时能够唤醒
-            // 获取电源锁，确保在闹钟触发前不会休眠
-            PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
-            PowerManager.WakeLock wakeLock = null;
-            try {
-                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                        "Sesame:AlarmSetupWakeLock");
-                wakeLock.acquire(5000); // 获取5秒钟的唤醒锁，足够设置闹钟
-            } catch (Exception e) {
-                Log.error(TAG, "获取唤醒锁失败: " + e.getMessage());
-            }
 
             // 设置精确闹钟，确保在Doze模式下也能触发
             // 在Android 12+上，已经在前面检查了权限，这里可以安全调用
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 // 如果没有权限，使用普通闹钟作为退化方案
                 Log.record(TAG, "⚠️ 使用非精确闹钟作为退化方案，可能会延迟触发");
-                // 尝试使用带有唤醒功能的闹钟
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-                Log.record(TAG, "已设置setAndAllowWhileIdle闹钟");
+                alarmManager.set(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
             } else {
                 // 有权限或者低版本Android，使用精确闹钟
-                // 使用最强力的闹钟设置方法
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent);
-               // Log.record(TAG, "已设置setExactAndAllowWhileIdle闹钟");
             }
-            // 释放唤醒锁
-            if (wakeLock != null && wakeLock.isHeld()) {
-                try {
-                    wakeLock.release();
-                } catch (Exception e) {
-                    Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
-                }
-            }
+
             // 保存闹钟引用
             scheduledAlarms.put(requestCode, pendingIntent);
+
             // 更新通知显示下次执行时间
             String nt = "⏰ 下次执行(Alarm) " + TimeUtil.getTimeStr(exactTimeMillis);
             Notify.updateNextExecText(exactTimeMillis);
             Toast.show(nt);
-            Log.record(TAG, "已设置闹钟唤醒执行，ID=" + requestCode +
-                    "，时间：" + TimeUtil.getCommonDate(exactTimeMillis) +
-                    "，延迟：" + delayMillis / 1000 + "秒" +
-                    "，权限：" + (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms() ? "已授予" : "未授予"));
+
+            Log.record(TAG, "已设置闹钟唤醒执行，ID=" + requestCode + "，时间：" + TimeUtil.getCommonDate(exactTimeMillis));
 
             // 保存执行状态，以便在重启后恢复
             saveExecutionState(System.currentTimeMillis(), exactTimeMillis);
 
-            // 1. 使用Handler作为第一级备份，延迟稍长一些，避免重复执行
+            // 同时设置Handler作为备份机制，但延迟稍长一些，避免重复执行
             if (mainHandler != null) {
                 mainHandler.postDelayed(() -> {
                     // 检查是否已经由闹钟触发执行
                     long currentTime = System.currentTimeMillis();
                     if (currentTime > exactTimeMillis + 10000) { // 如果已经超过预定时间10秒
-                        Log.record(TAG, "闹钟可能未触发，使用Handler备份执行 (第一级备份)");
+                        Log.record(TAG, "闹钟可能未触发，使用Handler备份执行");
                         // 确保在备份执行前也进行初始化
                         if (initHandler(true)) {  // 强制初始化
                             mainTask.startTask(true);
                         }
                     }
                 }, delayMillis + 10000); // 比预定时间晚10秒
-
-                // 2. 使用第二级备份，再延迟30秒，以防第一级备份也失败
-                mainHandler.postDelayed(() -> {
-                    // 检查是否已经由闹钟或第一级备份触发执行
-                    long currentTime = System.currentTimeMillis();
-                    if (currentTime > exactTimeMillis + 40000) { // 如果已经超过预定时间40秒
-                        Log.record(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)");
-                        // 确保在备份执行前也进行初始化
-                        if (initHandler(true)) {  // 强制初始化
-                            mainTask.startTask(true);
-                        }
-                    }
-                }, delayMillis + 40000); // 比预定时间晚40秒
-            }
-            // 3. 设置额外的闹钟备份，使用不同的请求码，以防主闹钟失败
-            try {
-                int backupRequestCode = requestCode + 10000; // 使用不同的请求码
-                Intent backupIntent = new Intent("com.eg.android.AlipayGphone.sesame.execute");
-                backupIntent.putExtra("execution_time", exactTimeMillis + 20000); // 比主闹钟晚20秒
-                backupIntent.putExtra("request_code", backupRequestCode);
-                backupIntent.putExtra("scheduled_at", System.currentTimeMillis());
-                backupIntent.putExtra("alarm_triggered", true);
-                backupIntent.putExtra("is_backup_alarm", true); // 标记为备份闹钟
-                backupIntent.setPackage(General.PACKAGE_NAME);
-                PendingIntent backupPendingIntent = PendingIntent.getBroadcast(
-                        appContext,
-                        backupRequestCode,
-                        backupIntent,
-                        getPendingIntentFlag()
-                );
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
-                        exactTimeMillis + 20000, backupPendingIntent);
-                scheduledAlarms.put(backupRequestCode, backupPendingIntent);
-                Log.debug(TAG, "已设置备份闹钟: ID=" + backupRequestCode);
-            } catch (Exception e) {
-                Log.error(TAG, "设置备份闹钟失败: " + e.getMessage());
             }
 
         } catch (Exception e) {
@@ -1067,7 +977,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     private static Boolean setAlarmTask(long triggerAtMillis, PendingIntent operation) {
         try {
             AlarmManager alarmManager = (AlarmManager) appContext.getSystemService(Context.ALARM_SERVICE);
-
+            
             // 检查Android 12+上的精确闹钟权限
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager != null) {
                 if (!alarmManager.canScheduleExactAlarms()) {
@@ -1255,35 +1165,22 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             boolean isAlarmTriggered = intent.getBooleanExtra("alarm_triggered", false);
                             boolean isWakenAtTime = intent.getBooleanExtra("waken_at_time", false);
                             boolean isDelayedExecution = intent.getBooleanExtra("delayed_execution", false);
-                            boolean isBackupAlarm = intent.getBooleanExtra("is_backup_alarm", false);
                             String wakenTime = intent.getStringExtra("waken_time");
-                            String uniqueId = intent.getStringExtra("unique_id");
 
                             String logInfo = "收到执行广播，闹钟ID=" + requestCode +
                                     "，预定时间=" + TimeUtil.getCommonDate(executionTime) +
                                     "，当前时间=" + TimeUtil.getCommonDate(currentTime) +
                                     "，延迟=" + delayMillis + "ms" +
                                     "，闹钟触发=" + (isAlarmTriggered ? "是" : "否");
-
+                            
                             if (isWakenAtTime) {
                                 logInfo += "，定时唤醒=" + (wakenTime != null ? wakenTime : "0点");
                             }
-
+                            
                             if (isDelayedExecution) {
                                 logInfo += "，延迟执行=是";
                             }
-
-                            if (isBackupAlarm) {
-                                logInfo += "，备份闹钟=是";
-                            }
-
-                            if (uniqueId != null) {
-                                logInfo += "，唯一ID=" + uniqueId;
-                            }
-
-                            // 记录闹钟触发信息到日志文件
-
-
+                            
                             Log.record(TAG, logInfo);
 
                             // 从管理集合中移除已触发的闹钟
@@ -1312,8 +1209,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             if (initHandler(isAlarmTriggered)) {  // 根据闹钟触发状态决定是否强制初始化
                                 // 记录执行开始时间
                                 long startTime = System.currentTimeMillis();
-                                // 设置线程名称以标识闹钟触发的执行
-                                Thread.currentThread().setName("AlarmTriggered_" + System.currentTimeMillis());
+
                                 // 直接执行任务
                                 mainTask.startTask(true);
 
