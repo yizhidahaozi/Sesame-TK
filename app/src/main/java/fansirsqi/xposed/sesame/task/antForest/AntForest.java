@@ -71,6 +71,8 @@ import lombok.Getter;
 /// lzw add begin
 import fansirsqi.xposed.sesame.model.modelFieldExt.PriorityModelField;
 import fansirsqi.xposed.sesame.util.TimeCounter;
+import java.text.SimpleDateFormat;
+import java.util.*;
 /// lzw add end
 
 /**
@@ -157,7 +159,6 @@ public class AntForest extends ModelTask {
     private SelectModelField helpFriendCollectList;
     /// lzw add begin
     private SelectModelField alternativeAccountList;
-    // 显示背包内容
     private BooleanModelField showBagList;
     /// lzw add end
     private SelectAndCountModelField vitalityExchangeList;
@@ -457,8 +458,8 @@ public class AntForest extends ModelTask {
         // 添加RPC间隔限制
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryHomePage", queryIntervalLimit);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.queryFriendHomePage", queryIntervalLimit);
-        RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.collectEnergy", 300);
-        RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.queryEnergyRanking", 300);
+        RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.collectEnergy", 200);
+        RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antmember.forest.h5.queryEnergyRanking", 200);
         RpcIntervalLimit.INSTANCE.addIntervalLimit("alipay.antforest.forest.h5.fillUserRobFlag", 500);
         
         // 设置其他参数
@@ -498,7 +499,7 @@ public class AntForest extends ModelTask {
             errorWait = false;
 
             // 计数器和时间记录
-            _is_monday = true;
+            if (isMonday()) _is_monday = true;
             TimeCounter tc = new TimeCounter(TAG);
 
             if (showBagList.getValue()) showBag();
@@ -1305,8 +1306,6 @@ public class AntForest extends ModelTask {
                 Log.runtime(TAG, "收取PK能量完成！");
             }
         } catch (Exception e) {
-            String pkObjec = AntForestRpcCall.queryTopEnergyChallengeRanking();
-            Log.error(TAG, "获取PK排行榜失败: " + pkObjec);
             Log.printStackTrace(TAG, "collectPKEnergy 异常", e);
         }
     }
@@ -1341,19 +1340,16 @@ public class AntForest extends ModelTask {
                     idList.clear();
                 }
             }
-            tc.countDebug("分批处理其他好友"+!idList.isEmpty());
+            tc.countDebug("分批处理其他好友");
             if (!idList.isEmpty()) {
                 processLastdEnergy(idList, "");
             }
-            tc.countDebug("分批处理其他好友空" );
+            tc.countDebug("分批处理其他好友空");
 
             Log.record(TAG, "收取好友能量完成！");
 
         } catch (JSONException e) {
-            String friendsObjec = AntForestRpcCall.queryFriendsEnergyRanking();
-            Log.error(TAG, "解析好友排行榜 JSON 异常:"+ friendsObjec );
             Log.printStackTrace(TAG, "解析好友排行榜 JSON 异常", e);
-
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryEnergyRanking 异常", t);
         }
@@ -1397,7 +1393,6 @@ public class AntForest extends ModelTask {
         try {
             if (errorWait) return;
             String userId = obj.getString("userId");
-          //  Log.record(TAG, "好友ID: " + userId);
             if (flag.equals("pk")) {
                 if (Objects.equals(userId, selfId)) return;//如果是自己，则跳过
                 boolean needCollectEnergy = (collectEnergy.getValue() > 0) && pkEnergy.getValue();
@@ -1477,7 +1472,14 @@ public class AntForest extends ModelTask {
             Log.printStackTrace(TAG, "处理好友异常", e);
         }
     }
-    /// lzw add end
+    /// lzw add begin
+    public static boolean isMonday() {
+        SimpleDateFormat sdf_week = new SimpleDateFormat("EEEE", Locale.getDefault());
+        String week = sdf_week.format(new Date());
+        Log.forest("today is:" + week);
+        return "星期一".equals(week);
+    }
+/// lzw add end
     /**
      * 收取排名靠前好友能量
      *
@@ -1580,7 +1582,7 @@ public class AntForest extends ModelTask {
     }
 
     private void collectEnergy(CollectEnergyEntity collectEnergyEntity) {
-        collectEnergy(collectEnergyEntity, true);
+        collectEnergy(collectEnergyEntity, false);
     }
 
     /**
