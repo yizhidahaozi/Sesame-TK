@@ -48,6 +48,7 @@ public class ForestTimerManager {
     /**
      * 为指定用户调度所有待成熟能量球的蹲点任务。
      * 此方法会遍历所有待成熟的能量球，并为每一个能量球创建一个并行的蹲点任务。
+     * 优化：限制单个用户的蹲点任务数量，避免资源过度占用
      *
      * @param userId         用户ID。
      * @param waitingBubbles 待成熟能量球列表，每个元素包含能量球ID和成熟时间。
@@ -57,26 +58,37 @@ public class ForestTimerManager {
         if (waitingBubbles.isEmpty()) {
             return;
         }
-        Log.record(TAG, "开始为用户[" + userName + "]添加" + waitingBubbles.size() + "个蹲点任务");
+        
+        // 限制单个用户最多10个蹲点任务，避免资源过度占用
+        final int maxBubbles = Math.min(waitingBubbles.size(), 10);
+        final List<AntForest.Pair<Long, Long>> limitedBubbles = waitingBubbles.subList(0, maxBubbles);
+        
+        if (maxBubbles < waitingBubbles.size()) {
+            Log.record(TAG, "用户[" + userName + "]有" + waitingBubbles.size() + "个能量球，限制为" + maxBubbles + "个蹲点任务");
+        } else {
+            Log.record(TAG, "开始为用户[" + userName + "]添加" + maxBubbles + "个蹲点任务");
+        }
 
-        final int bubbleCount = waitingBubbles.size();
         final AtomicInteger completedTasks = new AtomicInteger(0);
         final String finalUserName = userName;
 
-        for (AntForest.Pair<Long, Long> pair : waitingBubbles) {
-            final long bubbleId = pair.first();
-            final long produceTime = pair.second();
-
-            // 使用全局线程池并行添加任务，避免阻塞主流程
+        // 批量处理，减少线程创建开销
+        for (int i = 0; i < limitedBubbles.size(); i += 3) { // 每批处理3个任务
+            final int batchStart = i;
+            final int batchEnd = Math.min(i + 3, limitedBubbles.size());
+            
             GlobalThreadPools.execute(() -> {
                 try {
-                    addEnergyTimerTask(userId, bubbleId, produceTime, finalUserName);
+                    for (int j = batchStart; j < batchEnd; j++) {
+                        AntForest.Pair<Long, Long> pair = limitedBubbles.get(j);
+                        addEnergyTimerTask(userId, pair.first(), pair.second(), finalUserName);
+                    }
                 } catch (Exception e) {
-                    Log.printStackTrace(TAG, "添加蹲点任务异常: ", e);
+                    Log.printStackTrace(TAG, "批量添加蹲点任务异常: ", e);
                 } finally {
-                    // 任务添加完成后，检查是否所有任务都已添加完毕
-                    if (completedTasks.incrementAndGet() == bubbleCount) {
-                        Log.record(TAG, "用户[" + finalUserName + "]的所有蹲点任务已并行添加完成");
+                    // 任务添加完成后，检查是否所有批次都已完成
+                    if (completedTasks.addAndGet(batchEnd - batchStart) >= maxBubbles) {
+                        Log.record(TAG, "用户[" + finalUserName + "]的所有蹲点任务已批量添加完成");
                     }
                 }
             });

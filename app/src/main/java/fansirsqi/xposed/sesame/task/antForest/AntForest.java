@@ -1347,7 +1347,8 @@ public class AntForest extends ModelTask {
         try {
             TimeCounter tc = new TimeCounter(TAG);
             int foundCount = 0;
-            int maxAttempts = 10; // 最多尝试10次，避免无限循环
+            int maxAttempts = 5; // 减少到5次，避免过度循环
+            int consecutiveEmpty = 0; // 连续空结果计数
             Log.record(TAG, "开始使用找能量功能收取好友能量");
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 // 构建跳过用户列表（有保护罩的用户）
@@ -1364,8 +1365,9 @@ public class AntForest extends ModelTask {
                 if (!friendId.isEmpty() && !Objects.equals(friendId, selfId)) {
                     foundCount++;
                     String friendName = UserMap.getMaskName(friendId);
-                    if (friendName == null || friendName.isEmpty()) {
-                        friendName = friendId; // 如果获取不到名称，使用ID作为备用
+                    if (friendName == null || friendName.isEmpty() || friendName.equals(friendId)) {
+                        // 如果UserMap没有返回有效的用户名，使用通用的获取用户名方法
+                        friendName = getAndCacheUserName(friendId);
                     }
                     Log.record(TAG, "找能量第" + attempt + "次发现好友: " + friendName);
                     // 查询好友主页并收取能量
@@ -1385,16 +1387,22 @@ public class AntForest extends ModelTask {
                         // 无论是否有保护都进行收取处理（collectEnergy内部会处理保护逻辑）
                         collectEnergy(friendId, friendHomeObj, "takeLook");
                     }
-                    // 添加间隔，避免请求过快
-                    GlobalThreadPools.sleep(1000L);
+                    // 优化间隔：找到好友时减少等待时间，提高效率
+                    GlobalThreadPools.sleep(500L);
+                    consecutiveEmpty = 0; // 重置连续空结果计数
                 } else {
+                    consecutiveEmpty++;
                     // 检查friendId是否为null或空，给出更详细的信息
                     if (friendId.isEmpty()) {
                         Log.record(TAG, "找能量第" + attempt + "次：暂无可收取的好友");
                     } else {
                         Log.record(TAG, "找能量第" + attempt + "次：发现好友但是自己，跳过");
                     }
-                    break;
+                    // 连续2次空结果就提前结束，避免浪费时间
+                    if (consecutiveEmpty >= 2) {
+                        Log.record(TAG, "连续" + consecutiveEmpty + "次无结果，提前结束找能量");
+                        break;
+                    }
                 }
             }
             tc.countDebug("找能量收取完成");

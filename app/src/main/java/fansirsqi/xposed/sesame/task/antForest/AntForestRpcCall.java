@@ -142,14 +142,6 @@ public class AntForestRpcCall {
         }
     }
 
-    /**
-     * 找能量方法 - 查找可收取能量的好友
-     * 
-     * @return 找能量的响应结果
-     */
-    public static String takeLook() {
-        return takeLook(new JSONObject());
-    }
 
     /**
      * 找能量方法 - 查找可收取能量的好友（带跳过用户列表）
@@ -165,11 +157,10 @@ public class AntForestRpcCall {
             requestData.put("skipUsers", skipUsers);
             requestData.put("source", "chInfo_ch_appcenter__chsub_9patch");
             requestData.put("takeLookEnd", false);
-            requestData.put("takeLookStart", false);
+            requestData.put("takeLookStart", true);
             requestData.put("version", VERSION);
-            
             return RequestManager.requestString("alipay.antforest.forest.h5.takeLook", 
-                    "[" + requestData.toString() + "]");
+                    "[" + requestData + "]");
         } catch (JSONException e) {
             Log.printStackTrace(TAG, "takeLook构建请求参数失败", e);
             return "";
