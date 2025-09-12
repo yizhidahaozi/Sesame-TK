@@ -159,14 +159,9 @@ public class TaskRunner {
         @SuppressWarnings("deprecation")
         long threadId = currentThread.getId();
         Log.record(TAG, String.format("开始等待第%d轮任务完成，线程信息: [ID=%d, Name=%s]", runCount, threadId, currentThread.getName()));
-        // 获取等待时间设置
-        int waitTimeValue = BaseModel.taskWaitTime.getValue();
-        boolean infiniteWait = waitTimeValue == -1;
-        // 设置等待时间（-1表示无限等待）
-        long remainingTime = infiniteWait ? Long.MAX_VALUE : TimeUnit.MINUTES.toMillis(waitTimeValue);
-        if (infiniteWait) {
-            Log.record(TAG, "任务等待时间设置为-1，将无限等待直到任务完成");
-        }
+        
+        // 分段等待，每次等待30秒，总共等待10分钟
+        long remainingTime = TimeUnit.MINUTES.toMillis(10);
         long startTime = System.currentTimeMillis();
         while (remainingTime > 0) {
             try {
@@ -174,22 +169,16 @@ public class TaskRunner {
                     Log.record(TAG, String.format("第%d轮所有任务已完成，线程信息: [ID=%d, Name=%s]", runCount, threadId, currentThread.getName()));
                     return;
                 }
+                
                 // 更新剩余时间
-                remainingTime = TimeUnit.MINUTES.toMillis(waitTimeValue) - (System.currentTimeMillis() - startTime);
+                remainingTime = TimeUnit.MINUTES.toMillis(10) - (System.currentTimeMillis() - startTime);
+                
                 // 输出每个任务的执行状态
                 StringBuilder status = new StringBuilder();
-                // 构建状态信息
-                StringBuilder timeInfo = new StringBuilder();
-                if (infiniteWait) {
-                    timeInfo.append("无限等待模式");
-                } else {
-                    long minutes = Math.max(0, TimeUnit.MILLISECONDS.toMinutes(remainingTime));
-                    long seconds = Math.max(0, TimeUnit.MILLISECONDS.toSeconds(remainingTime) % 60);
-                    timeInfo.append(String.format("剩余%d分%d秒", minutes, seconds));
-                }
-                
-                status.append(String.format("\n⏳ 第%d轮任务执行状态 (%s):\n", 
-                    runCount, timeInfo.toString()));
+                status.append(String.format("\n⏳ 第%d轮任务执行状态 (剩余%d分%d秒):\n", 
+                    runCount, 
+                    TimeUnit.MILLISECONDS.toMinutes(remainingTime),
+                    TimeUnit.MILLISECONDS.toSeconds(remainingTime) % 60));
                 // 获取主任务状态
                 BaseTask mainTask = null;
                 try {
