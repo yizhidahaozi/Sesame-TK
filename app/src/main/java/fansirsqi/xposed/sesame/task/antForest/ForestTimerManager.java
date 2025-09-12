@@ -95,23 +95,16 @@ public class ForestTimerManager {
     private void addEnergyTimerTask(String userId, long bubbleId, long produceTime, String userName) {
         final String tid = getEnergyTimerTid(userId, bubbleId);
         final long remainingTime = produceTime - System.currentTimeMillis();
-
-        if (!antForest.hasChildTask(tid)) {
+        boolean taskExists = antForest.hasChildTask(tid);
+        String status = taskExists ? "⚠️蹲点⏰已存在" : "✅添加蹲点⏰";
+        if (!taskExists) {
             antForest.addChildTask(new EnergyTimerTask(userId, bubbleId, produceTime, userName));
-            Log.record(TAG,
-                    "✅添加蹲点⏰ -> [" + userName + "]"
-                            + " bubble=" + bubbleId
-                            + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
-                            + " 剩余=" + (remainingTime / 1000) + "秒"
-                            + " tid=" + tid);
-        } else {
-            Log.record(TAG,
-                    "⚠️蹲点⏰已存在 -> [" + userName + "]"
-                            + " bubble=" + bubbleId
-                            + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
-                            + " 剩余=" + (remainingTime / 1000) + "秒"
-                            + " tid=" + tid);
         }
+        Log.record(TAG, status + " -> [" + userName + "]"
+                + " bubble=" + bubbleId
+                + " 成熟时间/蹲守时间=" + TimeUtil.getCommonDate(produceTime)
+                + " 剩余=" + (remainingTime / 1000) + "秒"
+                + " tid=" + tid);
     }
 
     /**
@@ -135,14 +128,69 @@ public class ForestTimerManager {
             if (now > targetTime) {
                 continue;
             }
-            String targetTaskId = "TAGET|" + targetTime;
-            if (!antForest.hasChildTask(targetTaskId)) {
-                antForest.addChildTask(new ChildModelTask(targetTaskId, "TAGET", func, targetTime));
-                Log.record(TAG, "添加定时使用" + propName + "[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(targetTime) + "]执行");
-            } else {
-                antForest.addChildTask(new ChildModelTask(targetTaskId, "TAGET", func, targetTime));
-            }
+            String targetTaskId = "TARGET|" + targetTime;
+            boolean taskExists = antForest.hasChildTask(targetTaskId);
+            String action = taskExists ? "替换" : "添加";
+            antForest.addChildTask(new ChildModelTask(targetTaskId, "TARGET", func, targetTime));
+            Log.record(TAG, action + "定时使用" + propName + "[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(targetTime) + "]执行");
         }
+    }
+
+    /**
+     * 调度保护罩/炸弹卡过期时的蹲点任务
+     * 当保护罩或炸弹卡过期时，自动重新查询该用户的主页并收取能量
+     *
+     * @param userId           用户ID
+     * @param protectionEndTime 保护过期时间
+     * @param userName         用户名
+     */
+    public void scheduleProtectionExpire(String userId, long protectionEndTime, String userName) {
+        // 在保护过期后延迟1秒再收取，确保保护已完全过期
+        long executeTime = protectionEndTime + 1000;
+        long now = System.currentTimeMillis();
+        
+        if (executeTime <= now) {
+            Log.record(TAG, "保护已过期，跳过蹲点任务: [" + userName + "]");
+            return;
+        }
+        
+        String taskId = "PROTECTION_EXPIRE|" + userId + "|" + protectionEndTime;
+        boolean taskExists = antForest.hasChildTask(taskId);
+        String action = taskExists ? "⚠️保护过期蹲点⏰已存在" : "✅添加保护过期蹲点⏰";
+        
+        if (!taskExists) {
+            Runnable protectionExpireTask = () -> {
+                try {
+                    // 设置用户名到缓存
+                    antForest.setCachedUserName(userId, userName);
+                    Log.forest("保护过期蹲点⏰[" + userName + "]保护已过期，重新查询收取");
+                    
+                    // 重新查询用户主页并收取能量
+                    String response = AntForestRpcCall.queryFriendHomePage(userId, "PROTECTION_EXPIRE");
+                    if (response != null && !response.isEmpty()) {
+                        try {
+                            org.json.JSONObject friendHomeObj = new org.json.JSONObject(response);
+                            // 创建CollectEnergyEntity并通过消费者回调处理
+                            CollectEnergyEntity entity = new CollectEnergyEntity(userId, friendHomeObj, null, "protection_expire");
+                            collectEnergyConsumer.accept(entity);
+                        } catch (Exception e) {
+                            Log.printStackTrace(TAG, "保护过期蹲点处理异常", e);
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.printStackTrace(TAG, "保护过期蹲点任务执行异常", e);
+                }
+            };
+            
+            antForest.addChildTask(new ChildModelTask(taskId, "PROTECTION_EXPIRE", protectionExpireTask, executeTime));
+        }
+        
+        long remainingTime = executeTime - now;
+        Log.record(TAG, action + " -> [" + userName + "]"
+                + " 保护过期时间=" + TimeUtil.getCommonDate(protectionEndTime)
+                + " 执行时间=" + TimeUtil.getCommonDate(executeTime)
+                + " 剩余=" + (remainingTime / 1000) + "秒"
+                + " tid=" + taskId);
     }
 
     /**
@@ -178,8 +226,7 @@ public class ForestTimerManager {
                 // 在任务执行时，将用户名设置回上下文，解决异步任务中用户名可能为null的问题
                 antForest.setCachedUserName(userId, this.userName);
                 int averageInteger = offsetTimeMath.getAverageInteger();
-                Log.record(TAG, "执行蹲-点收取⏰ 任务ID " + this.getId() + " [" + this.userName + "]" + "时差[" + averageInteger + "]ms" + "提前[" + advanceTimeInt + "]ms");
-                // 调用外部传入的消费者来执行实际的能量收集RPC请求
+                Log.forest("蹲点收取⏰[" + this.userName + "]时差[" + averageInteger + "]ms提前[" + advanceTimeInt + "]ms");
                 collectEnergyConsumer.accept(new CollectEnergyEntity(userId, null, AntForestRpcCall.energyRpcEntity("", userId, bubbleId)));
             };
         }

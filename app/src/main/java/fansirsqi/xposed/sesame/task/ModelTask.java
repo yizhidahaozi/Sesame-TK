@@ -77,7 +77,6 @@ public abstract class ModelTask extends Model {
     @Getter
     private final Runnable mainRunnable = new Runnable() {
         private final ModelTask task = ModelTask.this;
-
         @Override
         public void run() {
             // 防止重复执行

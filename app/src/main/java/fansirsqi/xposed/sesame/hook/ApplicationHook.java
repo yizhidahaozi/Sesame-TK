@@ -24,9 +24,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.lang.reflect.Method;
 import java.lang.reflect.Member;
@@ -41,15 +38,12 @@ import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
-import fansirsqi.xposed.sesame.data.RunType;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.OldRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
-import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServer;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -64,13 +58,12 @@ import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
-import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
+import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fi.iki.elonen.NanoHTTPD;
 import kotlin.jvm.JvmStatic;
 import lombok.Getter;
-import org.json.JSONObject;
 
 public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
@@ -896,31 +889,49 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         @Override
         public void onReceive(Context context, Intent intent) {
             try {
-                if (alarmScheduler != null) {
-                    alarmScheduler.handleAlarmTrigger();
+                String action = intent.getAction();
+                Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
+                if (action != null) {
+                    switch (action) {
+                        case "com.eg.android.AlipayGphone.sesame.restart":
+                            initHandler(true);
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.execute":
+                            initHandler(false);
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.reLogin":
+                            reLogin();
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.status":
+                            // 状态查询处理
+                            Log.system(TAG, "收到状态查询广播");
+                            break;
+                        case "com.eg.android.AlipayGphone.sesame.rpctest":
+                            try {
+                                String method = intent.getStringExtra("method");
+                                String data = intent.getStringExtra("data");
+                                String type = intent.getStringExtra("type");
+                                Log.runtime(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
+                                DebugRpc rpcInstance = new DebugRpc();
+                                rpcInstance.start(method, data, type);
+                            } catch (Throwable th) {
+                                Log.runtime(TAG, "sesame 测试RPC请求失败:");
+                                Log.printStackTrace(TAG, th);
+                            }
+                            break;
+                        default:
+                            // 处理闹钟相关的广播
+                            if (alarmScheduler != null) {
+                                alarmScheduler.handleAlarmTrigger();
+                                int requestCode = intent.getIntExtra("request_code", -1);
+                                alarmScheduler.consumeAlarm(requestCode);
+                            }
+                            break;
+                    }
                 }
-                int requestCode = intent.getIntExtra("request_code", -1);
-                alarmScheduler.consumeAlarm(requestCode);
             } catch (Throwable t) {
                 Log.printStackTrace(TAG, "AlipayBroadcastReceiver.onReceive err:", t);
             }
-        }
-
-        /**
-         * 提取出的执行任务的公共方法，包含日志记录。
-         * @param requestCode 闹钟请求码，用于日志记录和线程命名
-         */
-        private void executeTaskWithLog(int requestCode) {
-            // 记录执行开始时间
-            long startTime = System.currentTimeMillis();
-            // 设置线程名称以标识闹钟触发的执行
-            Thread.currentThread().setName("AlarmTriggered_" + requestCode + "_" + System.currentTimeMillis());
-            // 直接执行任务，使用非强制模式避免中断正在运行的旧任务
-            mainTask.startTask(false);
-
-            // 记录执行耗时
-            long executionTime2 = System.currentTimeMillis() - startTime;
-            Log.record(TAG, "任务执行完成，耗时: " + executionTime2 + "ms");
         }
     }
 

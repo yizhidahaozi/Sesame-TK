@@ -16,7 +16,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,8 +25,6 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
@@ -70,6 +67,7 @@ import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.TimeFormatter;
 import lombok.Getter;
 /// lzw add begin
 import fansirsqi.xposed.sesame.model.modelFieldExt.PriorityModelField;
@@ -121,14 +119,8 @@ public class AntForest extends ModelTask {
      */
     private ForestTimerManager timerManager;
 
-    /**
-     * 一小时毫秒数
-     */
-    private static final long ONE_HOUR_MS = 60 * 60 * 1000L;
-    /**
-     * 一天毫秒数
-     */
-    private static final long ONE_DAY = 24 * ONE_HOUR_MS;
+
+    // 保持向后兼容
     /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分 */
     private static final int SHIELD_RENEW_THRESHOLD_HHMM = 2359;
     private PriorityModelField collectEnergy;
@@ -210,6 +202,11 @@ public class AntForest extends ModelTask {
      * “一轮任务”通常指由"执行间隔"触发的一次完整的好友遍历。
      */
     private final Map<String, Long> emptyForestCache = new ConcurrentHashMap<>();
+    /**
+     * 跳过用户缓存，用于记录有保护罩或其他需要跳过的用户
+     * Key: 用户ID，Value: 跳过原因（如"baohuzhao"表示有保护罩）
+     */
+    private final Map<String, String> skipUsersCache = new ConcurrentHashMap<>();
     /**
      * 加速器定时
      */
@@ -536,6 +533,11 @@ public class AntForest extends ModelTask {
             // -------------------------------
             // 收好友能量
             // -------------------------------
+            // 先尝试使用找能量功能快速定位有能量的好友
+            collectEnergyByTakeLook();
+            tc.countDebug("找能量收取");
+            
+            // 然后执行传统的好友排行榜收取
             collectFriendEnergy();  // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
             tc.countDebug("收取好友能量");
 
@@ -656,6 +658,8 @@ public class AntForest extends ModelTask {
             cacheCollectedMap.clear();
             // 清空本轮的空森林缓存，以便下一轮（如下次"执行间隔"到达）重新检查所有好友
             emptyForestCache.clear();
+            // 清空跳过用户缓存，下一轮重新检测保护罩状态
+            skipUsersCache.clear();
             String str_totalCollected = "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g";
             Notify.updateLastExecText(str_totalCollected);
         }
@@ -995,8 +999,7 @@ public class AntForest extends ModelTask {
                 }
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "handleVitalityExchange err");
-            Log.printStackTrace(TAG, t);
+            handleException("handleVitalityExchange", t);
         }
     }
 
@@ -1052,23 +1055,13 @@ public class AntForest extends ModelTask {
     }
 
 
+    
     /**
-     * 格式化时间差为人性化的字符串
-     *
+     * 格式化时间差为人性化的字符串（保持向后兼容）
      * @param milliseconds 时差毫秒
      */
     private String formatTimeDifference(long milliseconds) {
-        long seconds = Math.abs(milliseconds) / 1000;
-        String sign = milliseconds >= 0 ? "+" : "-";
-        if (seconds < 60) {
-            return sign + seconds + "秒";
-        } else if (seconds < 3600) {
-            long minutes = seconds / 60;
-            return sign + minutes + "分钟";
-        } else {
-            long hours = seconds / 3600;
-            return sign + hours + "小时";
-        }
+        return TimeFormatter.formatTimeDifference(milliseconds);
     }
 
     /**
@@ -1161,20 +1154,33 @@ public class AntForest extends ModelTask {
             timerManager.scheduleWaitingBubbles(userId, waitingBubbles, userName);
             // 6. 检查是否有能量罩保护（影响当前收取，但不影响蹲点）
             boolean hasProtection = false;
+            long protectionEndTime = 0;
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]被能量罩❤️保护着哟，跳过当前收取但已添加蹲点");
                     hasProtection = true;
+                    protectionEndTime = getShieldEndTime(userHomeObj);
+                    Log.record(TAG, "[" + userName + "]被能量罩❤️保护着哟，跳过当前收取但已添加蹲点");
+                    if (protectionEndTime > 0) {
+                        Log.record(TAG, "[" + userName + "]保护罩将在 " + TimeUtil.getCommonDate(protectionEndTime) + " 过期，已添加保护罩过期蹲点");
+                        // 添加保护罩过期时的蹲点任务
+                        timerManager.scheduleProtectionExpire(userId, protectionEndTime, userName);
+                    }
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
-                    Log.record(TAG, "[" + userName + "]开着炸弹卡💣，跳过当前收取但已添加蹲点");
                     hasProtection = true;
+                    protectionEndTime = getBombCardEndTime(userHomeObj);
+                    Log.record(TAG, "[" + userName + "]开着炸弹卡💣，跳过当前收取但已添加蹲点");
+                    if (protectionEndTime > 0) {
+                        Log.record(TAG, "[" + userName + "]炸弹卡将在 " + TimeUtil.getCommonDate(protectionEndTime) + " 过期，已添加炸弹卡过期蹲点");
+                        // 添加炸弹卡过期时的蹲点任务
+                        timerManager.scheduleProtectionExpire(userId, protectionEndTime, userName);
+                    }
                 }
             }
             
             // 7. 只有没有保护时才收集当前可用能量
             if (!hasProtection) {
-                collectVivaEnergy(userId, userHomeObj, availableBubbles, bizType);
+                collectVivaEnergy(userId, userHomeObj, availableBubbles, bizType, fromTag);
             }
             return userHomeObj;
         } catch (JSONException | NullPointerException e) {
@@ -1234,18 +1240,20 @@ public class AntForest extends ModelTask {
      * @param userId      用户ID
      * @param userHomeObj 用户主页的JSON对象
      * @param bubbleIds   能量球ID列表
+     * @param bizType     业务类型
+     * @param fromTag     收取来源标识
      */
-    private void collectVivaEnergy(String userId, JSONObject userHomeObj, List<Long> bubbleIds, String bizType) throws JSONException {
+    private void collectVivaEnergy(String userId, JSONObject userHomeObj, List<Long> bubbleIds, String bizType, String fromTag) throws JSONException {
         if (bubbleIds.isEmpty()) return;
         boolean isBatchCollect = batchRobEnergy.getValue();
         if (isBatchCollect) {
             for (int i = 0; i < bubbleIds.size(); i += MAX_BATCH_SIZE) {
                 List<Long> subList = bubbleIds.subList(i, Math.min(i + MAX_BATCH_SIZE, bubbleIds.size()));
-                collectEnergy(new CollectEnergyEntity(userId, userHomeObj, AntForestRpcCall.batchEnergyRpcEntity(bizType, userId, subList)));
+                collectEnergy(new CollectEnergyEntity(userId, userHomeObj, AntForestRpcCall.batchEnergyRpcEntity(bizType, userId, subList), fromTag));
             }
         } else {
             for (Long id : bubbleIds) {
-                collectEnergy(new CollectEnergyEntity(userId, userHomeObj, AntForestRpcCall.energyRpcEntity(bizType, userId, id)));
+                collectEnergy(new CollectEnergyEntity(userId, userHomeObj, AntForestRpcCall.energyRpcEntity(bizType, userId, id), fromTag));
             }
         }
     }
@@ -1330,6 +1338,109 @@ public class AntForest extends ModelTask {
                 });
     }
 
+
+    /**
+     * 使用找能量功能收取好友能量
+     * 这是一个更高效的收取方式，可以直接找到有能量的好友
+     */
+    private void collectEnergyByTakeLook() {
+        try {
+            TimeCounter tc = new TimeCounter(TAG);
+            int foundCount = 0;
+            int maxAttempts = 10; // 最多尝试10次，避免无限循环
+            Log.record(TAG, "开始使用找能量功能收取好友能量");
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                // 构建跳过用户列表（有保护罩的用户）
+                JSONObject skipUsers = buildSkipUsersMap();
+                // 调用找能量接口
+                String takeLookResponse = AntForestRpcCall.takeLook(skipUsers);
+                JSONObject takeLookResult = new JSONObject(takeLookResponse);
+                if (!ResChecker.checkRes(TAG + "找能量失败:", takeLookResult)) {
+                    Log.error(TAG, "找能量失败: " + takeLookResult.optString("resultDesc"));
+                    break;
+                }
+                // 获取找到的好友ID
+                String friendId = takeLookResult.optString("friendId");
+                if (!friendId.isEmpty() && !Objects.equals(friendId, selfId)) {
+                    foundCount++;
+                    String friendName = UserMap.getMaskName(friendId);
+                    if (friendName == null || friendName.isEmpty()) {
+                        friendName = friendId; // 如果获取不到名称，使用ID作为备用
+                    }
+                    Log.record(TAG, "找能量第" + attempt + "次发现好友: " + friendName);
+                    // 查询好友主页并收取能量
+                    JSONObject friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK_FRIEND");
+                    if (friendHomeObj != null) {
+                        long currentTime = System.currentTimeMillis();
+                        // 检查是否有保护，如果有则添加到跳过列表
+                        boolean hasShieldProtection = hasShield(friendHomeObj, currentTime);
+                        boolean hasBombProtection = hasBombCard(friendHomeObj, currentTime);
+                        
+                        if (hasShieldProtection || hasBombProtection) {
+                            String protectionType = hasShieldProtection ? "保护罩" : "炸弹卡";
+                            addToSkipUsers(friendId, "baohuzhao");
+                            Log.record(TAG, "找能量发现[" + friendName + "]有" + protectionType + "，已添加到跳过列表");
+                        }
+                        
+                        // 无论是否有保护都进行收取处理（collectEnergy内部会处理保护逻辑）
+                        collectEnergy(friendId, friendHomeObj, "takeLook");
+                    }
+                    // 添加间隔，避免请求过快
+                    GlobalThreadPools.sleep(1000L);
+                } else {
+                    // 检查friendId是否为null或空，给出更详细的信息
+                    if (friendId.isEmpty()) {
+                        Log.record(TAG, "找能量第" + attempt + "次：暂无可收取的好友");
+                    } else {
+                        Log.record(TAG, "找能量第" + attempt + "次：发现好友但是自己，跳过");
+                    }
+                    break;
+                }
+            }
+            tc.countDebug("找能量收取完成");
+            Log.record(TAG, "找能量功能完成，共发现 " + foundCount + " 个好友");
+        } catch (Exception e) {
+            Log.error(TAG, "找能量过程中发生异常");
+            Log.printStackTrace(TAG, "collectEnergyByTakeLook 异常", e);
+        }
+    }
+    
+    /**
+     * 构建跳过用户映射表
+     * @return 包含需要跳过用户的JSON对象
+     */
+    private JSONObject buildSkipUsersMap() {
+        JSONObject skipUsers = new JSONObject();
+        try {
+            // 从缓存中获取有保护罩的用户列表
+            for (Map.Entry<String, String> entry : skipUsersCache.entrySet()) {
+                String userId = entry.getKey();
+                String reason = entry.getValue();
+                skipUsers.put(userId, reason);
+            }
+            
+            if (skipUsers.length() > 0) {
+                Log.runtime(TAG, "找能量功能完成表，共 " + skipUsers.length() + " 个用户");
+            }
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "构建跳过用户列表失败", e);
+        }
+        return skipUsers;
+    }
+    
+    /**
+     * 将用户添加到跳过列表（内存缓存）
+     * @param userId 用户ID
+     * @param reason 跳过原因（如"baohuzhao"表示有保护罩）
+     */
+    private void addToSkipUsers(String userId, String reason) {
+        try {
+            skipUsersCache.put(userId, reason);
+            Log.runtime(TAG, "将用户 " + UserMap.getMaskName(userId) + " 添加到跳过列表，原因: " + reason);
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "添加跳过用户失败", e);
+        }
+    }
 
     private void collectFriendEnergy() {
         collectRankings("好友排行榜",
@@ -1665,7 +1776,8 @@ public class AntForest extends ModelTask {
                     if (collected > 0) {
                         int randomIndex = random.nextInt(emojiList.size());
                         String randomEmoji = emojiList.get(randomIndex);
-                        String str = "一键收取️" + randomEmoji + collected + "g[" + getAndCacheUserName(userId) + "]#";
+                        String collectType = "takeLook".equals(collectEnergyEntity.getFromTag()) ? "找能量一键收取️" : "一键收取️";
+                        String str = collectType + randomEmoji + collected + "g[" + getAndCacheUserName(userId) + "]#";
                         totalCollected += collected;
                         if (needDouble) {
                             Log.forest(str + "耗时[" + spendTime + "]ms[双击]");
@@ -1687,7 +1799,8 @@ public class AntForest extends ModelTask {
                     if (collected > 0) {
                         int randomIndex = random.nextInt(emojiList.size());
                         String randomEmoji = emojiList.get(randomIndex);
-                        String str = "普通收取" + randomEmoji + collected + "g[" + getAndCacheUserName(userId) + "]";
+                        String collectType = "takeLook".equals(collectEnergyEntity.getFromTag()) ? "找能量收取" : "普通收取";
+                        String str = collectType + randomEmoji + collected + "g[" + getAndCacheUserName(userId) + "]";
                         totalCollected += collected;
                         if (needDouble) {
                             Log.forest(str + "耗时[" + spendTime + "]ms[双击]");
@@ -2098,12 +2211,8 @@ public class AntForest extends ModelTask {
                 if (!doubleCheck) break;
             }
 
-        } catch (JSONException e) {
-            Log.error(TAG, "JSON解析错误: " + e.getMessage());
-            Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
-            Log.error(TAG, "receiveTaskAward 错误:");
-            Log.printStackTrace(TAG, t); // 打印异常栈
+            handleException("receiveTaskAward", t);
         }
     }
 
@@ -2184,26 +2293,49 @@ public class AntForest extends ModelTask {
      * 保护罩剩余时间判断
      * 以整数 HHmm 指定保护罩续写阈值。
      * 例如：2355 表示 23 小时 55 分钟，0955 可直接写为 955。
-     * 校验规则：0 ≤ HH ≤ 99，0 ≤ mm ≤ 59；非法值将回退为 23 小时。
+     * 校验规则：0 ≤ HH ≤ 99，0 ≤ mm ≤ 59；非法值将回退为默认值。
      */
     @SuppressLint("DefaultLocale")
     private boolean shouldRenewShield(long shieldEnd, long nowMillis) {
-        int hours = 23, minutes = 0;
+        // 解析阈值配置
+        int hours, minutes;
         if (SHIELD_RENEW_THRESHOLD_HHMM >= 0 && SHIELD_RENEW_THRESHOLD_HHMM <= 9959) {
             try {
                 int abs = Math.abs(SHIELD_RENEW_THRESHOLD_HHMM);
-                minutes = abs % 100;
-            } catch (Exception ignored) {}
+                hours = abs / 100;    // 提取小时部分
+                minutes = abs % 100;  // 提取分钟部分
+                
+                // 验证分钟有效性（0-59）
+            } catch (Exception e) {
+                Log.record(TAG, "[保护罩] 解析阈值配置异常: " + e.getMessage() + ", 使用默认值");
+                hours = 23;
+                minutes = 59;
+            }
+        } else {
+            // 使用默认值
+            hours = 23;
+            minutes = 59;
         }
-        long thresholdMs = hours * ONE_HOUR_MS + minutes * 60_000L;
+        long thresholdMs = hours * TimeFormatter.ONE_HOUR_MS + minutes * TimeFormatter.ONE_MINUTE_MS;
         if (shieldEnd <= nowMillis) { // 未生效或已过期
             Log.record(TAG, "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
             return true;
         }
         long remain = shieldEnd - nowMillis;
-        Log.record(TAG, "[保护罩] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + String.format("%02d小时%02d分", hours, minutes));
         boolean needRenew = remain <= thresholdMs;
-        Log.record(TAG, "[保护罩] 比较: "+remain+" <= "+thresholdMs+" == " + needRenew);
+        // 格式化剩余时间和阈值时间为更直观的显示
+        String remainTimeStr = TimeFormatter.formatRemainingTime(remain);
+        String thresholdTimeStr = String.format("%02d小时%02d分", hours, minutes);
+        if (needRenew) {
+            Log.record(TAG, String.format("[保护罩] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        } else {
+            Log.record(TAG, String.format("[保护罩] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        }
+        // 详细调试信息（可选）
+        Log.runtime(TAG, String.format("[保护罩] 详细对比: %dms ≤ %dms = %s", 
+            remain, thresholdMs, needRenew));
         return needRenew;
     }
 
@@ -2215,20 +2347,33 @@ public class AntForest extends ModelTask {
     @SuppressLint("DefaultLocale")
     private boolean shouldRenewEnergyBomb(long bombEnd, long nowMillis) {
         // 炸弹卡最长有效期为4天
-        long MAX_BOMB_DURATION = 4 * ONE_DAY;
+        long MAX_BOMB_DURATION = 4 * TimeFormatter.ONE_DAY_MS;
         // 炸弹卡续用阈值为3天
-        long BOMB_RENEW_THRESHOLD = 3 * ONE_DAY;
+        long BOMB_RENEW_THRESHOLD = 3 * TimeFormatter.ONE_DAY_MS;
         if (bombEnd <= nowMillis) { // 未生效或已过期
             Log.runtime(TAG, "[炸弹卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
             return true;
         }
         long remain = bombEnd - nowMillis;
-        Log.runtime(TAG, "[炸弹卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(BOMB_RENEW_THRESHOLD));
-
         // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
         boolean needRenew = remain <= BOMB_RENEW_THRESHOLD && (bombEnd - nowMillis + remain) <= MAX_BOMB_DURATION;
-        Log.runtime(TAG, "[炸弹卡] 比较: " + remain + " <= " + BOMB_RENEW_THRESHOLD + " == " + needRenew +
-                ", 总时长检查: " + (bombEnd - nowMillis + remain) + " <= " + MAX_BOMB_DURATION);
+        
+        String remainTimeStr = TimeFormatter.formatRemainingTime(remain);
+        String thresholdTimeStr = TimeFormatter.formatRemainingTime(BOMB_RENEW_THRESHOLD);
+        
+        if (needRenew) {
+            Log.runtime(TAG, String.format("[炸弹卡] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        } else {
+            Log.runtime(TAG, String.format("[炸弹卡] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        }
+        
+        // 详细调试信息
+        Log.runtime(TAG, String.format("[炸弹卡] 详细对比: %dms ≤ %dms = %s, 总时长检查: %dms ≤ %dms", 
+            remain, BOMB_RENEW_THRESHOLD, (remain <= BOMB_RENEW_THRESHOLD),
+            (bombEnd - nowMillis + remain), MAX_BOMB_DURATION));
+            
         return needRenew;
     }
 
@@ -2241,7 +2386,7 @@ public class AntForest extends ModelTask {
     private boolean shouldRenewDoubleCard(long doubleEnd, long nowMillis) {
         // 双击卡最长有效期为62天（31+31）
         // 双击卡续用阈值为31天
-        long DOUBLE_RENEW_THRESHOLD = 31 * ONE_DAY;
+        long DOUBLE_RENEW_THRESHOLD = 31 * TimeFormatter.ONE_DAY_MS;
 
         if (doubleEnd <= nowMillis) { // 未生效或已过期
             Log.runtime(TAG, "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
@@ -2249,11 +2394,24 @@ public class AntForest extends ModelTask {
         }
 
         long remain = doubleEnd - nowMillis;
-        Log.runtime(TAG, "[双击卡] 剩余= " + formatTimeDifference(remain) + ", 阈值=" + formatTimeDifference(DOUBLE_RENEW_THRESHOLD));
-
-        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        // 如果剩余时间小于阈值，则需要续用
         boolean needRenew = remain <= DOUBLE_RENEW_THRESHOLD;
-        Log.runtime(TAG, "[双击卡] 比较: " + remain + " <= " + DOUBLE_RENEW_THRESHOLD + " == " + needRenew);
+        
+        String remainTimeStr = TimeFormatter.formatRemainingTime(remain);
+        String thresholdTimeStr = TimeFormatter.formatRemainingTime(DOUBLE_RENEW_THRESHOLD);
+        
+        if (needRenew) {
+            Log.runtime(TAG, String.format("[双击卡] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        } else {
+            Log.runtime(TAG, String.format("[双击卡] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]", 
+                remainTimeStr, thresholdTimeStr));
+        }
+        
+        // 详细调试信息
+        Log.runtime(TAG, String.format("[双击卡] 详细对比: %dms ≤ %dms = %s", 
+            remain, DOUBLE_RENEW_THRESHOLD, needRenew));
+            
         return needRenew;
     }
 
@@ -2825,39 +2983,19 @@ public class AntForest extends ModelTask {
      * @param bagObject 背包的JSON对象。
      */
     private void useDoubleCard(JSONObject bagObject) {
-        try {
-            if (hasDoubleCardTime() && Status.canDoubleToday()) {
-                Log.runtime(TAG, "尝试使用双击卡...");
-                JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_DOUBLE_CLICK");
-                if (jo == null && doubleCardConstant.getValue()) {//如果背包内没有双击卡
-                    Log.runtime(TAG, "背包中没有限时双击卡，尝试兑换...");
-                    if (Vitality.handleVitalityExchange("SK20240805004754")) {//就鸡巴兑换
-                        jo = findPropBag(queryPropList(), "ENERGY_DOUBLE_CLICK_31DAYS");
-                    } else if (Vitality.handleVitalityExchange("CR20230516000363")) {
-                        jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_DOUBLE_CLICK");
-                    }
-                }
-                if (jo == null) {
-                    Log.runtime(TAG, "未找到限时双击卡，尝试查找普通双击卡...");
-                    jo = findPropBag(bagObject, "ENERGY_DOUBLE_CLICK");
-                }
-                if (jo != null) {
-                    Log.runtime(TAG, "找到双击卡，准备使用: " + jo);
-                    if (usePropBag(jo)) {
-                        doubleEndTime = System.currentTimeMillis() + 1000 * 60 * 5;
-                        Status.DoubleToday();
-                    }
-                } else {
-                    Log.runtime(TAG, "背包中未找到任何可用双击卡。");
-                    updateSelfHomePage();
-                }
-            } else {
-                Log.runtime(TAG, "不满足使用双击卡条件: inDoubleTime=" + hasDoubleCardTime() + ", canDoubleToday=" + Status.canDoubleToday());
+        PropConfig config = new PropConfig(
+            "双击卡",
+            new String[]{"LIMIT_TIME_ENERGY_DOUBLE_CLICK", "ENERGY_DOUBLE_CLICK_31DAYS", "ENERGY_DOUBLE_CLICK"},
+            () -> hasDoubleCardTime() && Status.canDoubleToday(),
+            () -> Vitality.handleVitalityExchange("SK20240805004754") || 
+                  Vitality.handleVitalityExchange("CR20230516000363"),
+            (time) -> {
+                doubleEndTime = time + 5 * TimeFormatter.ONE_MINUTE_MS;
+                Status.DoubleToday();
             }
-        } catch (Throwable th) {
-            Log.error(TAG + "useDoubleCard err");
-            Log.printStackTrace(TAG, th);
-        }
+        );
+        
+        usePropTemplate(bagObject, config, doubleCardConstant.getValue());
     }
 
     /**
@@ -2866,32 +3004,15 @@ public class AntForest extends ModelTask {
      * @param bagObject 背包的JSON对象。
      */
     private void useStealthCard(JSONObject bagObject) {
-        try {
-            Log.runtime(TAG, "尝试使用隐身卡...");
-            JSONObject jo = findPropBag(bagObject, "LIMIT_TIME_STEALTH_CARD");
-            if (jo == null && stealthCardConstant.getValue()) {
-                Log.runtime(TAG, "背包中没有限时隐身卡，尝试兑换...");
-                if (exchangeStealthCard()) {
-                    jo = findPropBag(queryPropList(), "LIMIT_TIME_STEALTH_CARD");
-                }
-            }
-            if (jo == null) {
-                Log.runtime(TAG, "未找到限时隐身卡，尝试查找普通隐身卡...");
-                jo = findPropBag(bagObject, "STEALTH_CARD");
-            }
-            if (jo != null) {
-                Log.runtime(TAG, "找到隐身卡，准备使用: " + jo);
-                if (usePropBag(jo)) {
-                    stealthEndTime = System.currentTimeMillis() + 1000 * 60 * 60 * 24;
-                }
-            } else {
-                Log.runtime(TAG, "背包中未找到任何可用隐身卡。");
-                updateSelfHomePage();
-            }
-        } catch (Throwable th) {
-            Log.error(TAG + "useStealthCard err");
-            Log.printStackTrace(TAG, th);
-        }
+        PropConfig config = new PropConfig(
+            "隐身卡",
+            new String[]{"LIMIT_TIME_STEALTH_CARD", "STEALTH_CARD"},
+            null, // 无特殊条件
+            this::exchangeStealthCard,
+            (time) -> stealthEndTime = time + TimeFormatter.ONE_DAY_MS
+        );
+        
+        usePropTemplate(bagObject, config, stealthCardConstant.getValue());
     }
 
     /**
@@ -3079,7 +3200,11 @@ public class AntForest extends ModelTask {
     }
 
     /**
-     * 统一获取和缓存用户名的中心方法
+     * 统一获取和缓存用户名的方法
+     * @param userId 用户ID
+     * @param userHomeObj 用户主页对象（可选）
+     * @param fromTag 来源标记（可选）
+     * @return 用户名
      */
     private String getAndCacheUserName(String userId, JSONObject userHomeObj, String fromTag) {
         // 1. 尝试从缓存获取
@@ -3087,7 +3212,150 @@ public class AntForest extends ModelTask {
         if (userName != null && !userName.equals(userId)) { // 如果缓存的不是userId本身
             return userName;
         }
+        
         // 2. 根据上下文解析
+        userName = resolveUserNameFromContext(userId, userHomeObj, fromTag);
+        
+        // 3. Fallback处理
+        if (userName == null || userName.isEmpty()) {
+            userName = userId;
+        }
+        
+        // 4. 存入缓存
+        cacheCollectedMap.put(userId, userName);
+        return userName;
+    }
+
+    /**
+     * 统一获取用户名的简化方法（无上下文）
+     */
+    private String getAndCacheUserName(String userId) {
+        return getAndCacheUserName(userId, null, null);
+    }
+    
+    /**
+     * 通用错误处理器
+     * @param operation 操作名称
+     * @param throwable 异常对象
+     */
+    private void handleException(String operation, Throwable throwable) {
+        if (throwable instanceof JSONException) {
+            Log.error(TAG, operation + " JSON解析错误: " + throwable.getMessage());
+        } else {
+            Log.error(TAG, operation + " 错误: " + throwable.getMessage());
+        }
+        Log.printStackTrace(TAG, throwable);
+    }
+
+
+    /**
+         * 道具使用配置类
+         */
+        private record PropConfig(String propName, String[] propTypes,
+                                  java.util.function.Supplier<Boolean> condition,
+                                  java.util.function.Supplier<Boolean> exchangeFunction,
+                                  java.util.function.Consumer<Long> endTimeUpdater) {
+    }
+    
+    /**
+     * 通用道具使用模板方法
+     *
+     * @param bagObject    背包对象
+     * @param config       道具配置
+     * @param constantMode 是否开启永动机模式
+     */
+    private void usePropTemplate(JSONObject bagObject, PropConfig config, boolean constantMode) {
+        try {
+            if (config.condition != null && !config.condition.get()) {
+                Log.runtime(TAG, "不满足使用" + config.propName + "的条件");
+                return;
+            }
+            Log.runtime(TAG, "尝试使用" + config.propName + "...");
+            // 按优先级查找道具
+            JSONObject propObj = null;
+            for (String propType : config.propTypes) {
+                propObj = findPropBag(bagObject, propType);
+                if (propObj != null) break;
+            }
+            // 如果背包中没有道具且开启永动机，尝试兑换
+            if (propObj == null && constantMode && config.exchangeFunction != null) {
+                Log.runtime(TAG, "背包中没有" + config.propName + "，尝试兑换...");
+                if (config.exchangeFunction.get()) {
+                    // 重新查找兑换后的道具
+                    for (String propType : config.propTypes) {
+                        propObj = findPropBag(queryPropList(), propType);
+                        if (propObj != null) break;
+                    }
+                }
+            }
+            if (propObj != null) {
+                Log.runtime(TAG, "找到" + config.propName + "，准备使用: " + propObj);
+                if (usePropBag(propObj)) {
+                    if (config.endTimeUpdater != null) {
+                        config.endTimeUpdater.accept(System.currentTimeMillis());
+                    }
+                }
+            } else {
+                Log.runtime(TAG, "背包中未找到任何可用的" + config.propName);
+                updateSelfHomePage();
+            }
+        } catch (Throwable th) {
+            handleException("use" + config.propName, th);
+        }
+    }
+
+    /**
+     * 获取保护罩结束时间
+     * @param userHomeObj 用户主页对象
+     * @return 保护罩结束时间戳，如果没有保护罩返回0
+     */
+    private long getShieldEndTime(JSONObject userHomeObj) {
+        try {
+            JSONArray usingUserPropsNew = userHomeObj.optJSONArray("usingUserPropsNew");
+            if (usingUserPropsNew != null) {
+                for (int i = 0; i < usingUserPropsNew.length(); i++) {
+                    JSONObject prop = usingUserPropsNew.getJSONObject(i);
+                    String propGroup = prop.optString("propGroup");
+                    if ("shield".equals(propGroup)) {
+                        return prop.optLong("endTime", 0);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "获取保护罩结束时间失败", e);
+        }
+        return 0;
+    }
+    
+    /**
+     * 获取炸弹卡结束时间
+     * @param userHomeObj 用户主页对象
+     * @return 炸弹卡结束时间戳，如果没有炸弹卡返回0
+     */
+    private long getBombCardEndTime(JSONObject userHomeObj) {
+        try {
+            JSONArray usingUserPropsNew = userHomeObj.optJSONArray("usingUserPropsNew");
+            if (usingUserPropsNew != null) {
+                for (int i = 0; i < usingUserPropsNew.length(); i++) {
+                    JSONObject prop = usingUserPropsNew.getJSONObject(i);
+                    String propGroup = prop.optString("propGroup");
+                    if ("energyBombCard".equals(propGroup)) {
+                        return prop.optLong("endTime", 0);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "获取炸弹卡结束时间失败", e);
+        }
+        return 0;
+    }
+
+    /**
+     * 从上下文中解析用户名
+     */
+    private String resolveUserNameFromContext(String userId, JSONObject userHomeObj, String fromTag) {
+        String userName = null;
+        
         if ("pk".equals(fromTag) && userHomeObj != null) {
             JSONObject userEnergy = userHomeObj.optJSONObject("userEnergy");
             if (userEnergy != null) {
@@ -3105,31 +3373,8 @@ public class AntForest extends ModelTask {
                 }
             }
         }
-        // 3. Fallback
-        if (userName == null || userName.isEmpty()) {
-            userName = userId;
-        }
-        // 4. 存入缓存
-        cacheCollectedMap.put(userId, userName);
+        
         return userName;
-    }
-
-    /**
-     * 统一获取用户名的简化方法（无上下文）
-     */
-    private String getAndCacheUserName(String userId) {
-        String userName = cacheCollectedMap.get(userId);
-        if (userName != null) {
-            return userName;
-        }
-        userName = UserMap.getMaskName(userId);
-        if (userName != null && !userName.isEmpty()) {
-            cacheCollectedMap.put(userId, userName);
-            return userName;
-        }
-        // Fallback to userId to avoid null, and cache it.
-        cacheCollectedMap.put(userId, userId);
-        return userId;
     }
 }
 

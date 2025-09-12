@@ -75,6 +75,8 @@ public class AntForestRpcCall {
         }
     }
 
+
+
     public static String fillUserRobFlag(JSONArray userIdList) {
         try {
             JSONObject arg = new JSONObject();
@@ -136,6 +138,40 @@ public class AntForestRpcCall {
             return RequestManager.requestString("alipay.antforest.forest.h5.queryFriendHomePage", param, 3, 1000);
         } catch (Exception e) {
             Log.printStackTrace(e);
+            return "";
+        }
+    }
+
+    /**
+     * 找能量方法 - 查找可收取能量的好友
+     * 
+     * @return 找能量的响应结果
+     */
+    public static String takeLook() {
+        return takeLook(new JSONObject());
+    }
+
+    /**
+     * 找能量方法 - 查找可收取能量的好友（带跳过用户列表）
+     * 
+     * @param skipUsers 跳过的用户列表，格式：{"userId": "baohuzhao"} 表示该用户有保护罩
+     * @return 找能量的响应结果
+     */
+    public static String takeLook(JSONObject skipUsers) {
+        try {
+            JSONObject requestData = new JSONObject();
+            requestData.put("contactsStatus", "N");
+            requestData.put("exposedUserId", "");
+            requestData.put("skipUsers", skipUsers);
+            requestData.put("source", "chInfo_ch_appcenter__chsub_9patch");
+            requestData.put("takeLookEnd", false);
+            requestData.put("takeLookStart", false);
+            requestData.put("version", VERSION);
+            
+            return RequestManager.requestString("alipay.antforest.forest.h5.takeLook", 
+                    "[" + requestData.toString() + "]");
+        } catch (JSONException e) {
+            Log.printStackTrace(TAG, "takeLook构建请求参数失败", e);
             return "";
         }
     }
