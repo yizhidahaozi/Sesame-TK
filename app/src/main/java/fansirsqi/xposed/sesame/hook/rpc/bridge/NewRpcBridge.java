@@ -150,7 +150,7 @@ public class NewRpcBridge implements RpcBridge {
      */
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
-        if (ApplicationHook.isOffline()) {
+        if (ApplicationHook.isOffline() || newRpcCallMethod == null) {
             return null;
         }
         try {

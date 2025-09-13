@@ -1133,6 +1133,9 @@ public class AntForest extends ModelTask {
      */
     private JSONObject collectEnergy(String userId, JSONObject userHomeObj, String fromTag) {
         try {
+            if (userHomeObj == null) {
+                return null;
+            }
             // 1. 检查接口返回是否成功
              if (!ResChecker.checkRes(TAG + "载入用户主页失败:", userHomeObj)) {
                  Log.debug(TAG, "载入失败: " + userHomeObj.optString("resultDesc", "未知错误"));

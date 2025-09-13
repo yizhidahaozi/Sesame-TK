@@ -218,11 +218,17 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 val isIgnoringOptimizations =
                     powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
 
+                val batteryOptLog = if (isIgnoringOptimizations) {
+                    "true (已忽略原生安卓优化, 但延迟仍然发生。这很可能是由手机厂商自带的省电策略导致。请检查手机管家/安全中心/电池设置中针对支付宝的后台活动、自启动等权限。)"
+                } else {
+                    "false (这是导致延迟的主要原因, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)"
+                }
+
                 val reason = """
                 - 预定时间: $scheduledTimeStr
                 - 备份触发时间: $nowStr
                 - 延迟: ${delay}ms
-                - 是否已忽略电池优化: $isIgnoringOptimizations (如果为false, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)
+                - 是否已忽略电池优化: $batteryOptLog
                 """.trimIndent()
                 Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)。可能原因分析:\n$reason")
                 executeBackupTask()
@@ -236,17 +242,20 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 val nowStr = TimeUtil.getTimeStr(now)
                 val delay = now - exactTimeMillis
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                val isIgnoringOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val isIgnoringOptimizations =
                     powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
+
+                val batteryOptLog = if (isIgnoringOptimizations) {
+                    "true (已忽略原生安卓优化, 但延迟仍然发生。这很可能是由手机厂商自带的省电策略导致。请检查手机管家/安全中心/电池设置中针对支付宝的后台活动、自启动等权限。)"
                 } else {
-                    true
+                    "false (这是导致延迟的主要原因, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)"
                 }
 
                 val reason = """
                 - 预定时间: $scheduledTimeStr
                 - 备份触发时间: $nowStr
                 - 延迟: ${delay}ms
-                - 是否已忽略电池优化: $isIgnoringOptimizations (如果为false, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)
+                - 是否已忽略电池优化: $batteryOptLog
                 """.trimIndent()
                 Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)。可能原因分析:\n$reason")
                 executeBackupTask()
@@ -329,7 +338,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 return false
             }
         }
-        Log.record(TAG, "闹钟可用。")
+
         return true
     }
 

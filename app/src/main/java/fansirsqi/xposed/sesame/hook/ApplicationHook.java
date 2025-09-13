@@ -119,7 +119,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      */
     @Getter
     static BaseTask mainTask;
-    static RpcBridge rpcBridge;
+    static volatile RpcBridge rpcBridge;
+    private static final Object rpcBridgeLock = new Object();
     @Getter
     private static RpcVersion rpcVersion;
     private static PowerManager.WakeLock wakeLock;
@@ -494,9 +495,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 calendar.set(Calendar.MILLISECOND, 0);
 
             if (alarmScheduler != null) {
-                if (alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true)) {
-                    Log.record(TAG, "⏰ 设置0点定时唤醒");
-                }
+                alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
+                // Log.record(TAG, "⏰ 设置0点定时唤醒");
             } else {
                 Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
             }
@@ -622,13 +622,15 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
                 setWakenAtTimeAlarm();
 
-                if (BaseModel.getNewRpc().getValue()) {
-                    rpcBridge = new NewRpcBridge();
-                } else {
-                    rpcBridge = new OldRpcBridge();
+                synchronized (rpcBridgeLock) {
+                    if (BaseModel.getNewRpc().getValue()) {
+                        rpcBridge = new NewRpcBridge();
+                    } else {
+                        rpcBridge = new OldRpcBridge();
+                    }
+                    rpcBridge.load();
+                    rpcVersion = rpcBridge.getVersion();
                 }
-                rpcBridge.load();
-                rpcVersion = rpcBridge.getVersion();
                 if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
                     HookUtil.INSTANCE.hookRpcBridgeExtension(appLloadPackageParam, BaseModel.getSendHookData().getValue(), BaseModel.getSendHookDataUrl().getValue());
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(appLloadPackageParam);
@@ -682,10 +684,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     wakeLock.release();
                     wakeLock = null;
                 }
-                if (rpcBridge != null) {
-                    rpcVersion = null;
-                    rpcBridge.unload();
-                    rpcBridge = null;
+                synchronized (rpcBridgeLock) {
+                    if (rpcBridge != null) {
+                        rpcVersion = null;
+                        rpcBridge.unload();
+                        rpcBridge = null;
+                    }
                 }
             } else {
                 ModelTask.stopAllTask();
