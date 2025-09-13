@@ -2873,10 +2873,8 @@ public class AntForest extends ModelTask {
                 if (resData == null) {
                     resData = checkResponse;
                 }
-
                 String status = resData.optString("usePropStatus");
                 Log.record(TAG, "查成功, 状态: " + status);
-
                 if ("NEED_CONFIRM_CAN_PROLONG".equals(status)) {
                     // 情况1: 需要二次确认 (真正的续写)
                     Log.record(TAG, "需要二次确认，发送确认请求...");
@@ -2898,7 +2896,6 @@ public class AntForest extends ModelTask {
 
             // 统一结果处理
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
-                Log.forest("使用道具" + tag + "[" + propName + "]");
                 updateSelfHomePage();
                 return true;
             } else {
