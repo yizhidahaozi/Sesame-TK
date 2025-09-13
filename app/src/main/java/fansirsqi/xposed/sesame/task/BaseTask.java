@@ -14,17 +14,17 @@ public abstract class BaseTask {
     private static final String TAG = "BaseTask";
 
     @Getter
-    private volatile Thread thread;
+    public volatile Thread thread;
 
     /** 任务开始时间 */
     @Getter
-    private volatile long taskStartTime;
+    public volatile long taskStartTime;
 
     /** 任务结束时间 */
     @Getter
-    private volatile long taskEndTime;
+    public volatile long taskEndTime;
 
-    private final Map<String, BaseTask> childTaskMap = new ConcurrentHashMap<>();
+    public final Map<String, BaseTask> childTaskMap = new ConcurrentHashMap<>();
 
     public BaseTask() {
         this.thread = null;

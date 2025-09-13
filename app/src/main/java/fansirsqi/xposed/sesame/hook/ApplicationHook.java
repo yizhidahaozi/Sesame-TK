@@ -510,9 +510,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
                             if (alarmScheduler != null) {
-                                if (alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false)) {
-                                    Log.record(TAG, "⏰ 设置定时唤醒: " + wakenAtTime);
-                                }
+                                alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
+                                //  Log.record(TAG, "⏰ 设置定时唤醒: " + wakenAtTime);
                             } else {
                                 Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
                             }
@@ -783,11 +782,26 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * 通过广播发送重启模块服务的指令。
+     */
     public static void restartByBroadcast() {
         try {
             appContext.sendBroadcast(new Intent("com.eg.android.AlipayGphone.sesame.restart"));
         } catch (Throwable th) {
-            Log.runtime(TAG, "sesame sendBroadcast restart err:");
+            Log.runtime(TAG, "发送重启广播时出错:");
+            Log.printStackTrace(TAG, th);
+        }
+    }
+
+    /**
+     * 通过广播发送立即执行一次任务的指令。
+     */
+    public static void executeByBroadcast() {
+        try {
+            appContext.sendBroadcast(new Intent("com.eg.android.AlipayGphone.sesame.execute"));
+        } catch (Throwable th) {
+            Log.runtime(TAG, "发送执行广播时出错:");
             Log.printStackTrace(TAG, th);
         }
     }

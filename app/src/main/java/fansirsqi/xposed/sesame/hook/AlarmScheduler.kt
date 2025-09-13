@@ -19,6 +19,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
+import androidx.core.net.toUri
 
 /**
  * 统一的闹钟调度管理器
@@ -132,7 +133,6 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
     private fun setAlarm(triggerAtMillis: Long, pendingIntent: PendingIntent, requestCode: Int): Boolean {
         try {
             val alarmManager = this.alarmManager ?: return false
-
             // 取消旧闹钟（如果存在）
             cancelOldAlarm(requestCode)
             // 获取临时唤醒锁
@@ -157,7 +157,6 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                     TAG,
                     "已设置多重保护闹钟: ID=$requestCode, 预定时间=${TimeUtil.getTimeStr(triggerAtMillis)}"
                 )
-
                 // 保存闹钟引用
                 scheduledAlarms[requestCode] = pendingIntent
                 return true
@@ -208,10 +207,24 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
      * 设置备份机制
      */
     private fun scheduleBackupMechanisms(exactTimeMillis: Long, delayMillis: Long) {
+        val scheduledTimeStr = TimeUtil.getTimeStr(exactTimeMillis)
         // 1. Handler第一级备份
         mainHandler?.postDelayed({
             if (isTaskExecutionPending.compareAndSet(true, false)) {
-                Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)")
+                val now = System.currentTimeMillis()
+                val nowStr = TimeUtil.getTimeStr(now)
+                val delay = now - exactTimeMillis
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                val isIgnoringOptimizations =
+                    powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
+
+                val reason = """
+                - 预定时间: $scheduledTimeStr
+                - 备份触发时间: $nowStr
+                - 延迟: ${delay}ms
+                - 是否已忽略电池优化: $isIgnoringOptimizations (如果为false, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)
+                """.trimIndent()
+                Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)。可能原因分析:\n$reason")
                 executeBackupTask()
             }
         }, delayMillis + Constants.FIRST_BACKUP_DELAY)
@@ -219,7 +232,23 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
         // 2. Handler第二级备份
         mainHandler?.postDelayed({
             if (isTaskExecutionPending.compareAndSet(true, false)) {
-                Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)")
+                val now = System.currentTimeMillis()
+                val nowStr = TimeUtil.getTimeStr(now)
+                val delay = now - exactTimeMillis
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                val isIgnoringOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
+                } else {
+                    true
+                }
+
+                val reason = """
+                - 预定时间: $scheduledTimeStr
+                - 备份触发时间: $nowStr
+                - 延迟: ${delay}ms
+                - 是否已忽略电池优化: $isIgnoringOptimizations (如果为false, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)
+                """.trimIndent()
+                Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)。可能原因分析:\n$reason")
                 executeBackupTask()
             }
         }, delayMillis + Constants.SECOND_BACKUP_DELAY)
@@ -295,10 +324,12 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
     private fun checkAndRequestAlarmPermissions(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (alarmManager?.canScheduleExactAlarms() == false) {
+                Log.record(TAG, "闹钟不可用(无权限), 准备请求。")
                 requestAlarmPermission()
                 return false
             }
         }
+        Log.record(TAG, "闹钟可用。")
         return true
     }
 
@@ -309,7 +340,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
     private fun requestAlarmPermission() {
         try {
             val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                data = android.net.Uri.parse("package:" + General.PACKAGE_NAME)
+                data = ("package:" + General.PACKAGE_NAME).toUri()
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
@@ -363,15 +394,11 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 }
             }
 
-            val initMethod = appHookClass.getDeclaredMethod("initHandler", java.lang.Boolean.TYPE)
-            initMethod.isAccessible = true
-            val initResult = initMethod.invoke(null, true) as? Boolean
-            if (initResult == true && mainTask != null) {
-                val startTaskMethod = mainTask.javaClass.getMethod("startTask", java.lang.Boolean.TYPE)
-                startTaskMethod.isAccessible = true
-                startTaskMethod.invoke(mainTask, true)
-            }
-            Log.record(TAG, "执行备份任务完成")
+            Log.record(TAG, "通过广播重启任务")
+            val restartMethod = appHookClass.getDeclaredMethod("restartByBroadcast")
+            restartMethod.isAccessible = true
+            restartMethod.invoke(null)
+            Log.record(TAG, "备份任务触发完成")
         } catch (e: Exception) {
             Log.error(TAG, "执行备份任务失败: " + e.message)
         }
