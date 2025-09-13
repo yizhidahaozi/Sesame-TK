@@ -922,9 +922,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         default:
                             // 处理闹钟相关的广播
                             if (alarmScheduler != null) {
-                                alarmScheduler.handleAlarmTrigger();
-                                int requestCode = intent.getIntExtra("request_code", -1);
-                                alarmScheduler.consumeAlarm(requestCode);
+                                new Thread(() -> {
+                                    alarmScheduler.handleAlarmTrigger();
+                                    int requestCode = intent.getIntExtra("request_code", -1);
+                                    alarmScheduler.consumeAlarm(requestCode);
+                                }).start();
                             }
                             break;
                     }

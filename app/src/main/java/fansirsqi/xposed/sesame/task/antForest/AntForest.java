@@ -1336,7 +1336,7 @@ public class AntForest extends ModelTask {
             Log.record(TAG, "开始使用找能量功能收取好友能量");
             for (int attempt = 1; attempt <= maxAttempts; attempt ++) {
                 // 构建跳过用户列表（有保护罩的用户）
-                JSONObject skipUsers = buildSkipUsersMap();
+                JSONObject skipUsers = new JSONObject();
                 // 调用找能量接口
                 String takeLookResponse = AntForestRpcCall.takeLook(skipUsers);
                 JSONObject takeLookResult = new JSONObject(takeLookResponse);
@@ -1347,7 +1347,9 @@ public class AntForest extends ModelTask {
                 // 获取找到的好友ID
                 String friendId = takeLookResult.optString("friendId");
                 if (friendId.isEmpty() || Objects.equals(friendId, selfId)) {
-                    Log.record(TAG, "第" + attempt + "次找能量没有发现新好友，继续尝试:"+skipUsers);
+                    if (attempt % 3 == 0) {
+                        Log.record(TAG, "第" + attempt + "次找能量没有发现新好友，继续尝试:"+skipUsers);
+                    }
                     continue;
                 }
                   // 查询好友主页并收取能量
@@ -1393,25 +1395,7 @@ public class AntForest extends ModelTask {
         }
     }
     
-    /**
-     * 构建跳过用户映射表
-     * @return 包含需要跳过用户的JSON对象
-     */
-    private JSONObject buildSkipUsersMap() {
-        JSONObject skipUsers = new JSONObject();
-        try {
-            // 从缓存中获取有保护罩的用户列表
-            for (Map.Entry<String, String> entry : skipUsersCache.entrySet()) {
-                String userId = entry.getKey();
-                String reason = entry.getValue();
-                skipUsers.put(userId, reason);
-            }
-            skipUsers.length();
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "构建跳过用户列表失败", e);
-        }
-        return skipUsers;
-    }
+  
     
     /**
      * 将用户添加到跳过列表（内存缓存）
