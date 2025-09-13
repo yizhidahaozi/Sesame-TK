@@ -56,6 +56,7 @@ import fansirsqi.xposed.sesame.util.AssetUtil;
 import fansirsqi.xposed.sesame.util.Detector;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
+import fansirsqi.xposed.sesame.util.NetworkUtils;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -564,6 +565,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.record(TAG, startMsg);
                 Log.record(TAG, "⚙️模块版本：" + modelVersion);
                 Log.record(TAG, "📦应用版本：" + alipayVersion.getVersionString());
+                Log.record(TAG, "📶网络类型：" + NetworkUtils.INSTANCE.getNetworkType());
                 Config.load(userId); //加载配置
                 if (!Config.isLoaded()) {
                     Log.record(TAG, "用户模块配置加载失败");
@@ -643,6 +645,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 String successMsg = "芝麻粒-TK 加载成功✨";
                 Log.record(successMsg);
                 Toast.show(successMsg);
+
             }
             offline = false;
             execHandler();
