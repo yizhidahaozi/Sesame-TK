@@ -25,9 +25,6 @@ public class CollectEnergyEntity {
     // 是否需要重试
     @Setter
     private Boolean needRetry = false;
-    // 收取来源标识
-    @Setter
-    private String fromTag;
     /**
      * 构造方法，仅指定用户 ID。
      * @param userId 用户 ID
@@ -54,20 +51,6 @@ public class CollectEnergyEntity {
         this.userId = userId;
         this.userHome = userHome;
         this.rpcEntity = rpcEntity;
-    }
-    
-    /**
-     * 构造方法，指定用户 ID、用户主页信息、RPC 请求实体及来源标识。
-     * @param userId 用户 ID
-     * @param userHome 用户主页 JSON 对象
-     * @param rpcEntity RPC 请求实体
-     * @param fromTag 收取来源标识
-     */
-    public CollectEnergyEntity(String userId, JSONObject userHome, RpcEntity rpcEntity, String fromTag) {
-        this.userId = userId;
-        this.userHome = userHome;
-        this.rpcEntity = rpcEntity;
-        this.fromTag = fromTag;
     }
     /**
      * 增加尝试次数。
