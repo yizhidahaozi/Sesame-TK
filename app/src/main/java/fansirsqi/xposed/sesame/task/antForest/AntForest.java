@@ -28,6 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
@@ -713,7 +715,7 @@ public class AntForest extends ModelTask {
         boolean hasMore;
         JSONObject currentObj = initialObj;
         do {
-            JSONArray jsonArray = currentObj.optJSONArray(arrayKey);
+            JSONArray jsonArray = currentObj != null ? currentObj.optJSONArray(arrayKey) : null;
             if (jsonArray != null && jsonArray.length() > 0) {
                 handler.handle(jsonArray);
                 // 判断是否还有更多数据（比如返回满20个）
@@ -1264,7 +1266,28 @@ public class AntForest extends ModelTask {
     private void collectRankings(String rankingName, RpcSupplier<String> rpcCall, String jsonArrayKey, String flag, JsonPredicate<JSONObject> preCondition) {
         try {
             TimeCounter tc = new TimeCounter(TAG);
-            JSONObject rankingObject = new JSONObject(rpcCall.get());
+            JSONObject rankingObject = null;
+            for (int i = 0; i < 3; i++) {
+                String response = null;
+                try {
+                    response = rpcCall.get();
+                    if (response != null && !response.isEmpty()) {
+                        rankingObject = new JSONObject(response);
+                        break;
+                    }
+                } catch (Exception e) {
+                    Log.printStackTrace(TAG, "collectRankings " + rankingName + ", response: " + response, e);
+                }
+                if (i < 2) {
+                    Log.record(TAG, "获取" + rankingName + "失败，" + (5 * (i + 1)) + "秒后重试");
+                    GlobalThreadPools.sleep(5000L * (i + 1));
+                }
+            }
+
+            if (rankingObject == null) {
+                Log.error(TAG, "获取" + rankingName + "失败");
+                return;
+            }
             if (!ResChecker.checkRes(TAG + "获取" + rankingName + "失败:", rankingObject)) {
                 Log.error(TAG, "获取" + rankingName + "失败: " + rankingObject.optString("resultDesc"));
                 return;
@@ -1341,8 +1364,26 @@ public class AntForest extends ModelTask {
                 // 构建跳过用户列表（有保护罩的用户）
                 JSONObject skipUsers = new JSONObject();
                 // 调用找能量接口
-                String takeLookResponse = AntForestRpcCall.takeLook(skipUsers);
-                JSONObject takeLookResult = new JSONObject(takeLookResponse);
+                String takeLookResponse;
+                try {
+                    takeLookResponse = AntForestRpcCall.takeLook(skipUsers);
+                } catch (NullPointerException e) {
+                    Log.error(TAG, "找异常，等待5秒后重试");
+                    Log.printStackTrace(TAG, "collectEnergyByTakeLook takeLook", e);
+                    GlobalThreadPools.sleep(5000L);
+                    continue;
+                }
+                if (takeLookResponse.isEmpty()) {
+                    continue;
+                }
+                JSONObject takeLookResult;
+                try {
+                    takeLookResult = new JSONObject(takeLookResponse);
+                } catch (JSONException e) {
+                    Log.error(TAG, "找能量返回的不是有效的JSON，response: " + takeLookResponse);
+                    Log.printStackTrace(TAG, e);
+                    continue;
+                }
                 if (!ResChecker.checkRes(TAG + "找能量失败:", takeLookResult)) {
                     Log.error(TAG, "找能量失败: " + takeLookResult.optString("resultDesc"));
                     break;
@@ -1351,13 +1392,16 @@ public class AntForest extends ModelTask {
                 String friendId = takeLookResult.optString("friendId");
                 if (friendId.isEmpty() || Objects.equals(friendId, selfId)) {
                     if (attempt % 3 == 0) {
-                        Log.record(TAG, "第" + attempt + "次找能量没有发现新好友，继续尝试:"+skipUsers);
+                        Log.record(TAG, "第" + attempt + "次找能量没有发现新好友，继续尝试:" + skipUsers);
                     }
                     continue;
                 }
-                  // 查询好友主页并收取能量
-                  JSONObject friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK_FRIEND");
-                  if (friendHomeObj != null) {
+                if (skipUsersCache.containsKey(friendId)) {
+                    continue;
+                }
+                // 查询好友主页并收取能量
+                JSONObject friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK_FRIEND");
+                if (friendHomeObj != null) {
                     foundCount++;
                     String friendName = UserMap.getMaskName(friendId);
                     if (friendName == null || friendName.isEmpty() || friendName.equals(friendId)) {
@@ -2897,6 +2941,7 @@ public class AntForest extends ModelTask {
             // 统一结果处理
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
                 updateSelfHomePage();
+                updateSelfHomePage();
                 return true;
             } else {
                 JSONObject errorData = jo.optJSONObject("resData");
@@ -3219,9 +3264,9 @@ public class AntForest extends ModelTask {
          * 道具使用配置类
          */
         private record PropConfig(String propName, String[] propTypes,
-                                  java.util.function.Supplier<Boolean> condition,
-                                  java.util.function.Supplier<Boolean> exchangeFunction,
-                                  java.util.function.Consumer<Long> endTimeUpdater) {
+                                  Supplier<Boolean> condition,
+                                  Supplier<Boolean> exchangeFunction,
+                                  Consumer<Long> endTimeUpdater) {
     }
     
     /**
