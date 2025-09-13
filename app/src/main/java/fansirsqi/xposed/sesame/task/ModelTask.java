@@ -34,6 +34,7 @@ public abstract class ModelTask extends Model {
     @Getter
     private final Runnable mainRunnable = new Runnable() {
         private final ModelTask task = ModelTask.this;
+
         @Override
         public void run() {
             if (MAIN_TASK_MAP.get(task) != null) {

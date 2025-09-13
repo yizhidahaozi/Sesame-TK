@@ -388,6 +388,7 @@ public class TimeUtil {
     /**
      * 获取格式化的日期 时间字符串yyyy-MM-dd HH:mm:ss
      *
+     * @return
      */
     public static String getFormatDateTime() {
         SimpleDateFormat simpleDateFormat = DATE_TIME_FORMAT_THREAD_LOCAL.get();
@@ -401,6 +402,7 @@ public class TimeUtil {
     /**
      * 获取格式化的日期符串yyyy-MM-dd
      *
+     * @return
      */
     public static String getFormatDate() {
         return getFormatDateTime().split(" ")[0];
@@ -409,6 +411,7 @@ public class TimeUtil {
     /**
      * 获取格式化的时间字符串HH:mm:ss
      *
+     * @return
      */
     public static String getFormatTime() {
         return getFormatDateTime().split(" ")[1];
