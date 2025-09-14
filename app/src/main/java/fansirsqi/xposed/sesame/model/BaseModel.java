@@ -29,6 +29,11 @@ public class BaseModel extends Model {
     @Getter
     public static final IntegerModelField.MultiplyIntegerModelField checkInterval =
             new IntegerModelField.MultiplyIntegerModelField("checkInterval", "执行间隔(分钟)", 50, 1, 12 * 60, 60_000);//此处调整至30分钟执行一次，可能会比平常耗电一点。。
+
+    @Getter
+    public static final IntegerModelField taskWaitTime =
+            new IntegerModelField("taskWaitTime", "任务等待时间(-1:无限)", 10, -1, 12 * 60);
+
     /**
      * 定时执行的时间点列表
      */
@@ -51,14 +56,14 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final ListModelField.ListJoinCommaToStringModelField energyTime =
-            new ListModelField.ListJoinCommaToStringModelField("energyTime", "只收能量时间(范围|关闭:-1)", ListUtil.newArrayList("0700-0730"));
+            new ListModelField.ListJoinCommaToStringModelField("energyTime", "只收能量时间(范围|关闭:-1)", ListUtil.newArrayList("0659-0731"));
 
     /**
      * 模块休眠时间范围
      */
     @Getter
     public static final ListModelField.ListJoinCommaToStringModelField modelSleepTime =
-            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("0200-0201"));
+            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("-1"));
 
     /**
      * 定时任务模式选择
@@ -161,6 +166,7 @@ public class BaseModel extends Model {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(stayAwake);//是否保持唤醒状态
         modelFields.addField(checkInterval);//执行间隔时间
+        modelFields.addField(taskWaitTime);//任务等待时间
         modelFields.addField(modelSleepTime);//模块休眠时间范围
         modelFields.addField(execAtTimeList);//定时执行的时间点列表
         modelFields.addField(wakenAtTimeList);//定时唤醒的时间点列表
@@ -192,11 +198,6 @@ public class BaseModel extends Model {
         try {
             Log.runtime(TAG, "🧹清理所有数据");
             IdMapManager.getInstance(BeachMap.class).clear();
-//            IdMapManager.getInstance(ReserveaMap.class).clear();
-//            IdMapManager.getInstance(CooperateMap.class).clear();
-//            IdMapManager.getInstance(MemberBenefitsMap.class).clear();
-//            IdMapManager.getInstance(ParadiseCoinBenefitIdMap.class).clear();
-//            IdMapManager.getInstance(VitalityRewardsMap.class).clear();
             //其他也可以清理清理
         } catch (Exception e) {
             Log.printStackTrace(e);

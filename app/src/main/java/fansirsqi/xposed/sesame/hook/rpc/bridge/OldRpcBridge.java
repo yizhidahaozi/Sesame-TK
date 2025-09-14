@@ -5,6 +5,7 @@ import org.json.JSONObject;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Objects;
 
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
@@ -94,7 +95,7 @@ public class OldRpcBridge implements RpcBridge {
         String args = rpcEntity.getRequestData(); // 获取请求参数
         for (int count = 0; count < tryCount; count++) {
             try {
-                RpcIntervalLimit.INSTANCE.enterIntervalLimit(method); // 进入 RPC 调用间隔限制
+                RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(method)); // 进入 RPC 调用间隔限制
                 Object response = invokeRpcCall(method, args); // 调用 RPC 方法
                 return processResponse(rpcEntity, response, id, method, args, retryInterval); // 处理响应
             } catch (Throwable t) {
@@ -193,7 +194,7 @@ public class OldRpcBridge implements RpcBridge {
         } else if (msg.contains("[1004]") && "alipay.antmember.forest.h5.collectEnergy".equals(method)) {
             handleEnergyCollectException(); // 处理能量收集异常
         } else if (msg.contains("MMTPException")) {
-            handleMmtpException(rpcEntity); // 处理 MMTP 异常
+            handleException(rpcEntity); // 处理 MMTP 异常
         }
     }
     /**
@@ -221,11 +222,11 @@ public class OldRpcBridge implements RpcBridge {
         }
     }
     /**
-     * 处理 MMTP 异常的情况。
+     * 处理 MTP 异常的情况。
      *
      * @param rpcEntity 要更新的 RPC 实体。
      */
-    private void handleMmtpException(RpcEntity rpcEntity) {
+    private void handleException(RpcEntity rpcEntity) {
         try {
             String jsonString;
             JSONObject jo = new JSONObject();
