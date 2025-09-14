@@ -120,26 +120,32 @@ class ExtendActivity : BaseActivity() {
                     }
                     container.addView(etMethod)
                     container.addView(etRequestData)
-                    AlertDialog.Builder(this)
+                    val dialog = AlertDialog.Builder(this)
                         .setTitle("RPC调试")
                         .setView(container)
-                        .setPositiveButton(R.string.ok) { _, _ ->
-                            val method = etMethod.text?.toString()?.trim().orEmpty()
-                            val requestData = etRequestData.text?.toString()?.trim().orEmpty()
-                            if (method.isEmpty() || requestData.isEmpty()) {
-                                ToastUtil.showToast(this, "Method 和 requestData 不能为空")
-                                return@setPositiveButton
-                            }
-                            // 通过广播交由支付宝进程执行，避免本进程无 rpcBridge 的问题
-                            val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest")
-                            intent.putExtra("method", method)
-                            intent.putExtra("data", requestData)
-                            intent.putExtra("type", "Rpc")
-                            sendBroadcast(intent)
-                            ToastUtil.showToast(this, "已发送，请在调试日志查看结果")
-                        }
+                        .setPositiveButton(R.string.ok, null) // 设置为null，稍后手动设置点击事件
                         .setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-                        .show()
+                        .create()
+                    
+                    dialog.show()
+                    
+                    // 手动设置确认按钮的点击事件，这样可以控制是否关闭对话框
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val method = etMethod.text?.toString()?.trim().orEmpty()
+                        val requestData = etRequestData.text?.toString()?.trim().orEmpty()
+                        if (method.isEmpty() || requestData.isEmpty()) {
+                            ToastUtil.showToast(this, "Method 和 requestData 不能为空")
+                            return@setOnClickListener // 不关闭对话框
+                        }
+                        // 通过广播交由支付宝进程执行，避免本进程无 rpcBridge 的问题
+                        val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest")
+                        intent.putExtra("method", method)
+                        intent.putExtra("data", requestData)
+                        intent.putExtra("type", "Rpc")
+                        sendBroadcast(intent)
+                        ToastUtil.showToast(this, "已发送，请在调试日志查看结果")
+                        // 不调用 dialog.dismiss()，保持对话框打开
+                    }
                 }
             )
             extendFunctions.add(
