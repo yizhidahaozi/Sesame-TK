@@ -14,9 +14,17 @@ public abstract class BaseTask {
     private static final String TAG = "BaseTask";
 
     @Getter
-    private volatile Thread thread;
+    public volatile Thread thread;
 
-    private final Map<String, BaseTask> childTaskMap = new ConcurrentHashMap<>();
+    /** 任务开始时间 */
+    @Getter
+    public volatile long taskStartTime;
+
+    /** 任务结束时间 */
+    @Getter
+    public volatile long taskEndTime;
+
+    public final Map<String, BaseTask> childTaskMap = new ConcurrentHashMap<>();
 
     public BaseTask() {
         this.thread = null;
@@ -93,6 +101,8 @@ public abstract class BaseTask {
         thread = new Thread(this::run);
         try {
             if (check()) {
+                taskStartTime = System.currentTimeMillis();
+                taskEndTime = 0;
                 thread.start();
                 for (BaseTask childTask : childTaskMap.values()) {
                     if (childTask != null) {
@@ -127,6 +137,9 @@ public abstract class BaseTask {
             if (childTask != null) {
                 shutdownAndWait(childTask.getThread(), -1, TimeUnit.SECONDS);
             }
+        }
+        if (taskStartTime > 0 && taskEndTime == 0) {
+            taskEndTime = System.currentTimeMillis();
         }
         thread = null;
         childTaskMap.clear();
