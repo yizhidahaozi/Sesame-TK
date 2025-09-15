@@ -398,7 +398,7 @@ public class AntForest extends ModelTask {
                 if (selfHomeObj != null) {
                     collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");
                 }
-                GlobalThreadPools.execute(this::collectEnergyByTakeLook); //找能量
+                GlobalThreadPools.execute(this::collectEnergyByTakeLook); //找能量 （异步）
                 GlobalThreadPools.execute(this::collectFriendEnergy);  // 好友能量收取（异步）
                 GlobalThreadPools.execute(this::collectPKEnergy);      // PK好友能量（异步）
                 // 循环间隔
@@ -1336,7 +1336,7 @@ public class AntForest extends ModelTask {
         }
     }
 
-    private void collectPKEnergy() {
+    private synchronized  void collectPKEnergy() {
         collectRankings("PK排行榜",
                 AntForestRpcCall::queryTopEnergyChallengeRanking,
                 "totalData",
@@ -1356,7 +1356,7 @@ public class AntForest extends ModelTask {
      * 使用找能量功能收取好友能量
      * 这是一个更高效的收取方式，可以直接找到有能量的好友
      */
-    private void collectEnergyByTakeLook() {
+    private synchronized  void collectEnergyByTakeLook() {
         try {
             TimeCounter tc = new TimeCounter(TAG);
             int foundCount = 0;
@@ -1460,7 +1460,7 @@ public class AntForest extends ModelTask {
         }
     }
 
-    private void collectFriendEnergy() {
+    private synchronized  void collectFriendEnergy() {
         collectRankings("好友排行榜",
                 AntForestRpcCall::queryFriendsEnergyRanking,
                 "totalDatas",
@@ -2826,7 +2826,7 @@ public class AntForest extends ModelTask {
         return queryPropList(false);
     }
 
-    private JSONObject queryPropList(boolean forceRefresh) {
+     private synchronized  JSONObject queryPropList(boolean forceRefresh) {
         long now = System.currentTimeMillis();
         if (!forceRefresh && cachedBagObject != null && now - lastQueryPropListTime < 5000) {
             return cachedBagObject;
