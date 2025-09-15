@@ -915,30 +915,32 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 if (action != null) {
                     switch (action) {
                         case "com.eg.android.AlipayGphone.sesame.restart":
-                            initHandler(true);
+                            new Thread(() -> initHandler(true)).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.execute":
-                            initHandler(false);
+                            new Thread(() -> initHandler(false)).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
-                            reLogin();
+                            new Thread(ApplicationHook::reLogin).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.status":
                             // 状态查询处理
                             Log.system(TAG, "收到状态查询广播");
                             break;
                         case "com.eg.android.AlipayGphone.sesame.rpctest":
-                            try {
-                                String method = intent.getStringExtra("method");
-                                String data = intent.getStringExtra("data");
-                                String type = intent.getStringExtra("type");
-                                Log.runtime(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
-                                DebugRpc rpcInstance = new DebugRpc();
-                                rpcInstance.start(method, data, type);
-                            } catch (Throwable th) {
-                                Log.runtime(TAG, "sesame 测试RPC请求失败:");
-                                Log.printStackTrace(TAG, th);
-                            }
+                            new Thread(() -> {
+                                try {
+                                    String method = intent.getStringExtra("method");
+                                    String data = intent.getStringExtra("data");
+                                    String type = intent.getStringExtra("type");
+                                    Log.runtime(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
+                                    DebugRpc rpcInstance = new DebugRpc();
+                                    rpcInstance.start(method, data, type);
+                                } catch (Throwable th) {
+                                    Log.runtime(TAG, "sesame 测试RPC请求失败:");
+                                    Log.printStackTrace(TAG, th);
+                                }
+                            }).start();
                             break;
                         default:
                             // 处理闹钟相关的广播
