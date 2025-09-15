@@ -188,7 +188,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 updateNotification(exactTimeMillis)
                 // 保存执行状态
                 saveExecutionState(System.currentTimeMillis(), exactTimeMillis)
-                Log.record(
+                Log.runtime(
                     TAG, "已设置闹钟唤醒执行，ID=" + requestCode +
                             "，时间：" + TimeUtil.getCommonDate(exactTimeMillis) +
                             "，延迟：" + delayMillis / 1000 + "秒"
@@ -230,7 +230,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 - 延迟: ${delay}ms
                 - 是否已忽略电池优化: $batteryOptLog
                 """.trimIndent()
-                Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)。可能原因分析:\n$reason")
+                // Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)。可能原因分析:\n$reason")
                 executeBackupTask()
             }
         }, delayMillis + Constants.FIRST_BACKUP_DELAY)
@@ -294,7 +294,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
                 )
                 it.setAlarmClock(backupAlarmInfo, backupPendingIntent)
                 scheduledAlarms[backupRequestCode] = backupPendingIntent
-                Log.record(
+                Log.runtime(
                     TAG,
                     "已设置备份闹钟: ID=$backupRequestCode, 预定时间=${TimeUtil.getTimeStr(backupTriggerTime)} (+${Constants.BACKUP_ALARM_DELAY / 1000}秒)"
                 )
@@ -367,7 +367,6 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
         scheduledAlarms[requestCode]?.let { oldPendingIntent ->
             alarmManager?.cancel(oldPendingIntent)
             scheduledAlarms.remove(requestCode)
-            Log.debug(TAG, "已取消旧闹钟: ID=$requestCode")
         }
     }
 
@@ -445,7 +444,7 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
             }
             val stateJson = state.toString()
             DataStore.put("execution_state", stateJson)
-            Log.record(TAG, "已保存执行状态: $stateJson")
+           // Log.record(TAG, "已保存执行状态: $stateJson")
         } catch (e: Exception) {
             Log.error(TAG, "保存执行状态失败: " + e.message)
         }

@@ -38,7 +38,9 @@ import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
+import fansirsqi.xposed.sesame.data.RunType;
 import fansirsqi.xposed.sesame.data.Status;
+import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.OldRpcBridge;
@@ -269,7 +271,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                         mainHandler = new Handler(Looper.getMainLooper());
                         appContext = (Context) param.args[0];
-                        
+
+                        registerBroadcastReceiver(appContext);
                         // 初始化闹钟调度器
                         alarmScheduler = new AlarmScheduler(appContext, mainHandler);
                         PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(appContext.getPackageName(), 0);
@@ -388,7 +391,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                                 Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
                                             }
                                         } else {
-                                            Log.record(TAG, "▶️ 开始新一轮任务 (手动触发)");
+                                            Log.record(TAG, "▶️ 开始新一轮任务 (自动触发)");
+                                            new Thread(() -> initHandler(false)).start();
                                         }
                                         long currentTime = System.currentTimeMillis();
                                         // 获取最小执行间隔（2秒）
@@ -432,7 +436,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         Log.printStackTrace(TAG, e);
                                     }
                                 });
-                                registerBroadcastReceiver(appService);
                                 dayCalendar = Calendar.getInstance();
                                 if (initHandler(true)) {
                                     init = true;
@@ -897,6 +900,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     } else {
                         Log.error(TAG, "AlarmScheduler未初始化，无法设置延迟执行");
                     }
+
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -915,17 +919,27 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 if (action != null) {
                     switch (action) {
                         case "com.eg.android.AlipayGphone.sesame.restart":
+                            Log.printStack(TAG);
                             new Thread(() -> initHandler(true)).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.execute":
+                            Log.printStack(TAG);
                             new Thread(() -> initHandler(false)).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
+                            Log.printStack(TAG);
                             new Thread(ApplicationHook::reLogin).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.status":
                             // 状态查询处理
-                            Log.system(TAG, "收到状态查询广播");
+                            Log.printStack(TAG);
+                            if (ViewAppInfo.getRunType() == RunType.DISABLE) {
+                                Intent replyIntent = new Intent("fansirsqi.xposed.sesame.status");
+                                replyIntent.putExtra("EXTRA_RUN_TYPE", RunType.ACTIVE.getNickName());
+                                replyIntent.setPackage(General.MODULE_PACKAGE_NAME);
+                                context.sendBroadcast(replyIntent);
+                                Log.system(TAG, "Replied with status: " + RunType.ACTIVE.getNickName());
+                            }
                             break;
                         case "com.eg.android.AlipayGphone.sesame.rpctest":
                             new Thread(() -> {
