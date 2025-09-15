@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.Collections;
 
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
@@ -80,6 +81,7 @@ import fansirsqi.xposed.sesame.util.TimeCounter;
  */
 public class AntForest extends ModelTask {
     public static final String TAG = AntForest.class.getSimpleName();
+
 
     private static final Average offsetTimeMath = new Average(5);
 
@@ -140,7 +142,6 @@ public class AntForest extends ModelTask {
     private ListModelField.ListJoinCommaToStringModelField doubleCardTime; // 双击卡时间
     @Getter
     private IntegerModelField doubleCountLimit; // 双击卡次数限制
-    private BooleanModelField doubleCardConstant; // 双击卡永动机
     private ChoiceModelField stealthCard; // 隐身卡
     private BooleanModelField stealthCardConstant; // 隐身卡永动机
     private ChoiceModelField shieldCard; // 保护罩
@@ -178,7 +179,6 @@ public class AntForest extends ModelTask {
     private PriorityModelField giveProp;
 
     private ChoiceModelField robExpandCard;//1.1倍能量卡
-    private ListModelField robExpandCardTime; //1.1倍能量卡时间
     private IntegerModelField cycleinterval;      // 循环间隔
 
 
@@ -205,10 +205,6 @@ public class AntForest extends ModelTask {
      * Key: 用户ID，Value: 跳过原因（如"baohuzhao"表示有保护罩）
      */
     private final Map<String, String> skipUsersCache = new ConcurrentHashMap<>();
-    /**
-     * 加速器定时
-     */
-    private ListModelField.ListJoinCommaToStringModelField bubbleBoostTime;
 
     private PriorityModelField forestChouChouLe;//森林抽抽乐
     private static boolean canConsumeAnimalProp;
@@ -231,6 +227,9 @@ public class AntForest extends ModelTask {
             "🍗", "🌮", "🍃", "🥘", "🥒", "🧄", "🍠", "🥥"
     ));
     private final Random random = new Random();
+
+    private JSONObject cachedBagObject = null;
+    private long lastQueryPropListTime = 0;
 
     @Override
     public String getName() {
@@ -280,10 +279,12 @@ public class AntForest extends ModelTask {
         modelFields.addField(doubleCountLimit = new IntegerModelField("doubleCountLimit", "双击卡 | 使用次数", 6));
         modelFields.addField(doubleCardTime = new ListModelField.ListJoinCommaToStringModelField("doubleCardTime", "双击卡 | 使用时间/范围", ListUtil.newArrayList(
                 "0700", "0730", "1200", "1230", "1700", "1730", "2000", "2030", "2359")));
-        modelFields.addField(doubleCardConstant = new BooleanModelField("DoubleCardConstant", "限时双击永动机 | 开关", false));
+        // 双击卡永动机
+        modelFields.addField(new BooleanModelField("DoubleCardConstant", "限时双击永动机 | 开关", false));
 
         modelFields.addField(bubbleBoostCard = new ChoiceModelField("bubbleBoostCard", "加速器开关 | 消耗类型", applyPropType.CLOSE, applyPropType.nickNames));
-        modelFields.addField(bubbleBoostTime = new ListModelField.ListJoinCommaToStringModelField("bubbleBoostTime", "加速器 | 使用时间/不能范围", ListUtil.newArrayList(
+
+        modelFields.addField(new ListModelField.ListJoinCommaToStringModelField("bubbleBoostTime", "加速器 | 使用时间/不能范围", ListUtil.newArrayList(
                 "0030,0630", "0700", "0730", "1200", "1230", "1700", "1730", "2000", "2030", "2359")));
 
         modelFields.addField(shieldCard = new ChoiceModelField("shieldCard", "保护罩开关 | 消耗类型", applyPropType.CLOSE, applyPropType.nickNames));
@@ -293,7 +294,9 @@ public class AntForest extends ModelTask {
                 applyPropType.nickNames, "若开启了保护罩，则不会使用炸弹卡"));
 
         modelFields.addField(robExpandCard = new ChoiceModelField("robExpandCard", "1.1倍能量卡开关 | 消耗类型", applyPropType.CLOSE, applyPropType.nickNames));
-        modelFields.addField(robExpandCardTime = new ListModelField.ListJoinCommaToStringModelField("robExpandCardTime", "1.1倍能量卡 | 使用时间/不能范围",
+
+        //1.1倍能量卡时间
+        modelFields.addField(new ListModelField.ListJoinCommaToStringModelField("robExpandCardTime", "1.1倍能量卡 | 使用时间/不能范围",
                 ListUtil.newArrayList("0700", "0730", "1200", "1230", "1700", "1730", "2000", "2030", "2359")));
 
         modelFields.addField(stealthCard = new ChoiceModelField("stealthCard", "隐身卡开关 | 消耗类型", applyPropType.CLOSE, applyPropType.nickNames));
@@ -342,7 +345,7 @@ public class AntForest extends ModelTask {
         modelFields.addField(tryCount = new IntegerModelField("tryCount", "尝试收取(次数)", 1, 0, 5));
         modelFields.addField(retryInterval = new IntegerModelField("retryInterval", "重试间隔(毫秒)", 1200, 0, 10000));
         modelFields.addField(cycleinterval = new IntegerModelField("cycleinterval", "循环间隔(毫秒)", 5000, 0, 10000));
-        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容", false));
+        modelFields.addField(showBagList = new BooleanModelField("showBagList", "显示背包内容", true));
         return modelFields;
     }
 
@@ -395,7 +398,7 @@ public class AntForest extends ModelTask {
                 if (selfHomeObj != null) {
                     collectEnergy(UserMap.getCurrentUid(), selfHomeObj, "self");
                 }
-                GlobalThreadPools.execute(this::collectEnergyByTakeLook); //找能量
+                GlobalThreadPools.execute(this::collectEnergyByTakeLook); //找能量 （异步）
                 GlobalThreadPools.execute(this::collectFriendEnergy);  // 好友能量收取（异步）
                 GlobalThreadPools.execute(this::collectPKEnergy);      // PK好友能量（异步）
                 // 循环间隔
@@ -1333,7 +1336,7 @@ public class AntForest extends ModelTask {
         }
     }
 
-    private void collectPKEnergy() {
+    private synchronized  void collectPKEnergy() {
         collectRankings("PK排行榜",
                 AntForestRpcCall::queryTopEnergyChallengeRanking,
                 "totalData",
@@ -1353,7 +1356,7 @@ public class AntForest extends ModelTask {
      * 使用找能量功能收取好友能量
      * 这是一个更高效的收取方式，可以直接找到有能量的好友
      */
-    private void collectEnergyByTakeLook() {
+    private synchronized  void collectEnergyByTakeLook() {
         try {
             TimeCounter tc = new TimeCounter(TAG);
             int foundCount = 0;
@@ -1457,7 +1460,7 @@ public class AntForest extends ModelTask {
         }
     }
 
-    private void collectFriendEnergy() {
+    private synchronized  void collectFriendEnergy() {
         collectRankings("好友排行榜",
                 AntForestRpcCall::queryFriendsEnergyRanking,
                 "totalDatas",
@@ -2402,30 +2405,27 @@ public class AntForest extends ModelTask {
         // 双击卡最长有效期为62天（31+31）
         // 双击卡续用阈值为31天
         long DOUBLE_RENEW_THRESHOLD = 31 * TimeFormatter.ONE_DAY_MS;
-
         if (doubleEnd <= nowMillis) { // 未生效或已过期
-            Log.runtime(TAG, "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
+            Log.record(TAG, "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(nowMillis));
             return true;
         }
-
         long remain = doubleEnd - nowMillis;
         // 如果剩余时间小于阈值，则需要续用
         boolean needRenew = remain <= DOUBLE_RENEW_THRESHOLD;
-        
         String remainTimeStr = TimeFormatter.formatRemainingTime(remain);
         String thresholdTimeStr = TimeFormatter.formatRemainingTime(DOUBLE_RENEW_THRESHOLD);
         
         if (needRenew) {
-            Log.runtime(TAG, String.format("[双击卡] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]", 
+            Log.record(TAG, String.format("[双击卡] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]",
                 remainTimeStr, thresholdTimeStr));
         } else {
-            Log.runtime(TAG, String.format("[双击卡] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]", 
+            Log.record(TAG, String.format("[双击卡] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]",
                 remainTimeStr, thresholdTimeStr));
         }
         
         // 详细调试信息
-        Log.runtime(TAG, String.format("[双击卡] 详细对比: %dms ≤ %dms = %s", 
-            remain, DOUBLE_RENEW_THRESHOLD, needRenew));
+      //  Log.record(TAG, String.format("[双击卡] 详细对比: %dms ≤ %dms = %s",
+        //    remain, DOUBLE_RENEW_THRESHOLD, needRenew));
             
         return needRenew;
     }
@@ -2823,14 +2823,26 @@ public class AntForest extends ModelTask {
      * 获取背包信息
      */
     private JSONObject queryPropList() {
+        return queryPropList(false);
+    }
+
+     private synchronized  JSONObject queryPropList(boolean forceRefresh) {
+        long now = System.currentTimeMillis();
+        if (!forceRefresh && cachedBagObject != null && now - lastQueryPropListTime < 5000) {
+            return cachedBagObject;
+        }
         try {
+            Log.record(TAG, "刷新背包...");
             JSONObject bagObject = new JSONObject(AntForestRpcCall.queryPropList(false));
-            if (ResChecker.checkRes(TAG + "查询背包失败:", bagObject)) {
+            if (bagObject.optBoolean("success")) {
+                cachedBagObject = bagObject;
+                lastQueryPropListTime = now;
                 return bagObject;
+            } else {
+                Log.record(TAG, "刷新背包失败: " + bagObject.optString("resultDesc"));
             }
-            Log.error(TAG, "获取背包信息失败: " + bagObject);
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, "获取背包信息失败:", e);
+        } catch (Throwable th) {
+            handleException("queryPropList", th);
         }
         return null;
     }
@@ -2868,24 +2880,43 @@ public class AntForest extends ModelTask {
      * 返回背包道具信息
      */
     private void showBag() {
-        JSONObject bagObject = queryPropList();
+        JSONObject bagObject = queryPropList(true);
         if (Objects.isNull(bagObject)) {
             return;
         }
         try {
-            JSONArray forestPropVOList = Objects.requireNonNull(bagObject).getJSONArray("forestPropVOList");
+            JSONArray forestPropVOList = Objects.requireNonNull(bagObject).optJSONArray("forestPropVOList");
+            if (forestPropVOList == null) return;
+
+            StringBuilder logBuilder = new StringBuilder("\n======= 背包道具列表 =======\n");
             for (int i = 0; i < forestPropVOList.length(); i++) {
-                JSONObject forestPropVO = forestPropVOList.getJSONObject(i);
-                JSONObject propConfigVO = forestPropVO.getJSONObject("propConfigVO");
-                String currentPropType = propConfigVO.getString("propType");
-                String propName = propConfigVO.getString("propName");
-                Log.record("道具名称:"+propName+",道具代码:"+currentPropType);
+                JSONObject prop = forestPropVOList.optJSONObject(i);
+                if (prop == null) continue;
+
+                JSONObject propConfig = prop.optJSONObject("propConfigVO");
+                if (propConfig == null) continue;
+
+                String propName = propConfig.optString("propName");
+                String propType = prop.optString("propType");
+                int holdsNum = prop.optInt("holdsNum");
+                long expireTime = prop.optLong("recentExpireTime", 0);
+                logBuilder.append("道具: ").append(propName)
+                        .append(" | 数量: ").append(holdsNum)
+                        .append(" | 类型: ").append(propType);
+                if (expireTime > 0) {
+                    String formattedDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                            .format(new java.util.Date(expireTime));
+                    logBuilder.append(" | 过期时间: ").append(formattedDate);
+                }
+                logBuilder.append("\n");
             }
+            logBuilder.append("==========================");
+            Log.record(TAG, logBuilder.toString());
+
         } catch (Exception e) {
-            Log.error(TAG, "查找背包道具出错:");
+            Log.error(TAG, "解析背包道具出错:");
             Log.printStackTrace(TAG, e);
         }
-
     }
 
     /**
@@ -2918,10 +2949,9 @@ public class AntForest extends ModelTask {
                     resData = checkResponse;
                 }
                 String status = resData.optString("usePropStatus");
-                Log.record(TAG, "查成功, 状态: " + status);
                 if ("NEED_CONFIRM_CAN_PROLONG".equals(status)) {
                     // 情况1: 需要二次确认 (真正的续写)
-                    Log.record(TAG, "需要二次确认，发送确认请求...");
+                    Log.record(TAG, propName + "需要二次确认，发送确认请求...");
                     GlobalThreadPools.sleep(2000);
                     String confirmResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, true);
                     jo = new JSONObject(confirmResponseStr);
@@ -2992,24 +3022,98 @@ public class AntForest extends ModelTask {
 
     /**
      * 使用双击卡道具
-     * 功能：提高能量收取效率，可以进行双击收取
-     * 
+     * 功能：在指定时间内，使好友的一个能量球可以收取两次
+     *
      * @param bagObject 背包的JSON对象
      */
     private void useDoubleCard(JSONObject bagObject) {
-        PropConfig config = new PropConfig(
-            "双击卡",
-            new String[]{"LIMIT_TIME_ENERGY_DOUBLE_CLICK", "ENERGY_DOUBLE_CLICK_31DAYS", "ENERGY_DOUBLE_CLICK"},
-            () -> hasDoubleCardTime() && Status.canDoubleToday(),
-            () -> Vitality.handleVitalityExchange("SK20240805004754") || 
-                  Vitality.handleVitalityExchange("CR20230516000363"),
-            (time) -> {
-                doubleEndTime = time + 5 * TimeFormatter.ONE_MINUTE_MS;
-                Status.DoubleToday();
+        try {
+            // 前置检查1: 检查今日使用次数是否已达上限
+            if (!Status.canDoubleToday()) {
+                Log.record(TAG, "双击卡使用条件检查: 今日次数已达上限");
+                return;
             }
-        );
-        
-        usePropTemplate(bagObject, config, doubleCardConstant.getValue());
+
+            // 前置检查2: 校验背包数据是否有效
+            if (!bagObject.optBoolean("success")) {
+                Log.record(TAG, "背包数据异常，无法使用双击卡" + bagObject);
+                return;
+            }
+
+            JSONArray forestPropVOList = bagObject.optJSONArray("forestPropVOList");
+            if (forestPropVOList == null) {
+                return;
+            }
+
+            // 步骤1: 根据用户UI设置，筛选出需要使用的双击卡
+            List<JSONObject> doubleClickProps = new ArrayList<>();
+            int choice = doubleCard.getValue();
+            for (int i = 0; i < forestPropVOList.length(); i++) {
+                JSONObject prop = forestPropVOList.optJSONObject(i);
+                if (prop != null && "doubleClick".equals(prop.optString("propGroup"))) {
+                    if (choice == applyPropType.ALL) {
+                        // 设置为"所有道具": 添加所有双击卡
+                        doubleClickProps.add(prop);
+                    } else if (choice == applyPropType.ONLY_LIMIT_TIME) {
+                        // 设置为"限时道具": 只添加用于续期的卡 (名字含LIMIT_TIME或DAYS)
+                        String propType = prop.optString("propType");
+                        if (propType.contains("LIMIT_TIME") || propType.contains("DAYS")) {
+                            doubleClickProps.add(prop);
+                        }
+                    }
+                }
+            }
+            if (doubleClickProps.isEmpty()) {
+                Log.record(TAG, "根据设置，背包中没有需要使用的双击卡");
+                return;
+            }
+            // 步骤2: 按过期时间升序排序，优先使用即将过期的卡，避免浪费
+            Collections.sort(doubleClickProps, (p1, p2) -> {
+                long expireTime1 = p1.optLong("recentExpireTime", Long.MAX_VALUE);
+                long expireTime2 = p2.optLong("recentExpireTime", Long.MAX_VALUE);
+                return Long.compare(expireTime1, expireTime2);
+            });
+
+            Log.record(TAG, "扫描到" + doubleClickProps.size() + "种双击卡，将按过期顺序尝试使用...");
+            // 步骤3: 遍历筛选并排序后的列表，逐个尝试使用
+            boolean success = false;
+            for (JSONObject propObj : doubleClickProps) {
+                String propType = propObj.optString("propType");
+                String propName = Objects.requireNonNull(propObj.optJSONObject("propConfigVO")).optString("propName");
+                
+                // 特定条件检查1: 如果是普通的5分钟卡，需要检查是否在指定时间段内
+                if ("ENERGY_DOUBLE_CLICK".equals(propType) && !hasDoubleCardTime()) {
+                    Log.record(TAG, "跳过[" + propName + "]，当前不在指定使用时间段内");
+                    continue; // 跳过，尝试下一张
+                }
+
+                // 特定条件检查2: 如果是限时卡，并且设置为"仅限时道具"，则只在过期前1天内使用
+                if ("LIMIT_TIME_ENERGY_DOUBLE_CLICK".equals(propType) && choice == applyPropType.ONLY_LIMIT_TIME) {
+                    long expireTime = propObj.optLong("recentExpireTime", 0);
+                    if (expireTime > 0 && (expireTime - System.currentTimeMillis() > 24 * 60 * 60 * 1000L)) {
+                        Log.record(TAG, "跳过[" + propName + "]，该卡有效期剩余超过1天 (仅限时模式)");
+                        continue; // 跳过，尝试下一张
+                    }
+                }
+
+                // 尝试使用道具
+                Log.runtime(TAG, "尝试使用卡: " + propName);
+                if (usePropBag(propObj)) {
+                    // 使用成功，更新状态并结束循环
+                    doubleEndTime = System.currentTimeMillis() + 5 * TimeFormatter.ONE_MINUTE_MS;
+                    Status.DoubleToday();
+                    success = true;
+                    break;
+                }
+            }
+
+            if (!success) {
+                Log.record(TAG, "所有可用的双击卡均不满足使用条件");
+            }
+
+        } catch (Throwable th) {
+            handleException("useDoubleCard", th);
+        }
     }
 
     /**
@@ -3279,7 +3383,7 @@ public class AntForest extends ModelTask {
     private void usePropTemplate(JSONObject bagObject, PropConfig config, boolean constantMode) {
         try {
             if (config.condition != null && !config.condition.get()) {
-                Log.runtime(TAG, "不满足使用" + config.propName + "的条件");
+                Log.record(TAG, "不满足使用" + config.propName + "的条件");
                 return;
             }
             Log.runtime(TAG, "尝试使用" + config.propName + "...");
@@ -3301,6 +3405,14 @@ public class AntForest extends ModelTask {
                 }
             }
             if (propObj != null) {
+                // 针对限时双击卡的时间检查
+                if ("双击卡".equals(config.propName)) {
+                    String propType = propObj.optString("propType");
+                    if ("ENERGY_DOUBLE_CLICK".equals(propType) && hasDoubleCardTime()) {
+                        Log.record(TAG, "双击卡[" + propType + "]需要在指定时间段内使用");
+                        return;
+                    }
+                }
                 Log.runtime(TAG, "找到" + config.propName + "，准备使用: " + propObj);
                 if (usePropBag(propObj)) {
                     if (config.endTimeUpdater != null) {
