@@ -29,10 +29,10 @@ public class TaskCommon {
         IS_AFTER_8AM = TimeUtil.isAfterOrCompareTimeStr(currentTimeMillis, "0800");
 
         // 输出状态更新日志
-        Log.runtime("TaskCommon Update 完成:\n" +
+  /*      Log.runtime("TaskCommon Update 完成:\n" +
                 "只收能量时间配置: " + IS_ENERGY_TIME + "\n" +
                 "模块休眠配置: " + IS_MODULE_SLEEP_TIME + "\n" +
-                "当前是否过了8点: " + IS_AFTER_8AM);
+                "当前是否过了8点: " + IS_AFTER_8AM);*/
     }
 
     /**
