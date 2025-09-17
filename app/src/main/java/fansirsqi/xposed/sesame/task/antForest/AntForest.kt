@@ -38,8 +38,6 @@ import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasBombCard
 import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasShield
 import fansirsqi.xposed.sesame.task.antForest.Privilege.studentSignInRedEnvelope
 import fansirsqi.xposed.sesame.task.antForest.Privilege.youthPrivilege
-import fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager
-import fansirsqi.xposed.sesame.task.antForest.EnergyCollectCallback
 import fansirsqi.xposed.sesame.ui.ObjReference
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
@@ -66,7 +64,6 @@ import java.util.Locale
 import java.util.Objects
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -825,10 +822,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.record(TAG, "开始执行找能量...")
                 this. collectEnergyByTakeLook() //找能量（同步）
                 Log.record(TAG, "开始执行好友能量收取...")
-                this.collectFriendEnergy() // 好友能量收取（同步）
+                runBlocking { collectFriendEnergyCoroutine() } // 好友能量收取（协程）
                 
                 Log.record(TAG, "开始执行PK好友能量收取...")
-                collectPKEnergy() // PK好友能量（同步）
+                runBlocking { collectPKEnergyCoroutine() } // PK好友能量（协程）
                 
                 // 循环间隔
                 val sleepMillis = cycleinterval!!.value
@@ -919,8 +916,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 // 先尝试使用找能量功能快速定位有能量的好友（同步）
                 this.collectEnergyByTakeLook()  //找能量
-                this.collectFriendEnergy() // 好友能量收取（同步）
-                this.collectPKEnergy()  // PK好友能量（同步）
+                runBlocking { collectFriendEnergyCoroutine() } // 好友能量收取（协程）
+                runBlocking { collectPKEnergyCoroutine() }  // PK好友能量（协程）
                 Log.record(TAG, "午夜任务刷新，强制执行收取PK好友能量和好友能量")
             }
 
@@ -946,7 +943,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 收PK好友能量
             // -------------------------------
             Log.runtime(TAG, "🚀 异步执行PK好友能量收取")
-            this.collectPKEnergy()  // 好友道具在 collectFriendEnergy 内会自动处理
+            runBlocking { collectPKEnergyCoroutine() }  // 好友道具在 collectFriendEnergy 内会自动处理
             tc.countDebug("收PK好友能量（同步）")
 
             // -------------------------------
@@ -972,7 +969,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             // 然后执行传统的好友排行榜收取（异步）
             Log.runtime(TAG, "🚀 同步执行好友能量收取")
-             this.collectFriendEnergy() // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
+             runBlocking { collectFriendEnergyCoroutine() } // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
             tc.countDebug("收取好友能量（同步）")
 
             // -------------------------------
@@ -1851,7 +1848,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             // 处理前20个
             Log.record(TAG, "开始处理" + rankingName + "前20位好友...")
-            collectUserEnergyCoroutine(rankingObject, flag)
+            val friendRanking = rankingObject.optJSONArray("friendRanking")
+            if (friendRanking != null) {
+                processFriendsEnergyCoroutine(friendRanking, flag, "${rankingName}前20位")
+            }
             tc.countDebug("处理" + rankingName + "靠前的好友")
             // 分批并行处理后续的（协程版本）
             if (totalDatas.length() <= 20) {
@@ -1883,7 +1883,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     
                     val job = async {
                         Log.record(TAG, "[批次$currentBatchNum/$batches] 开始处理...")
-                        processLastdEnergyCoroutine(batch, flag)
+                        processFriendsEnergyCoroutine(batch, flag, "批次$currentBatchNum")
                         Log.record(TAG, "[批次$currentBatchNum/$batches] 处理完成")
                     }
                     batchJobs.add(job)
@@ -1896,7 +1896,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val currentBatchNum = ++batchCount
                 val job = async {
                     Log.record(TAG, "[批次$currentBatchNum/$batches] 开始处理...")
-                    processLastdEnergyCoroutine(idList, flag)
+                    processFriendsEnergyCoroutine(idList, flag, "批次$currentBatchNum")
                     Log.record(TAG, "[批次$currentBatchNum/$batches] 处理完成")
                 }
                 batchJobs.add(job)
@@ -1932,11 +1932,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         )
     }
     
-    private fun collectPKEnergy() {
-        runBlocking {
-            collectPKEnergyCoroutine()
-        }
-    }
 
 
     /**
@@ -2065,30 +2060,58 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         )
     }
     
-    private fun collectFriendEnergy() {
-        runBlocking {
-            collectFriendEnergyCoroutine()
-        }
-    }
 
     /**
-     * 协程版本：收取排名靠后的能量
+     * 统一的协程批量好友处理方法
+     * 
+     * @param friendSource 好友数据源，可以是：
+     *   - JSONArray: 直接的好友列表
+     *   - MutableList<String?>: 用户ID列表，需要通过API获取
+     * @param flag 标记（空字符串=普通好友，"pk"=PK好友）
+     * @param sourceName 数据源名称（用于日志）
      */
-    private suspend fun processLastdEnergyCoroutine(
-        userIds: MutableList<String?>?,
-        flag: String
+    private suspend fun processFriendsEnergyCoroutine(
+        friendSource: Any,
+        flag: String,
+        sourceName: String = "好友"
     ) = withContext(Dispatchers.Default) {
         try {
             if (errorWait) return@withContext
-            val jsonStr: String?
-            jsonStr = if (flag == "pk") {
-                AntForestRpcCall.fillUserRobFlag(JSONArray(userIds), true)
-            } else {
-                AntForestRpcCall.fillUserRobFlag(JSONArray(userIds))
+            
+            val friendList: JSONArray? = when (friendSource) {
+                is JSONArray -> {
+                    // 直接的好友列表
+                    friendSource
+                }
+                is MutableList<*> -> {
+                    // 用户ID列表，需要通过API获取详细信息
+                    @Suppress("UNCHECKED_CAST")
+                    val userIds = friendSource as MutableList<String?>
+                    val jsonStr = if (flag == "pk") {
+                        AntForestRpcCall.fillUserRobFlag(JSONArray(userIds), true)
+                    } else {
+                        AntForestRpcCall.fillUserRobFlag(JSONArray(userIds))
+                    }
+                    val batchObj = JSONObject(jsonStr)
+                    batchObj.optJSONArray("friendRanking")
+                }
+                else -> {
+                    Log.error(TAG, "不支持的好友数据源类型: ${friendSource?.javaClass?.simpleName}")
+                    return@withContext
+                }
             }
-            val batchObj = JSONObject(jsonStr)
-            val friendList = batchObj.optJSONArray("friendRanking")
-            if (friendList == null) return@withContext
+            
+            if (friendList == null) {
+                Log.debug(TAG, "${sourceName}数据为空，跳过处理")
+                return@withContext
+            }
+            
+            if (friendList.length() == 0) {
+                Log.debug(TAG, "${sourceName}列表为空，跳过处理")
+                return@withContext
+            }
+            
+            Log.debug(TAG, "开始处理${friendList.length()}个${sourceName}")
             
             // 使用协程并发处理每个好友（带并发控制）
             val friendJobs = mutableListOf<Deferred<Unit>>()
@@ -2097,7 +2120,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val job = async {
                     concurrencyLimiter.acquire()
                     try {
-                        processEnergyCoroutine(friendObj, flag)
+                        processSingleFriendEnergy(friendObj, flag)
                     } finally {
                         concurrencyLimiter.release()
                     }
@@ -2107,18 +2130,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             
             // 等待所有好友处理完成
             friendJobs.awaitAll()
+            Log.debug(TAG, "${sourceName}处理完成")
             
         } catch (e: JSONException) {
-            Log.printStackTrace(TAG, "解析批量好友数据失败", e)
+            Log.printStackTrace(TAG, "解析${sourceName}数据失败", e)
         } catch (e: Exception) {
-            Log.printStackTrace(TAG, "处理批量好友出错", e)
+            Log.printStackTrace(TAG, "处理${sourceName}出错", e)
         }
     }
 
     /**
-     * 协程版本：处理单个好友 - 收能量
+     * 处理单个好友的能量收取（协程版本）
      */
-    private suspend fun processEnergyCoroutine(obj: JSONObject, flag: String?) = withContext(Dispatchers.Default) {
+    private suspend fun processSingleFriendEnergy(obj: JSONObject, flag: String?) = withContext(Dispatchers.Default) {
         try {
             processEnergyInternal(obj, flag)
         } catch (e: Exception) {
@@ -2217,50 +2241,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     /**
      * 协程版本：收取排名靠前好友能量
      */
-    private suspend fun collectUserEnergyCoroutine(friendsObject: JSONObject, flag: String?) = withContext(Dispatchers.Default) {
-        try {
-            if (errorWait) return@withContext
-            val friendRanking = friendsObject.optJSONArray("friendRanking")
-            if (friendRanking == null) {
-                Log.runtime(TAG, "无好友数据(friendRanking)可处理")
-                return@withContext
-            }
-            
-            // 使用协程并发处理前20个好友（带并发控制）
-            val friendJobs = mutableListOf<Deferred<Unit>>()
-            for (i in 0..<friendRanking.length()) {
-                val finalFriendObj = friendRanking.getJSONObject(i)
-                val job = async {
-                    concurrencyLimiter.acquire()
-                    try {
-                        processEnergyInternal(finalFriendObj, flag)
-                    } catch (e: Exception) {
-                        Log.printStackTrace(TAG, "处理好友(top)异常", e)
-                    } finally {
-                        concurrencyLimiter.release()
-                    }
-                }
-                friendJobs.add(job)
-            }
-            
-            // 等待所有好友处理完成
-            friendJobs.awaitAll()
-            
-        } catch (e: JSONException) {
-            Log.printStackTrace(TAG, "解析好友排行榜子项失败", e)
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "处理好友列表异常", e)
-        }
-    }
     
-    /**
-     * 收取排名靠前好友能量（兼容版本）
-     */
-    private fun collectUserEnergy(friendsObject: JSONObject, flag: String?) {
-        runBlocking {
-            collectUserEnergyCoroutine(friendsObject, flag)
-        }
-    }
 
     private fun collectGiftBox(userHomeObj: JSONObject) {
         try {
@@ -4370,34 +4351,184 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * 实现EnergyCollectCallback接口
-     * 为蹲点管理器提供能量收取功能
+     * 检查用户是否有保护罩或炸弹（自己的能量无视保护）
      */
-    override suspend fun collectUserEnergy(userId: String, fromTag: String): Boolean {
+    private fun checkUserShieldAndBomb(userHomeObj: JSONObject, userName: String?, userId: String): CollectResult {
+        try {
+            // 如果是自己，无视保护罩和炸弹
+            val isSelf = userId == selfId
+            if (isSelf) {
+                return CollectResult(
+                    success = true,
+                    userName = userName,
+                    message = "自己的能量，无视保护"
+                )
+            }
+            
+            val userEnergy = userHomeObj.optJSONObject("userEnergy")
+            if (userEnergy != null) {
+                // 检查保护罩
+                val isShielded = userEnergy.optBoolean("isShielded", false)
+                if (isShielded) {
+                    return CollectResult(
+                        success = false,
+                        userName = userName,
+                        hasShield = true,
+                        message = "有保护罩"
+                    )
+                }
+                
+                // 检查炸弹
+                val hasBomb = userEnergy.optBoolean("hasBomb", false)
+                if (hasBomb) {
+                    return CollectResult(
+                        success = false,
+                        userName = userName,
+                        hasBomb = true,
+                        message = "有炸弹"
+                    )
+                }
+            }
+            
+            // 也检查bubbles中是否有保护信息
+            val bubbles = userHomeObj.optJSONArray("bubbles")
+            if (bubbles != null) {
+                for (i in 0..<bubbles.length()) {
+                    val bubble = bubbles.optJSONObject(i)
+                    if (bubble != null) {
+                        // 检查是否被保护
+                        val isProtected = bubble.optBoolean("isProtected", false)
+                        if (isProtected) {
+                            return CollectResult(
+                                success = false,
+                                userName = userName,
+                                hasShield = true,
+                                message = "能量球被保护"
+                            )
+                        }
+                        
+                        // 检查是否有炸弹
+                        val hasOwnerBomb = bubble.optBoolean("hasOwnerBomb", false)
+                        if (hasOwnerBomb) {
+                            return CollectResult(
+                                success = false,
+                                userName = userName,
+                                hasBomb = true,
+                                message = "能量球有炸弹"
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // 无保护罩和炸弹
+            return CollectResult(
+                success = true,
+                userName = userName,
+                message = "无保护"
+            )
+            
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "检查保护罩和炸弹异常", e)
+            return CollectResult(
+                success = true,
+                userName = userName,
+                message = "检查异常，继续收取"
+            )
+        }
+    }
+    
+    /**
+     * 专门用于蹲点的能量收取方法
+     */
+    private fun collectEnergyForWaiting(
+        userId: String,
+        userHomeObj: JSONObject,
+        fromTag: String?,
+        userName: String?
+    ): CollectResult {
+        try {
+            // 调用原有的collectEnergy方法
+            val result = collectEnergy(userId, userHomeObj, fromTag)
+            
+            if (result != null) {
+                // 尝试获取收取的能量数量
+                val energyCount = extractCollectedEnergyCount(result)
+                
+                return CollectResult(
+                    success = true,
+                    userName = userName,
+                    energyCount = energyCount,
+                    message = "收取成功"
+                )
+            } else {
+                return CollectResult(
+                    success = false,
+                    userName = userName,
+                    message = "能量收取返回null"
+                )
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "蹲点能量收取异常", e)
+            return CollectResult(
+                success = false,
+                userName = userName,
+                message = "收取异常：${e.message}"
+            )
+        }
+    }
+    
+    /**
+     * 从收取结果中提取收取的能量数量
+     */
+    private fun extractCollectedEnergyCount(result: JSONObject): Int {
+        return try {
+            // 尝试从返回结果中获取能量数量
+            result.optInt("collectEnergy", 0)
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * 实现EnergyCollectCallback接口
+     * 为蹲点管理器提供能量收取功能（增强版）
+     */
+    override suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult {
         return try {
             withContext(Dispatchers.Default) {
-                Log.record(TAG, "蹲点收取：开始收取用户[${UserMap.getMaskName(userId)}]的能量")
+                Log.record(TAG, "蹲点收取：开始收取用户[${UserMap.getMaskName(task.userId)}]的能量")
                 
                 // 查询好友主页
-                val friendHomeObj = queryFriendHome(userId, fromTag)
+                val friendHomeObj = queryFriendHome(task.userId, task.fromTag)
                 if (friendHomeObj != null) {
-                    // 调用原有的collectEnergy方法
-                    val result = collectEnergy(userId, friendHomeObj, fromTag)
-                    if (result != null) {
-                        Log.forest("蹲点收取成功🎯[${UserMap.getMaskName(userId)}]")
-                        true
-                    } else {
-                        Log.record(TAG, "蹲点收取失败：能量收取返回null")
-                        false
+                    // 获取真实用户名
+                    val realUserName = getAndCacheUserName(task.userId, friendHomeObj, task.fromTag)
+                    
+                    // 检查保护罩和炸弹（自己的能量无视保护）
+                    val shieldResult = checkUserShieldAndBomb(friendHomeObj, realUserName, task.userId)
+                    if (shieldResult.hasShield || shieldResult.hasBomb) {
+                        return@withContext shieldResult.copy(userName = realUserName)
                     }
+                    
+                    // 执行能量收取
+                    val result = collectEnergyForWaiting(task.userId, friendHomeObj, task.fromTag, realUserName)
+                    result.copy(userName = realUserName)
                 } else {
-                    Log.record(TAG, "蹲点收取失败：无法获取用户主页信息")
-                    false
+                    CollectResult(
+                        success = false,
+                        userName = task.userName,
+                        message = "无法获取用户主页信息"
+                    )
                 }
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "蹲点收取异常", e)
-            false
+            CollectResult(
+                success = false,
+                userName = task.userName,
+                message = "异常：${e.message}"
+            )
         }
     }
 }

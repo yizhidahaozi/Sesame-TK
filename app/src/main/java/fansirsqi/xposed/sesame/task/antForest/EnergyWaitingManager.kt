@@ -18,13 +18,24 @@ import java.util.concurrent.atomic.AtomicLong
  */
 interface EnergyCollectCallback {
     /**
-     * 收取指定用户的能量
-     * @param userId 用户ID
-     * @param fromTag 来源标记
-     * @return 是否收取成功
+     * 收取指定用户的能量（蹲点专用）
+     * @param task 蹲点任务信息
+     * @return 收取结果信息
      */
-    suspend fun collectUserEnergy(userId: String, fromTag: String): Boolean
+    suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult
 }
+
+/**
+ * 收取结果数据类
+ */
+data class CollectResult(
+    val success: Boolean,
+    val userName: String?,
+    val message: String = "",
+    val hasShield: Boolean = false,
+    val hasBomb: Boolean = false,
+    val energyCount: Int = 0
+)
 
 /**
  * 能量球蹲点管理器
@@ -93,7 +104,7 @@ object EnergyWaitingManager {
     private var energyCollectCallback: EnergyCollectCallback? = null
     
     /**
-     * 添加蹲点任务
+     * 添加蹲点任务（带重复检查优化）
      * 
      * @param userId 用户ID
      * @param userName 用户名称
@@ -111,10 +122,25 @@ object EnergyWaitingManager {
         managerScope.launch {
             taskMutex.withLock {
                 val currentTime = System.currentTimeMillis()
+                val taskId = "${userId}_${bubbleId}"
+                
+                // 检查是否已存在相同的任务
+                val existingTask = waitingTasks[taskId]
+                if (existingTask != null) {
+                    // 如果已存在且时间相同，跳过添加
+                    if (existingTask.produceTime == produceTime) {
+                        Log.debug(TAG, "蹲点任务[$taskId]已存在且时间相同，跳过重复添加")
+                        return@withLock
+                    }
+                    // 如果时间不同，记录更新信息
+                    Log.debug(TAG, "更新蹲点任务[$taskId]：时间从[${TimeUtil.getCommonDate(existingTask.produceTime)}]更新为[${TimeUtil.getCommonDate(produceTime)}]")
+                }
                 
                 // 检查时间有效性
                 if (produceTime <= currentTime) {
                     Log.debug(TAG, "能量球[$bubbleId]已经成熟，跳过蹲点")
+                    // 如果已过期，移除现有任务
+                    waitingTasks.remove(taskId)
                     return@withLock
                 }
                 
@@ -122,6 +148,8 @@ object EnergyWaitingManager {
                 val waitTime = produceTime - currentTime
                 if (waitTime > MAX_WAIT_TIME_MS) {
                     Log.debug(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
+                    // 移除过长的任务
+                    waitingTasks.remove(taskId)
                     return@withLock
                 }
                 
@@ -134,12 +162,13 @@ object EnergyWaitingManager {
                 )
                 
                 // 移除旧任务（如果存在）
-                waitingTasks.remove(task.taskId)
+                waitingTasks.remove(taskId)
                 
                 // 添加新任务
-                waitingTasks[task.taskId] = task
+                waitingTasks[taskId] = task
                 
-                Log.record(TAG, "添加蹲点任务：[${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟")
+                val actionText = if (existingTask != null) "更新" else "添加"
+                Log.record(TAG, "${actionText}蹲点任务：[${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟")
                 
                 // 启动蹲点协程
                 startWaitingCoroutine(task)
@@ -225,23 +254,40 @@ object EnergyWaitingManager {
     }
     
     /**
-     * 执行能量收取
+     * 执行能量收取（增强版）
      */
     private suspend fun executeEnergyCollection(task: WaitingTask) {
-        // 这里需要调用AntForest的相关方法
-        // 由于我们在EnergyWaitingManager中，需要通过回调或者直接调用的方式
-        // 这里使用GlobalThreadPools来执行，保持与原有代码风格一致
-        
         withContext(Dispatchers.Default) {
             try {
-                // 获取AntForest实例并执行收取
-                // 这里假设有一个全局的AntForest实例或者通过某种方式获取
-                val success = collectEnergyFromWaiting(task)
+                // 通过回调获取收取结果
+                val result = collectEnergyFromWaiting(task)
                 
-                if (success) {
-                    Log.forest("蹲点收取成功🎯[${task.userName}]能量球[${task.bubbleId}]")
-                } else {
-                    Log.record(TAG, "蹲点收取失败：[${task.userName}]能量球[${task.bubbleId}]")
+                // 根据结果进行不同的处理，所有情况都会移除任务
+                when {
+                    result.hasShield -> {
+                        Log.record(TAG, "蹲点跳过🛡️[${result.userName ?: task.userName}]能量球[${task.bubbleId}] - 有保护罩")
+                        // 有保护罩的任务直接移除，避免重复检查
+                        waitingTasks.remove(task.taskId)
+                    }
+                    result.hasBomb -> {
+                        Log.record(TAG, "蹲点跳过💣[${result.userName ?: task.userName}]能量球[${task.bubbleId}] - 有炸弹")
+                        // 有炸弹的任务直接移除，避免重复检查
+                        waitingTasks.remove(task.taskId)
+                    }
+                    result.success -> {
+                        val displayName = result.userName ?: task.userName
+                        val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
+                        Log.forest("蹲点收取成功🎯[${displayName}]能量球[${task.bubbleId}]${energyInfo}")
+                        // 成功收取的任务移除
+                        waitingTasks.remove(task.taskId)
+                    }
+                    else -> {
+                        val displayName = result.userName ?: task.userName
+                        val reason = if (result.message.isNotEmpty()) " - ${result.message}" else ""
+                        Log.record(TAG, "蹲点收取失败：[${displayName}]能量球[${task.bubbleId}]${reason}")
+                        // 失败的任务也移除，避免无限重试
+                        waitingTasks.remove(task.taskId)
+                    }
                 }
                 
             } catch (e: Exception) {
@@ -254,19 +300,27 @@ object EnergyWaitingManager {
     /**
      * 收取等待的能量（通过回调调用AntForest）
      */
-    private suspend fun collectEnergyFromWaiting(task: WaitingTask): Boolean {
+    private suspend fun collectEnergyFromWaiting(task: WaitingTask): CollectResult {
         return try {
             val callback = energyCollectCallback
             if (callback != null) {
                 // 通过回调调用AntForest的收取方法
-                callback.collectUserEnergy(task.userId, task.fromTag)
+                callback.collectUserEnergyForWaiting(task)
             } else {
                 Log.debug(TAG, "能量收取回调未设置，跳过收取：用户[${task.userId}] 能量球[${task.bubbleId}]")
-                false
+                CollectResult(
+                    success = false,
+                    userName = task.userName,
+                    message = "回调未设置"
+                )
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "收取能量失败", e)
-            false
+            CollectResult(
+                success = false,
+                userName = task.userName,
+                message = "异常：${e.message}"
+            )
         }
     }
     
