@@ -1799,8 +1799,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         jsonArrayKey: String?,
         flag: String,
         preCondition: JsonPredicate<JSONObject?>?
-    ) {
-        withContext(Dispatchers.Default) {
+    ) = withContext(Dispatchers.Default) {
         try {
             Log.record(TAG, "开始处理$rankingName...")
             val tc = TimeCounter(TAG)
@@ -1910,7 +1909,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         } catch (e: Exception) {
             Log.error(TAG, "处理" + rankingName + "时发生异常")
             Log.printStackTrace(TAG, "collectRankings 异常", e)
-        }
         }
     }
 
