@@ -37,7 +37,7 @@ public class WhackMole {
                     if (!moleIdList.isEmpty()) {
                         String token = response.getString("token"); // 获取令牌
                         long elapsedTime = System.currentTimeMillis() - startTime; // 计算已耗时间
-                        GlobalThreadPools.sleep(Math.max(0, 6000 - elapsedTime)); // 睡眠至6秒
+                        GlobalThreadPools.sleepCompat(Math.max(0, 6000 - elapsedTime)); // 睡眠至6秒
                         response = new JSONObject(AntForestRpcCall.settlementWhackMole(token, moleIdList, "senlinguangchangdadishu"));
                         if (ResChecker.checkRes(TAG, response)) {
                             int totalEnergy = response.getInt("totalEnergy");

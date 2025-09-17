@@ -22,6 +22,7 @@ import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -52,8 +53,9 @@ import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
+import fansirsqi.xposed.sesame.task.CoroutineTaskRunner;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.task.TaskRunner;
+import fansirsqi.xposed.sesame.task.TaskRunnerAdapter;
 import fansirsqi.xposed.sesame.util.AssetUtil;
 import fansirsqi.xposed.sesame.util.Detector;
 import fansirsqi.xposed.sesame.util.Files;
@@ -274,7 +276,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
                         registerBroadcastReceiver(appContext);
                         // 初始化闹钟调度器
-                        alarmScheduler = new AlarmScheduler(appContext, mainHandler);
+                        alarmScheduler = new AlarmScheduler(appContext);
                         PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(appContext.getPackageName(), 0);
                         assert pInfo.versionName != null;
                         alipayVersion = new AlipayVersion(pInfo.versionName);
@@ -391,8 +393,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                                 Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
                                             }
                                         } else {
-                                            Log.record(TAG, "▶️ 开始新一轮任务 (自动触发)");
-                                            new Thread(() -> initHandler(false)).start();
+                                            Log.record(TAG, "▶️ 开始新一轮任务 (支付宝APP触发)");
+                                            // 避免在主任务中创建新线程，可能导致并发问题
+                                            // 改为同步调用initHandler检查
+                                            if (!init) {
+                                                Log.record(TAG, "检测到未初始化状态，准备初始化");
+                                            }
                                         }
                                         long currentTime = System.currentTimeMillis();
                                         // 获取最小执行间隔（2秒）
@@ -405,18 +411,24 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         // 记录执行间隔信息（无论是否跳过）
                                         Log.record(TAG, "执行间隔: " + timeSinceLastExec + "ms，最小间隔: " + MIN_EXEC_INTERVAL +
                                                 "ms，闹钟触发: " + (isAlarmTriggered ? "是" : "否"));
-                                        // 只有在非闹钟触发且间隔太短的情况下才跳过执行
+
                                         if (shouldSkipExecution) {
                                             Log.record(TAG, "⚠️ 执行间隔较短，跳过执行，安排下次执行");
                                             // 使用统一的闹钟调度器
                                             if (alarmScheduler != null) {
                                                 alarmScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
                                             } else {
-                                                Log.error(TAG, "AlarmScheduler未初始化，无法设置延迟执行");
+                                                Log.error(TAG, "AlarmScheduler未初始化，无法设置延迟执行，稍后重试");
+                                                // 如果AlarmScheduler未初始化，延迟一段时间后重试
+                                                mainHandler.postDelayed(() -> {
+                                                    if (alarmScheduler != null) {
+                                                        alarmScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
+                                                        Log.record(TAG, "AlarmScheduler重试调度成功");
+                                                    }
+                                                }, 5000);
                                             }
                                             return;
                                         }
-
                                         // 闹钟触发的执行总是允许的
                                         if (isAlarmTriggered) {
                                             Log.record(TAG, "闹钟触发执行，忽略间隔时间检查");
@@ -429,7 +441,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             return;
                                         }
                                         lastExecTime = currentTime; // 更新最后执行时间
-                                        new TaskRunner(List.of(Model.getModelArray())).run(true, ModelTask.TaskExecutionMode.PARALLEL);
+                                        // 方式1：直接使用数组转换
+                                        TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                        adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL);
                                         scheduleNextExecution(lastExecTime);
                                     } catch (Exception e) {
                                         Log.record(TAG, "❌执行异常");
@@ -481,48 +495,75 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      * 设置定时唤醒
      */
     private static void setWakenAtTimeAlarm() {
+        setWakenAtTimeAlarmWithRetry(0);
+    }
+
+    /**
+     * 设置定时唤醒（带重试机制）
+     */
+    private static void setWakenAtTimeAlarmWithRetry(int retryCount) {
         try {
+            // 检查AlarmScheduler是否已初始化
+            if (alarmScheduler == null) {
+                if (retryCount < 3) {
+                    // 延迟重试，最多3次
+                    final int currentRetry = retryCount + 1;
+                    Log.runtime(TAG, "AlarmScheduler未初始化，延迟" + (currentRetry * 2) + "秒后重试设置定时唤醒 (第" + currentRetry + "次)");
+                    if (mainHandler != null) {
+                        mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
+                    }
+                    return;
+                } else {
+                    Log.error(TAG, "AlarmScheduler初始化超时，放弃设置定时唤醒");
+                    return;
+                }
+            }
+
             List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
             if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
             }
+            
             // 清理旧的唤醒闹钟
             unsetWakenAtTimeAlarm();
 
             // 设置0点唤醒
-                Calendar calendar = Calendar.getInstance();
-                calendar.add(Calendar.DAY_OF_MONTH, 1);
-                calendar.set(Calendar.HOUR_OF_DAY, 0);
-                calendar.set(Calendar.MINUTE, 0);
-                calendar.set(Calendar.SECOND, 0);
-                calendar.set(Calendar.MILLISECOND, 0);
+            Calendar calendar = Calendar.getInstance();
+            calendar.add(Calendar.DAY_OF_MONTH, 1);
+            calendar.set(Calendar.HOUR_OF_DAY, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
 
-            if (alarmScheduler != null) {
-                alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
-                // Log.record(TAG, "⏰ 设置0点定时唤醒");
+            boolean success = alarmScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
+            if (success) {
+                Log.record(TAG, "⏰ 设置0点定时唤醒成功");
             } else {
-                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
+                Log.runtime(TAG, "⏰ 设置0点定时唤醒失败");
             }
 
             // 设置自定义时间点唤醒
             if (wakenAtTimeList != null && !wakenAtTimeList.isEmpty()) {
                 Calendar nowCalendar = Calendar.getInstance();
+                int successCount = 0;
                 for (int i = 1, len = wakenAtTimeList.size(); i < len; i++) {
                     try {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                            if (alarmScheduler != null) {
-                                alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
-                                //  Log.record(TAG, "⏰ 设置定时唤醒: " + wakenAtTime);
-                            } else {
-                                Log.error(TAG, "AlarmScheduler未初始化，无法设置定时唤醒");
+                            boolean customSuccess = alarmScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
+                            if (customSuccess) {
+                                successCount++;
+                                Log.record(TAG, "⏰ 设置定时唤醒成功: " + wakenAtTime);
                             }
                         }
                     } catch (Exception e) {
                         Log.runtime(TAG, "设置自定义唤醒时间失败: " + e.getMessage());
                     }
+                }
+                if (successCount > 0) {
+                    Log.record(TAG, "⏰ 共设置了 " + successCount + " 个自定义定时唤醒");
                 }
             }
         } catch (Exception e) {
@@ -685,6 +726,13 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     RpcIntervalLimit.INSTANCE.clearIntervalLimit();
                     Config.unload();
                     UserMap.unload();
+                }
+                // 清理AlarmScheduler协程资源
+                if (alarmScheduler != null) {
+                    Log.record(TAG, "开始清理AlarmScheduler: " + alarmScheduler.getCoroutineStatus());
+                    alarmScheduler.cleanup();
+                    alarmScheduler = null;
+                    Log.record(TAG, "AlarmScheduler清理完成");
                 }
                 if (wakeLock != null) {
                     wakeLock.release();
@@ -959,11 +1007,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         default:
                             // 处理闹钟相关的广播
                             if (alarmScheduler != null) {
-                                new Thread(() -> {
+                                int requestCode = intent.getIntExtra("request_code", -1);
+                                Thread alarmThread = new Thread(() -> {
                                     alarmScheduler.handleAlarmTrigger();
-                                    int requestCode = intent.getIntExtra("request_code", -1);
                                     alarmScheduler.consumeAlarm(requestCode);
-                                }).start();
+                                });
+                                alarmThread.setName("AlarmTriggered_" + requestCode);
+                                alarmThread.start();
+                                Log.record(TAG, "闹钟广播触发，创建处理线程: " + alarmThread.getName());
                             }
                             break;
                     }

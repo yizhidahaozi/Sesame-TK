@@ -1,4 +1,5 @@
 package fansirsqi.xposed.sesame.model.modelFieldExt;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,7 +35,7 @@ public class BooleanModelField extends ModelField<Boolean> {
    */
   @Override
   public View getView(Context context) {
-    Switch sw = new Switch(context); // 创建 Switch 控件
+    @SuppressLint("UseSwitchCompatOrMaterialCode") Switch sw = new Switch(context); // 创建 Switch 控件
     sw.setText(getName()); // 设置 Switch 的文本为字段名称
     sw.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)); // 设置布局参数
     sw.setMinHeight(150); // 设置最小高度

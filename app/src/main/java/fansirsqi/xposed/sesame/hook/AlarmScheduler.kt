@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Handler
+// import android.os.Handler // 不再需要Handler
 import android.os.PowerManager
 import androidx.annotation.RequiresApi
 import fansirsqi.xposed.sesame.data.General
@@ -20,29 +20,44 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 import androidx.core.net.toUri
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
- * 统一的闹钟调度管理器
- *
+ * 统一的闹钟调度管理器（协程版本）
  *
  * 负责管理所有闹钟相关功能，包括：
  * 1. 闹钟的设置和取消
  * 2. 权限检查和处理
- * 3. 备份机制管理
+ * 3. 协程备份机制管理
  * 4. 唤醒锁管理
+ * 
+ * @param context Android上下文
  */
-class AlarmScheduler(private val context: Context, private val mainHandler: Handler?) {
+class AlarmScheduler(private val context: Context) {
     private val scheduledAlarms: MutableMap<Int, PendingIntent> = ConcurrentHashMap()
     private val isTaskExecutionPending = AtomicBoolean(false)
+    
+    // 协程相关
+    private val alarmScope = CoroutineScope(
+        SupervisorJob() + 
+        Dispatchers.Default + 
+        CoroutineName("AlarmSchedulerScope")
+    )
+    private val executionMutex = Mutex()
+    
+    // 存储备份任务的Job，用于取消
+    private val backupJobs = ConcurrentHashMap<String, Job>()
 
     /**
      * 闹钟相关常量
      */
     object Constants {
         const val WAKE_LOCK_SETUP_TIMEOUT = 5000L // 5秒
-        const val FIRST_BACKUP_DELAY = 20000L // 20秒，缩短第一级备份延迟
-        const val SECOND_BACKUP_DELAY = 50000L // 50秒，缩短第二级备份延迟
-        const val BACKUP_ALARM_DELAY = 15000L // 15秒，缩短备份闹钟延迟
+        const val FIRST_BACKUP_DELAY = 15000L // 15秒，协程版本可以更快响应
+        const val SECOND_BACKUP_DELAY = 35000L // 35秒，优化备份时间
+        const val BACKUP_ALARM_DELAY = 12000L // 12秒，更快的备份闹钟
         const val BACKUP_REQUEST_CODE_OFFSET = 10000
     }
 
@@ -198,69 +213,48 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
             Log.error(TAG, "设置闹钟备份失败：" + e.message)
             Log.printStackTrace(e)
 
-            // 失败时使用Handler备份
-            scheduleHandlerBackup(delayMillis)
+            // 失败时使用协程备份
+            scheduleCoroutineBackup(delayMillis)
         }
     }
 
     /**
-     * 设置备份机制
+     * 设置备份机制（协程版本）
      */
     private fun scheduleBackupMechanisms(exactTimeMillis: Long, delayMillis: Long) {
         val scheduledTimeStr = TimeUtil.getTimeStr(exactTimeMillis)
-        // 1. Handler第一级备份
-        mainHandler?.postDelayed({
-            if (isTaskExecutionPending.compareAndSet(true, false)) {
+        val backupKey = "backup_${System.currentTimeMillis()}"
+        // 取消之前的备份任务
+        backupJobs.values.forEach { it.cancel() }
+        backupJobs.clear()
+        // 1. 协程第一级备份
+        val firstBackupJob = alarmScope.launch {
+            delay(delayMillis + Constants.FIRST_BACKUP_DELAY)
+            if (isActive && isTaskExecutionPending.compareAndSet(true, false)) {
                 val now = System.currentTimeMillis()
-                val nowStr = TimeUtil.getTimeStr(now)
-                val delay = now - exactTimeMillis
+                TimeUtil.getTimeStr(now)
+                now - exactTimeMillis
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                val isIgnoringOptimizations =
-                    powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
-
-                val batteryOptLog = if (isIgnoringOptimizations) {
-                    "true (已忽略原生安卓优化, 但延迟仍然发生。这很可能是由手机厂商自带的省电策略导致。请检查手机管家/安全中心/电池设置中针对支付宝的后台活动、自启动等权限。)"
-                } else {
-                    "false (这是导致延迟的主要原因, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)"
-                }
-
-                val reason = """
-                - 预定时间: $scheduledTimeStr
-                - 备份触发时间: $nowStr
-                - 延迟: ${delay}ms
-                - 是否已忽略电池优化: $batteryOptLog
-                """.trimIndent()
-                // Log.error(TAG, "闹钟未在预期内触发，使用Handler备份执行 (第一级备份)。可能原因分析:\n$reason")
-                executeBackupTask()
+                powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
+                executeBackupTaskSuspend()
             }
-        }, delayMillis + Constants.FIRST_BACKUP_DELAY)
+        }
+        backupJobs["${backupKey}_first"] = firstBackupJob
 
-        // 2. Handler第二级备份
-        mainHandler?.postDelayed({
-            if (isTaskExecutionPending.compareAndSet(true, false)) {
+        // 2. 协程第二级备份
+        val secondBackupJob = alarmScope.launch {
+            delay(delayMillis + Constants.SECOND_BACKUP_DELAY)
+            if (isActive && isTaskExecutionPending.compareAndSet(true, false)) {
                 val now = System.currentTimeMillis()
-                val nowStr = TimeUtil.getTimeStr(now)
-                val delay = now - exactTimeMillis
+                TimeUtil.getTimeStr(now)
+                now - exactTimeMillis
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                val isIgnoringOptimizations =
-                    powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
+                powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
 
-                val batteryOptLog = if (isIgnoringOptimizations) {
-                    "true (已忽略原生安卓优化, 但延迟仍然发生。这很可能是由手机厂商自带的省电策略导致。请检查手机管家/安全中心/电池设置中针对支付宝的后台活动、自启动等权限。)"
-                } else {
-                    "false (这是导致延迟的主要原因, 请在系统设置中为支付宝开启“无限制”或“允许后台活动”权限)"
-                }
-
-                val reason = """
-                - 预定时间: $scheduledTimeStr
-                - 备份触发时间: $nowStr
-                - 延迟: ${delay}ms
-                - 是否已忽略电池优化: $batteryOptLog
-                """.trimIndent()
-                Log.error(TAG, "闹钟和第一级备份可能都未触发，使用Handler备份执行 (第二级备份)。可能原因分析:\n$reason")
-                executeBackupTask()
+                executeBackupTaskSuspend()
             }
-        }, delayMillis + Constants.SECOND_BACKUP_DELAY)
+        }
+        backupJobs["${backupKey}_second"] = secondBackupJob
         // 3. 备份闹钟
         scheduleBackupAlarm(exactTimeMillis)
     }
@@ -383,44 +377,58 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
         get() = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
     /**
-     * 执行备份任务
+     * 执行备份任务（协程版本）
+     */
+    private suspend fun executeBackupTaskSuspend() = withContext(Dispatchers.Main) {
+        executionMutex.withLock {
+            try {
+                // 通过反射调用ApplicationHook的方法，避免循环依赖
+                val appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook")
+                val getTaskMethod = appHookClass.getDeclaredMethod("getMainTask")
+                getTaskMethod.isAccessible = true
+                val mainTask = getTaskMethod.invoke(null)
+
+                // 检查主任务是否已在运行
+                if (mainTask is BaseTask) {
+                    val taskThread = mainTask.thread
+                    if (taskThread?.isAlive == true) {
+                        Log.record(TAG, "主任务正在运行，备份任务跳过执行。")
+                        return@withLock
+                    }
+                }
+
+                Log.record(TAG, "通过协程备份重启任务")
+                val restartMethod = appHookClass.getDeclaredMethod("restartByBroadcast")
+                restartMethod.isAccessible = true
+                restartMethod.invoke(null)
+                Log.record(TAG, "协程备份任务触发完成")
+            } catch (e: Exception) {
+                Log.error(TAG, "执行协程备份任务失败: " + e.message)
+            }
+        }
+    }
+    
+    /**
+     * 执行备份任务（兼容旧版本）
      */
     private fun executeBackupTask() {
-        try {
-            // 通过反射调用ApplicationHook的方法，避免循环依赖
-            val appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook")
-            val getTaskMethod = appHookClass.getDeclaredMethod("getMainTask")
-            getTaskMethod.isAccessible = true
-            val mainTask = getTaskMethod.invoke(null)
-
-            // 检查主任务是否已在运行
-            if (mainTask is BaseTask) {
-                val taskThread = mainTask.thread
-                if (taskThread?.isAlive == true) {
-                    Log.record(TAG, "主任务正在运行，备份任务跳过执行。")
-                    return
-                }
-            }
-
-            Log.record(TAG, "通过广播重启任务")
-            val restartMethod = appHookClass.getDeclaredMethod("restartByBroadcast")
-            restartMethod.isAccessible = true
-            restartMethod.invoke(null)
-            Log.record(TAG, "备份任务触发完成")
-        } catch (e: Exception) {
-            Log.error(TAG, "执行备份任务失败: " + e.message)
+        // 启动协程版本
+        alarmScope.launch {
+            executeBackupTaskSuspend()
         }
     }
 
     /**
-     * Handler备份执行
+     * 协程备份执行（替代Handler）
      */
-    private fun scheduleHandlerBackup(delayMillis: Long) {
-        mainHandler?.postDelayed({
-            Log.record(TAG, "闹钟设置失败，使用Handler备份执行")
-            executeBackupTask()
-        }, delayMillis)
+    private fun scheduleCoroutineBackup(delayMillis: Long) {
+        alarmScope.launch {
+            delay(delayMillis)
+            Log.record(TAG, "闹钟设置失败，使用协程备份执行")
+            executeBackupTaskSuspend()
+        }
     }
+    
 
     /**
      * 更新通知
@@ -504,6 +512,47 @@ class AlarmScheduler(private val context: Context, private val mainHandler: Hand
             // 设置15分钟超时，防止任务卡死导致无法释放
             wakeLock?.acquire(15 * 60 * 1000L)
             Log.record(TAG, "闹钟触发，已获取唤醒锁以确保任务持续执行")
+        }
+    }
+
+    /**
+     * 获取协程状态信息
+     */
+    fun getCoroutineStatus(): String {
+        return try {
+            val activeJobs = backupJobs.values.count { it.isActive }
+            val completedJobs = backupJobs.values.count { it.isCompleted }
+            val cancelledJobs = backupJobs.values.count { it.isCancelled }
+            val scopeActive = alarmScope.isActive
+            
+            "协程状态: 作用域=${if (scopeActive) "活跃" else "非活跃"}, " +
+            "活跃任务=$activeJobs, 完成任务=$completedJobs, 取消任务=$cancelledJobs"
+        } catch (e: Exception) {
+            "协程状态获取失败: ${e.message}"
+        }
+    }
+    
+    /**
+     * 清理协程资源
+     */
+    fun cleanup() {
+        try {
+            val totalJobs = backupJobs.size
+            
+            // 取消所有备份任务
+            backupJobs.values.forEach { job ->
+                if (job.isActive) {
+                    job.cancel("AlarmScheduler cleanup")
+                }
+            }
+            backupJobs.clear()
+            
+            // 取消协程作用域
+            alarmScope.cancel("AlarmScheduler cleanup")
+            
+            Log.record(TAG, "AlarmScheduler协程资源已清理 (清理了${totalJobs}个备份任务)")
+        } catch (e: Exception) {
+            Log.error(TAG, "清理AlarmScheduler协程资源失败: " + e.message)
         }
     }
 

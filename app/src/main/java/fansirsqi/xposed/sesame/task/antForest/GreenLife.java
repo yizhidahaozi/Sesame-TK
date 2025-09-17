@@ -1,4 +1,5 @@
 package fansirsqi.xposed.sesame.task.antForest;
+import fansirsqi.xposed.sesame.util.CoroutineUtils;
 import org.json.JSONObject;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.ResChecker;
@@ -11,7 +12,7 @@ public class GreenLife {
             if (ResChecker.checkRes(TAG,jo)) {
                 JSONObject data = jo.getJSONObject("data");
                 if (data.optBoolean("canSendEnergy", false)) {
-                    Thread.sleep(300);
+                    fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(300);
                     jo = new JSONObject(AntForestRpcCall.sendEnergyByAction(sourceType));
                     if (ResChecker.checkRes(TAG,jo)) {
                         data = jo.getJSONObject("data");
@@ -23,7 +24,7 @@ public class GreenLife {
                 }
             } else {
                 Log.runtime(TAG, jo.getJSONObject("data").getString("resultCode"));
-                Thread.sleep(300);
+                fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(300);
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "sendEnergyByAction err:");

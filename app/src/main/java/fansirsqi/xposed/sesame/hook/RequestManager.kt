@@ -22,10 +22,7 @@ object RequestManager {
     private fun getRpcBridge(): RpcBridge? {
         if (!NetworkUtils.isNetworkAvailable()) {
             Log.record("网络未连接，等待5秒")
-            try {
-                Thread.sleep(5000)
-            } catch (ignored: InterruptedException) {
-            }
+            fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(5000)
             if (!NetworkUtils.isNetworkAvailable()) {
                 val networkType = NetworkUtils.getNetworkType()
                 Log.record("网络仍未连接，当前网络类型: $networkType，放弃本次请求...")
@@ -35,10 +32,7 @@ object RequestManager {
         var rpcBridge = ApplicationHook.rpcBridge
         if (rpcBridge == null) {
             Log.record("ApplicationHook.rpcBridge 为空，等待5秒")
-            try {
-                Thread.sleep(5000)
-            } catch (ignored: InterruptedException) {
-            }
+            fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(5000)
             rpcBridge = ApplicationHook.rpcBridge
         }
         return rpcBridge

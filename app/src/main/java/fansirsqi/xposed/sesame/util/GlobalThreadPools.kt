@@ -1,201 +1,251 @@
-package fansirsqi.xposed.sesame.util;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
+package fansirsqi.xposed.sesame.util
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * @author: ghostxx
- * @date: 2025/9/11
- * @description: 全局线程池管理器，用于统一管理应用内的线程，避免重复创建销毁线程带来的开销。
+ * @date: 2025/9/17
+ * @description: 全局协程调度器，用于统一管理应用内的协程，提供结构化并发和生命周期管理。
  */
-public class GlobalThreadPools {
-    private static final String TAG = "GlobalThreadPools";
+object GlobalThreadPools {
+    private const val TAG = "GlobalThreadPools"
 
     /**
      * CPU核心数
      */
-    private static final int CPU_COUNT = Runtime.getRuntime().availableProcessors();
+    private val CPU_COUNT = Runtime.getRuntime().availableProcessors()
 
     /**
-     * 核心线程数
+     * 计算密集型任务并行度
      * 根据CPU核心数动态计算，保证最佳性能。
-     * 通常设置为 CPU核心数 + 1，以应对计算密集型和IO密集型任务。
      */
-    private static final int CORE_POOL_SIZE = Math.max(2, Math.min(CPU_COUNT - 1, 4));
+    private val COMPUTE_PARALLELISM = max(2, min(CPU_COUNT - 1, 4))
 
     /**
-     * 最大线程数
-     * 允许线程池创建的最大线程数，防止资源过度消耗。
+     * 全局协程作用域
+     * 用于启动不绑定到特定生命周期的长寿命协程
+     * 使用SupervisorJob确保一个协程的失败不会影响其他协程
      */
-    private static final int MAXIMUM_POOL_SIZE = CPU_COUNT * 2 + 1;
+    private val globalScope = CoroutineScope(
+        SupervisorJob() + 
+        Dispatchers.Default + 
+        CoroutineName("SesameGlobalScope")
+    )
 
     /**
-     * 线程空闲后的存活时间
-     * 当线程数超过核心线程数时，多余的空闲线程在指定时间后会被销毁。
+     * 计算密集型任务调度器
+     * 适用于CPU密集型操作，如复杂计算、数据处理等
      */
-    private static final long KEEP_ALIVE_TIME = 30L;
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val computeDispatcher = Dispatchers.Default.limitedParallelism(COMPUTE_PARALLELISM)
 
     /**
      * 任务调度器
-     * 用于执行延迟或周期性任务，不会在等待时阻塞线程。
+     * 用于执行延迟或周期性任务
      */
-    private static final ScheduledExecutorService SCHEDULER = new ScheduledThreadPoolExecutor(
-            CORE_POOL_SIZE,
-            new ThreadFactory() {
-                private final AtomicInteger threadNumber = new AtomicInteger(1);
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    return new Thread(r, "SesameScheduler-" + threadNumber.getAndIncrement());
-                }
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy()
-    );
+    private val schedulerScope = CoroutineScope(
+        SupervisorJob() + 
+        Dispatchers.Default + 
+        CoroutineName("SesameScheduler")
+    )
 
     /**
-     * 线程池实例
-     * 使用 ThreadPoolExecutor 自定义线程池，以实现更精细的控制。
-     * - corePoolSize: 核心线程数，即使空闲也保留在池中。
-     * - maximumPoolSize: 线程池能够容纳同时执行的最大线程数。
-     * - keepAliveTime: 多于corePoolSize的线程的空闲存活时间。
-     * - workQueue: 用于保存等待执行的任务的阻塞队列。
-     * - threadFactory: 用于创建新线程的工厂。
+     * 任务ID生成器
      */
-    private static final ExecutorService THREAD_POOL = new ThreadPoolExecutor(
-            CORE_POOL_SIZE,
-            MAXIMUM_POOL_SIZE,
-            KEEP_ALIVE_TIME,
-            TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(128), // 增加工作队列容量
-            new ThreadFactory() {
-                private final AtomicInteger threadNumber = new AtomicInteger(1);
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "SesamePool-" + threadNumber.getAndIncrement());
-                    if (t.isDaemon()) {
-                        t.setDaemon(false);
-                    }
-                    if (t.getPriority() != Thread.NORM_PRIORITY) {
-                        t.setPriority(Thread.NORM_PRIORITY);
-                    }
-                    return t;
-                }
-            },
-            // 添加拒绝策略，当线程池和队列都满了，会让调用者线程自己执行任务
-            new ThreadPoolExecutor.CallerRunsPolicy()
-    );
+    private val taskIdGenerator = AtomicInteger(0)
 
     /**
-     * 在全局线程池中执行一个任务。
+     * 已调度任务的映射表
+     * 用于存储和管理周期性任务
+     */
+    private val scheduledTasks = ConcurrentHashMap<Int, Job>()
+
+    /**
+     * 在全局协程作用域中执行一个任务。
      *
-     * @param command 要执行的Runnable任务。
+     * @param block 要执行的挂起函数代码块
+     * @param context 可选的协程上下文，默认使用计算调度器
+     * @return 代表任务的Job对象
      */
-    public static void execute(Runnable command) {
-        try {
-            THREAD_POOL.execute(command);
-        } catch (Exception e) {
-            Log.error(TAG, "执行任务异常: " + e.getMessage());
-            Log.printStackTrace(e);
-        }
-    }
-
-    /**
-     * 在全局线程池中提交一个任务，并返回一个Future对象。
-     *
-     * @param task 要提交的Runnable任务。
-     * @return 代表任务待定结果的 Future 对象，如果提交失败则返回 null。
-     */
-    public static Future<?> submit(Runnable task) {
-        try {
-            return THREAD_POOL.submit(task);
-        } catch (Exception e) {
-            Log.error(TAG, "提交任务异常: " + e.getMessage());
-            Log.printStackTrace(e);
-            return null;
-        }
-    }
-
-    /**
-     * 在全局调度器中安排一个延迟执行的任务。
-     *
-     * @param command 要执行的任务。
-     * @param delay   延迟时间。
-     * @param unit    时间单位。
-     * @return一个 ScheduledFuture 对象，可用于取消任务或获取结果。
-     */
-    public static ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
-        try {
-            return SCHEDULER.schedule(command, delay, unit);
-        } catch (Exception e) {
-            Log.error(TAG, "安排任务异常: " + e.getMessage());
-            Log.printStackTrace(e);
-            return null;
-        }
-    }
-
-    /**
-     * 使当前线程暂停指定的毫秒数。
-     * 这是一个对 Thread.sleep 的封装，统一处理了 InterruptedException。
-     *
-     * @param millis 要暂停的毫秒数。
-     */
-    public static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Log.error(TAG, "线程休眠被中断: " + e.getMessage());
-            // 重新设置中断状态，以便调用栈上层的代码可以感知到中断
-            Thread.currentThread().interrupt();
-        } catch (Throwable t) {
-            Log.error(TAG, "线程休眠时发生未知错误: " + t.getMessage());
-            Log.printStackTrace(t);
-        }
-    }
-
-    /**
-     * 平滑地关闭指定的ExecutorService。
-     * 会先尝试正常关闭，如果超时仍未关闭，则强制关闭。
-     *
-     * @param pool      要关闭的线程池。
-     * @param timeout   等待的超时时间。
-     * @param timeUnit  超时时间的单位。
-     * @param poolName  线程池的名称，用于日志记录。
-     */
-    public static void shutdownAndAwaitTermination(ExecutorService pool, long timeout, TimeUnit timeUnit, String poolName) {
-        if (pool == null || pool.isShutdown()) {
-            return;
-        }
-        pool.shutdown(); // 禁用新任务提交
-        try {
-            // 等待现有任务在超时时间内完成
-            if (!pool.awaitTermination(timeout, timeUnit)) {
-                pool.shutdownNow(); // 取消当前执行的任务
-                // 再次等待，以便响应取消操作
-                if (!pool.awaitTermination(timeout, timeUnit)) {
-                    Log.runtime(TAG, "线程池 " + poolName + " 未能终止");
-                }
+    fun execute(
+        context: CoroutineContext = computeDispatcher,
+        block: suspend CoroutineScope.() -> Unit
+    ): Job {
+        return globalScope.launch(context) {
+            try {
+                block()
+            } catch (_: CancellationException) {
+                // 协程取消异常，正常流程，不记录
+            } catch (e: Exception) {
+                Log.error(TAG, "执行任务异常: ${e.message}")
+                Log.printStackTrace(e)
             }
-        } catch (InterruptedException ie) {
-            // （重新）取消任务，如果当前线程也被中断
-            pool.shutdownNow();
-            // 保留中断状态
-            Thread.currentThread().interrupt();
         }
     }
 
     /**
-     * 关闭全局线程池。
-     * 在应用退出时调用，以释放资源。
+     * 提交一个可返回结果的任务。
+     *
+     * @param T 结果类型
+     * @param context 可选的协程上下文，默认使用计算调度器
+     * @param block 要执行的挂起函数代码块，返回类型为T
+     * @return 代表任务结果的Deferred对象
      */
-    public static void shutdown() {
-        shutdownAndAwaitTermination(THREAD_POOL, 5, TimeUnit.SECONDS, "GlobalThreadPool");
-        shutdownAndAwaitTermination(SCHEDULER, 5, TimeUnit.SECONDS, "GlobalScheduler");
+    fun <T> submit(
+        context: CoroutineContext = computeDispatcher,
+        block: suspend CoroutineScope.() -> T
+    ): Deferred<T> {
+        return globalScope.async(context) {
+            block()
+        }
+    }
+
+    /**
+     * 兼容Java的执行方法
+     *
+     * @param command 要执行的Runnable任务
+     * @return 代表任务的Job对象
+     */
+    @JvmOverloads
+    fun execute(command: Runnable?, context: CoroutineContext = computeDispatcher): Job {
+        return execute(context) {
+            command?.run()
+        }
+    }
+
+    /**
+     * 兼容Java的提交方法
+     *
+     * @param task 要提交的Runnable任务
+     * @return 代表任务的Deferred对象
+     */
+    @JvmOverloads
+    fun submit(task: Runnable?, context: CoroutineContext = computeDispatcher): Deferred<Unit> {
+        return submit(context) {
+            task?.run()
+        }
+    }
+
+    /**
+     * 调度一个延迟执行的任务
+     *
+     * @param delayMillis 延迟的毫秒数
+     * @param context 可选的协程上下文
+     * @param block 要执行的挂起函数代码块
+     * @return 任务ID，可用于取消任务
+     */
+    fun schedule(
+        delayMillis: Long,
+        context: CoroutineContext = computeDispatcher,
+        block: suspend CoroutineScope.() -> Unit
+    ): Int {
+        val taskId = taskIdGenerator.incrementAndGet()
+        val job = schedulerScope.launch(context) {
+            delay(delayMillis)
+            try {
+                block()
+            } catch (_: CancellationException) {
+                // 协程取消异常，正常流程，不记录
+            } catch (e: Exception) {
+                Log.error(TAG, "调度任务执行异常: ${e.message}")
+                Log.printStackTrace(e)
+            } finally {
+                scheduledTasks.remove(taskId)
+            }
+        }
+        scheduledTasks[taskId] = job
+        return taskId
+    }
+
+    /**
+     * 调度一个固定周期执行的任务
+     *
+     * @param periodMillis 周期的毫秒数
+     * @param initialDelayMillis 初始延迟的毫秒数，默认为0
+     * @param context 可选的协程上下文
+     * @param block 要执行的挂起函数代码块
+     * @return 任务ID，可用于取消任务
+     */
+    fun scheduleAtFixedRate(
+        periodMillis: Long,
+        initialDelayMillis: Long = 0,
+        context: CoroutineContext = computeDispatcher,
+        block: suspend CoroutineScope.() -> Unit
+    ): Int {
+        val taskId = taskIdGenerator.incrementAndGet()
+        val job = schedulerScope.launch(context) {
+            delay(initialDelayMillis)
+            while (isActive) {
+                val startTime = System.currentTimeMillis()
+                try {
+                    block()
+                } catch (_: CancellationException) {
+                    break
+                } catch (e: Exception) {
+                    Log.error(TAG, "周期任务执行异常: ${e.message}")
+                    Log.printStackTrace(e)
+                }
+                
+                val executionTime = System.currentTimeMillis() - startTime
+                val nextDelay = (periodMillis - executionTime).coerceAtLeast(0)
+                delay(nextDelay)
+            }
+            scheduledTasks.remove(taskId)
+        }
+        scheduledTasks[taskId] = job
+        return taskId
+    }
+
+    /**
+     * 取消一个已调度的任务
+     *
+     * @param taskId 任务ID
+     * @return 是否成功取消
+     */
+    fun cancelTask(taskId: Int): Boolean {
+        val job = scheduledTasks.remove(taskId) ?: return false
+        job.cancel()
+        return true
+    }
+
+
+
+    /**
+     * 协程兼容的暂停方法
+     * 优先使用协程delay，在非协程环境中降级到Thread.sleep
+     *
+     * @param millis 要暂停的毫秒数
+     */
+    @JvmStatic
+    fun sleepCompat(millis: Long) {
+        CoroutineUtils.sleepCompat(millis)
+    }
+    
+    /**
+     * 关闭全局协程调度器
+     * 取消所有正在执行的任务
+     */
+    fun shutdown() {
+        scheduledTasks.clear()
+        schedulerScope.cancel()
+        globalScope.cancel()
     }
 }

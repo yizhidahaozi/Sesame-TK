@@ -89,7 +89,7 @@ public class AntBookRead extends ModelTask {
                                 if (energy >= 150) {
                                     break;
                                 } else {
-                                    GlobalThreadPools.sleep(1500L);
+                                    GlobalThreadPools.sleepCompat(1500L);
                                 }
                             }
                         }
@@ -141,9 +141,9 @@ public class AntBookRead extends ModelTask {
                                 String taskId = taskInfo.getString("taskId");
                                 for (int m = 0; m < 5; m++) {
                                     taskFinish(taskId, taskType);
-                                    GlobalThreadPools.sleep(1500L);
+                                    GlobalThreadPools.sleepCompat(1500L);
                                     collectTaskPrize(taskId, taskType, title);
-                                    GlobalThreadPools.sleep(1500L);
+                                    GlobalThreadPools.sleepCompat(1500L);
                                 }
                             } else if ("FOLLOW_UP".equals(taskType) || "JUMP".equals(taskType)) {
                                 String taskId = taskInfo.getString("taskId");

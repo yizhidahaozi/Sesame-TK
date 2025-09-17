@@ -157,7 +157,7 @@ public class AntCooperate extends ModelTask {
             Log.runtime(TAG, "cooperateWater err:");
             Log.printStackTrace(TAG, t);
         } finally {
-            GlobalThreadPools.sleep(1500);
+            GlobalThreadPools.sleepCompat(1500);
         }
     }
 
@@ -192,7 +192,7 @@ public class AntCooperate extends ModelTask {
             if (TimeUtil.isNowBeforeTimeStr("1800")) {
                 return;
             }
-            TimeUtil.sleep(500);
+            TimeUtil.sleepCompat(500);
             JSONObject jo = new JSONObject(AntCooperateRpcCall.queryCooperateRank("D", cooperationId));
             if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray cooperateRankInfos = jo.getJSONArray("cooperateRankInfos");
@@ -203,7 +203,7 @@ public class AntCooperate extends ModelTask {
                         if (ResChecker.checkRes(TAG,jo)) {
                             Log.forest("合种🚿[" + name + "]#召唤队友[" + rankInfo.getString("displayName") + "]成功");
                         }
-                        TimeUtil.sleep(1000);
+                        TimeUtil.sleepCompat(1000);
                     }
                 }
             }

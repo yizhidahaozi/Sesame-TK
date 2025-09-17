@@ -7,6 +7,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import fansirsqi.xposed.sesame.task.ModelTask;
@@ -47,6 +48,7 @@ public class Status {
     private Set<String> dailyAnswerList = new HashSet<>();
     private Set<String> donationEggList = new HashSet<>();
     private int useAccelerateToolCount = 0;
+    
     /**
      * 小鸡换装
      */
@@ -262,6 +264,7 @@ public class Status {
         getINSTANCE().useAccelerateToolCount += 1;
         save();
     }
+    
 
     public static boolean canDonationEgg(String uid) {
         return !getINSTANCE().donationEggList.contains(uid);
@@ -354,7 +357,7 @@ public class Status {
         if (task == null) {
             return false;
         }
-        return getINSTANCE().getDoubleTimes() < task.getDoubleCountLimit().getValue();
+        return getINSTANCE().getDoubleTimes() < Objects.requireNonNull(task.getDoubleCountLimit()).value;
     }
 
     public static void DoubleToday() {

@@ -8,26 +8,26 @@ import org.json.JSONObject;
 @Getter
 public class CollectEnergyEntity {
     // 用户 ID
-    private final String userId;
+    public  final String userId;
     // 用户主页 JSON 对象
     @Setter
-    private JSONObject userHome;
+    public JSONObject userHome;
     // RPC 请求实体
     @Setter
-    private RpcEntity rpcEntity;
+    public RpcEntity rpcEntity;
     // 收集次数
     private Integer collectCount = 0;
     // 尝试次数
     private Integer tryCount = 0;
     // 是否需要翻倍
     @Setter
-    private Boolean needDouble = false;
+    public Boolean needDouble = false;
     // 是否需要重试
     @Setter
-    private Boolean needRetry = false;
+    public Boolean needRetry = false;
     // 收取来源标识
     @Setter
-    private String fromTag;
+    public String fromTag;
     /**
      * 构造方法，仅指定用户 ID。
      * @param userId 用户 ID

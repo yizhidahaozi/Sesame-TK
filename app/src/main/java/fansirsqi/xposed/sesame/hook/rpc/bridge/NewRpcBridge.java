@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.hook.rpc.bridge;
 
+import fansirsqi.xposed.sesame.util.CoroutineUtils;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -231,33 +232,17 @@ public class NewRpcBridge implements RpcBridge {
                         Log.printStackTrace(e);
                     }
                     if (retryInterval < 0) {
-                        try {
-                            Thread.sleep(600 + RandomUtil.delay());
-                        } catch (InterruptedException e) {
-                            Log.printStackTrace(e);
-                        }
+                        CoroutineUtils.sleepCompat(600 + RandomUtil.delay());
                     } else if (retryInterval > 0) {
-                        try {
-                            Thread.sleep(retryInterval);
-                        } catch (InterruptedException e) {
-                            Log.printStackTrace(e);
-                        }
+                        CoroutineUtils.sleepCompat(retryInterval);
                     }
                 } catch (Throwable t) {
                     Log.error(TAG, "new rpc request | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() + " err:");
                     Log.printStackTrace(t);
                     if (retryInterval < 0) {
-                        try {
-                            Thread.sleep(600 + RandomUtil.delay());
-                        } catch (InterruptedException e) {
-                            Log.printStackTrace(e);
-                        }
+                        CoroutineUtils.sleepCompat(600 + RandomUtil.delay());
                     } else if (retryInterval > 0) {
-                        try {
-                            Thread.sleep(retryInterval);
-                        } catch (InterruptedException e) {
-                            Log.printStackTrace(e);
-                        }
+                        CoroutineUtils.sleepCompat(retryInterval);
                     }
                 }
             } while (count < tryCount);

@@ -51,7 +51,7 @@ public class ForestChouChouLe {
                 doublecheck = false;
                 if (System.currentTimeMillis() > startTime && System.currentTimeMillis() < endTime) {
                     Log.record("延时1S");
-                    GlobalThreadPools.sleep(1000L);
+                    GlobalThreadPools.sleepCompat(1000L);
 
                     JSONObject listTaskopengreen = new JSONObject(AntForestRpcCall.listTaskopengreen(activityId, listSceneCode, source));
                     if (ResChecker.checkRes(TAG, listTaskopengreen)) {
@@ -93,7 +93,7 @@ public class ForestChouChouLe {
                             // 统一处理 FOREST_NORMAL_DRAW 开头任务
                             if (taskType.startsWith("FOREST_NORMAL_DRAW") && taskStatus.equals(TaskStatus.TODO.name())) {
                                 Log.record("任务延时30S模拟：" + taskName);
-                                GlobalThreadPools.sleep(30 * 1000L);
+                                GlobalThreadPools.sleepCompat(30 * 1000L);
 
                                 // 调用对应完成接口
                                 String result;
@@ -115,7 +115,7 @@ public class ForestChouChouLe {
                             // 已完成任务领取奖励
                             if (taskStatus.equals(TaskStatus.FINISHED.name())) {
                                 Log.record("奖励延时3S:" + taskName);
-                                GlobalThreadPools.sleep(3000L);
+                                GlobalThreadPools.sleepCompat(3000L);
                                 String sginRes = AntForestRpcCall.receiveTaskAwardopengreen(source, taskSceneCode, taskType);
                                 if (ResChecker.checkRes(TAG, sginRes)) {
                                     Log.forest("森林寻宝🧾：" + taskName);
