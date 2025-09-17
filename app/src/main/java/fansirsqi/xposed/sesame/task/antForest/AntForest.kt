@@ -816,9 +816,9 @@ class AntForest : ModelTask() {
                 
                 // 顺序执行，避免重复和重叠
                 Log.record(TAG, "开始执行找能量...")
-                collectEnergyByTakeLook() //找能量（同步）
+                this. collectEnergyByTakeLook() //找能量（同步）
                 Log.record(TAG, "开始执行好友能量收取...")
-                collectFriendEnergy() // 好友能量收取（同步）
+                this.collectFriendEnergy() // 好友能量收取（同步）
                 
                 Log.record(TAG, "开始执行PK好友能量收取...")
                 collectPKEnergy() // PK好友能量（同步）
@@ -907,10 +907,10 @@ class AntForest : ModelTask() {
                 if (selfHomeObj != null) {
                     collectEnergy(UserMap.currentUid, selfHomeObj, "self") // 异步收取自己
                 }
-                // 先尝试使用找能量功能快速定位有能量的好友（异步）
-                GlobalThreadPools.execute({ this.collectEnergyByTakeLook() }) //找能量
-                GlobalThreadPools.execute({ this.collectFriendEnergy() }) // 好友能量收取（异步）
-                GlobalThreadPools.execute({ this.collectPKEnergy() }) // PK好友能量（异步）
+                // 先尝试使用找能量功能快速定位有能量的好友（同步）
+                this.collectEnergyByTakeLook()  //找能量
+                this.collectFriendEnergy() // 好友能量收取（同步）
+                this.collectPKEnergy()  // PK好友能量（同步）
                 Log.record(TAG, "午夜任务刷新，强制执行收取PK好友能量和好友能量")
             }
 
@@ -936,8 +936,8 @@ class AntForest : ModelTask() {
             // 收PK好友能量
             // -------------------------------
             Log.runtime(TAG, "🚀 异步执行PK好友能量收取")
-            GlobalThreadPools.execute({ this.collectPKEnergy() }) // 好友道具在 collectFriendEnergy 内会自动处理
-            tc.countDebug("收PK好友能量（异步）")
+            this.collectPKEnergy()  // 好友道具在 collectFriendEnergy 内会自动处理
+            tc.countDebug("收PK好友能量（同步）")
 
             // -------------------------------
             // 收自己能量
@@ -946,7 +946,7 @@ class AntForest : ModelTask() {
             tc.countDebug("获取自己主页对象信息")
             if (selfHomeObj != null) {
                 collectEnergy(UserMap.currentUid, selfHomeObj, "self") // 异步收取自己的能量
-                tc.countDebug("收取自己的能量（异步）")
+                tc.countDebug("收取自己的能量（同步）")
             } else {
                 Log.error(TAG, "获取自己主页信息失败，跳过能量收取")
                 tc.countDebug("跳过自己的能量收取（主页获取失败）")
@@ -956,14 +956,14 @@ class AntForest : ModelTask() {
             // 收好友能量
             // -------------------------------
             // 先尝试使用找能量功能快速定位有能量的好友（异步）
-            Log.runtime(TAG, "🚀 异步执行找能量功能")
-            GlobalThreadPools.execute({ this.collectEnergyByTakeLook() })
-            tc.countDebug("找能量收取（异步）")
+            Log.runtime(TAG, "🚀 同步执行找能量功能")
+            this.collectEnergyByTakeLook()
+            tc.countDebug("找能量收取（同步）")
 
             // 然后执行传统的好友排行榜收取（异步）
-            Log.runtime(TAG, "🚀 异步执行好友能量收取")
-            GlobalThreadPools.execute({ this.collectFriendEnergy() }) // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
-            tc.countDebug("收取好友能量（异步）")
+            Log.runtime(TAG, "🚀 同步执行好友能量收取")
+             this.collectFriendEnergy() // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
+            tc.countDebug("收取好友能量（同步）")
 
             // -------------------------------
             // 后续任务流程
