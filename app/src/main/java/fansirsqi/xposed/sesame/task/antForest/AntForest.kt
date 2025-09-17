@@ -4351,91 +4351,24 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * 检查用户是否有保护罩或炸弹（自己的能量无视保护）
+     * 检查用户是否有保护罩或炸弹（按照原有逻辑）
      */
-    private fun checkUserShieldAndBomb(userHomeObj: JSONObject, userName: String?, userId: String): CollectResult {
-        try {
-            // 如果是自己，无视保护罩和炸弹
-            val isSelf = userId == selfId
-            if (isSelf) {
-                return CollectResult(
-                    success = true,
-                    userName = userName,
-                    message = "自己的能量，无视保护"
-                )
+    private fun checkUserShieldAndBomb(userHomeObj: JSONObject, userName: String?, userId: String, serverTime: Long): Boolean {
+        var hasProtection = false
+        val isSelf = userId == UserMap.currentUid
+        
+        if (!isSelf) {
+            if (hasShield(userHomeObj, serverTime)) {
+                hasProtection = true
+                Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取")
             }
-            
-            val userEnergy = userHomeObj.optJSONObject("userEnergy")
-            if (userEnergy != null) {
-                // 检查保护罩
-                val isShielded = userEnergy.optBoolean("isShielded", false)
-                if (isShielded) {
-                    return CollectResult(
-                        success = false,
-                        userName = userName,
-                        hasShield = true,
-                        message = "有保护罩"
-                    )
-                }
-                
-                // 检查炸弹
-                val hasBomb = userEnergy.optBoolean("hasBomb", false)
-                if (hasBomb) {
-                    return CollectResult(
-                        success = false,
-                        userName = userName,
-                        hasBomb = true,
-                        message = "有炸弹"
-                    )
-                }
+            if (hasBombCard(userHomeObj, serverTime)) {
+                hasProtection = true
+                Log.record(TAG, "[$userName]开着炸弹卡💣，跳过收取")
             }
-            
-            // 也检查bubbles中是否有保护信息
-            val bubbles = userHomeObj.optJSONArray("bubbles")
-            if (bubbles != null) {
-                for (i in 0..<bubbles.length()) {
-                    val bubble = bubbles.optJSONObject(i)
-                    if (bubble != null) {
-                        // 检查是否被保护
-                        val isProtected = bubble.optBoolean("isProtected", false)
-                        if (isProtected) {
-                            return CollectResult(
-                                success = false,
-                                userName = userName,
-                                hasShield = true,
-                                message = "能量球被保护"
-                            )
-                        }
-                        
-                        // 检查是否有炸弹
-                        val hasOwnerBomb = bubble.optBoolean("hasOwnerBomb", false)
-                        if (hasOwnerBomb) {
-                            return CollectResult(
-                                success = false,
-                                userName = userName,
-                                hasBomb = true,
-                                message = "能量球有炸弹"
-                            )
-                        }
-                    }
-                }
-            }
-            
-            // 无保护罩和炸弹
-            return CollectResult(
-                success = true,
-                userName = userName,
-                message = "无保护"
-            )
-            
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "检查保护罩和炸弹异常", e)
-            return CollectResult(
-                success = true,
-                userName = userName,
-                message = "检查异常，继续收取"
-            )
         }
+        
+        return hasProtection
     }
     
     /**
@@ -4448,8 +4381,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         userName: String?
     ): CollectResult {
         try {
+            Log.debug(TAG, "蹲点收取开始：用户[${userName}] userId[${userId}] fromTag[${fromTag}]")
+            
+            // 获取服务器时间
+            val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
+            
+            // 先检查保护罩和炸弹
+            val hasProtection = checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
+            if (hasProtection) {
+                return CollectResult(
+                    success = false,
+                    userName = userName,
+                    message = "有保护，已跳过"
+                )
+            }
+            
             // 调用原有的collectEnergy方法
             val result = collectEnergy(userId, userHomeObj, fromTag)
+            
+            Log.debug(TAG, "蹲点收取结果：用户[${userName}] result=${result != null}")
             
             if (result != null) {
                 // 尝试获取收取的能量数量
@@ -4505,13 +4455,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     // 获取真实用户名
                     val realUserName = getAndCacheUserName(task.userId, friendHomeObj, task.fromTag)
                     
-                    // 检查保护罩和炸弹（自己的能量无视保护）
-                    val shieldResult = checkUserShieldAndBomb(friendHomeObj, realUserName, task.userId)
-                    if (shieldResult.hasShield || shieldResult.hasBomb) {
-                        return@withContext shieldResult.copy(userName = realUserName)
-                    }
+                    val isSelf = task.userId == UserMap.currentUid
+                    Log.debug(TAG, "蹲点收取：用户[${realUserName}] userId=${task.userId} currentUid=${UserMap.currentUid} isSelf=${isSelf}")
                     
-                    // 执行能量收取
+                    // 直接执行能量收取，让原有的collectEnergy方法处理保护罩和炸弹检查
                     val result = collectEnergyForWaiting(task.userId, friendHomeObj, task.fromTag, realUserName)
                     result.copy(userName = realUserName)
                 } else {

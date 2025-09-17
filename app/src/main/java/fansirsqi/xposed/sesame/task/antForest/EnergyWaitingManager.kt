@@ -244,6 +244,7 @@ object EnergyWaitingManager {
                 executeEnergyCollection(task)
                 
                 // 任务执行完成，从队列中移除
+                // 无论是成功收取、跳过（保护罩/炸弹）还是失败，都移除任务避免重复执行
                 waitingTasks.remove(task.taskId)
                 
             } catch (e: Exception) {
@@ -262,33 +263,22 @@ object EnergyWaitingManager {
                 // 通过回调获取收取结果
                 val result = collectEnergyFromWaiting(task)
                 
-                // 根据结果进行不同的处理，所有情况都会移除任务
+                // 根据结果进行不同的处理
+                // 注意：保护罩和炸弹的检查已经在原有的collectEnergy方法中处理，会产生相应的日志
                 when {
-                    result.hasShield -> {
-                        Log.record(TAG, "蹲点跳过🛡️[${result.userName ?: task.userName}]能量球[${task.bubbleId}] - 有保护罩")
-                        // 有保护罩的任务直接移除，避免重复检查
-                        waitingTasks.remove(task.taskId)
-                    }
-                    result.hasBomb -> {
-                        Log.record(TAG, "蹲点跳过💣[${result.userName ?: task.userName}]能量球[${task.bubbleId}] - 有炸弹")
-                        // 有炸弹的任务直接移除，避免重复检查
-                        waitingTasks.remove(task.taskId)
-                    }
                     result.success -> {
                         val displayName = result.userName ?: task.userName
                         val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
                         Log.forest("蹲点收取成功🎯[${displayName}]能量球[${task.bubbleId}]${energyInfo}")
-                        // 成功收取的任务移除
-                        waitingTasks.remove(task.taskId)
                     }
                     else -> {
                         val displayName = result.userName ?: task.userName
                         val reason = if (result.message.isNotEmpty()) " - ${result.message}" else ""
-                        Log.record(TAG, "蹲点收取失败：[${displayName}]能量球[${task.bubbleId}]${reason}")
-                        // 失败的任务也移除，避免无限重试
-                        waitingTasks.remove(task.taskId)
+                        Log.debug(TAG, "蹲点任务完成：[${displayName}]能量球[${task.bubbleId}]${reason}")
                     }
                 }
+                
+                // 注意：任务移除在executeWaitingTask方法中统一处理
                 
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "收取能量异常", e)
