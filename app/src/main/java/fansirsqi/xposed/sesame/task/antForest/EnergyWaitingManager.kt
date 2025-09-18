@@ -269,12 +269,12 @@ object EnergyWaitingManager {
                     result.success -> {
                         val displayName = result.userName ?: task.userName
                         val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
-                        Log.forest("蹲点收取成功🎯[${displayName}]能量球[${task.bubbleId}]${energyInfo}")
+                        Log.forest("蹲点收取成功🎯[${displayName}]${energyInfo}")
                     }
                     else -> {
                         val displayName = result.userName ?: task.userName
                         val reason = if (result.message.isNotEmpty()) " - ${result.message}" else ""
-                        Log.debug(TAG, "蹲点任务完成：[${displayName}]能量球[${task.bubbleId}]${reason}")
+                        Log.debug(TAG, "蹲点任务完成：[${displayName}]${reason}")
                     }
                 }
                 

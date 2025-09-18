@@ -1091,9 +1091,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 清空跳过用户缓存，下一轮重新检测保护罩状态
             skipUsersCache.clear()
             // 清空好友主页缓存
-            val str_totalCollected =
+            val strTotalCollected =
                 "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g"
-            updateLastExecText(str_totalCollected)
+            updateLastExecText(strTotalCollected)
         }
     }
 
@@ -4396,15 +4396,18 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             }
             
+            // 记录收取前的总能量
+            val beforeTotalCollected = totalCollected
+            
             // 调用原有的collectEnergy方法
             val result = collectEnergy(userId, userHomeObj, fromTag)
             
-            Log.debug(TAG, "蹲点收取结果：用户[${userName}] result=${result != null}")
+            // 计算本次收取的能量数量
+            val energyCount = totalCollected - beforeTotalCollected
+            
+            Log.debug(TAG, "蹲点收取结果：用户[${userName}] result=${result != null} 收取能量=${energyCount}g")
             
             if (result != null) {
-                // 尝试获取收取的能量数量
-                val energyCount = extractCollectedEnergyCount(result)
-                
                 return CollectResult(
                     success = true,
                     userName = userName,
@@ -4433,9 +4436,27 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun extractCollectedEnergyCount(result: JSONObject): Int {
         return try {
-            // 尝试从返回结果中获取能量数量
-            result.optInt("collectEnergy", 0)
+            // 尝试多种可能的字段名
+            when {
+                result.has("collectEnergy") -> result.getInt("collectEnergy")
+                result.has("totalCollectEnergy") -> result.getInt("totalCollectEnergy")
+                result.has("energy") -> result.getInt("energy")
+                result.has("bubbles") -> {
+                    // 从bubbles数组中统计收取的能量
+                    val bubbles = result.getJSONArray("bubbles")
+                    var totalEnergy = 0
+                    for (i in 0..<bubbles.length()) {
+                        val bubble = bubbles.getJSONObject(i)
+                        if (bubble.has("collectedEnergy")) {
+                            totalEnergy += bubble.getInt("collectedEnergy")
+                        }
+                    }
+                    totalEnergy
+                }
+                else -> 0
+            }
         } catch (e: Exception) {
+            Log.debug(TAG, "提取能量数量失败: ${e.message}")
             0
         }
     }
