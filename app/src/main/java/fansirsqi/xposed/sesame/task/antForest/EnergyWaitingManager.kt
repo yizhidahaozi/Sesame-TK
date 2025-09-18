@@ -1,14 +1,20 @@
 package fansirsqi.xposed.sesame.task.antForest
 
-import fansirsqi.xposed.sesame.hook.rpc.intervallimit.IntervalLimit
-import fansirsqi.xposed.sesame.task.ModelTask
-import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -70,13 +76,51 @@ object EnergyWaitingManager {
         val produceTime: Long,
         val fromTag: String,
         val retryCount: Int = 0,
-        val maxRetries: Int = 3
+        val maxRetries: Int = 3,
+        val shieldEndTime: Long = 0, // 保护罩结束时间
+        val bombEndTime: Long = 0     // 炸弹卡结束时间
     ) {
         val taskId: String = "${userId}_${bubbleId}"
         
         fun withRetry(): WaitingTask = this.copy(retryCount = retryCount + 1)
         
         fun canRetry(): Boolean = retryCount < maxRetries
+        
+        /**
+         * 检查是否有保护（保护罩或炸弹卡）
+         */
+        fun hasProtection(currentTime: Long = System.currentTimeMillis()): Boolean {
+            return shieldEndTime > currentTime || bombEndTime > currentTime
+        }
+        
+        /**
+         * 获取保护结束时间（取最晚的时间）
+         */
+        fun getProtectionEndTime(): Long {
+            return maxOf(shieldEndTime, bombEndTime)
+        }
+        
+        /**
+         * 检查是否应该跳过蹲点
+         * 如果保护时间比能量球成熟时间还要长，就跳过
+         */
+        fun shouldSkipDueToProtection(currentTime: Long = System.currentTimeMillis()): Boolean {
+            val protectionEndTime = getProtectionEndTime()
+            return protectionEndTime > produceTime
+        }
+        
+        /**
+         * 获取实际应该收取的时间
+         * 如果有保护，则在保护结束后收取；否则在能量球成熟时收取
+         */
+        fun getActualCollectTime(currentTime: Long = System.currentTimeMillis()): Long {
+            val protectionEndTime = getProtectionEndTime()
+            return if (protectionEndTime > currentTime) {
+                maxOf(protectionEndTime, produceTime)
+            } else {
+                produceTime
+            }
+        }
     }
     
     // 蹲点任务存储
@@ -111,20 +155,26 @@ object EnergyWaitingManager {
     private var energyCollectCallback: EnergyCollectCallback? = null
     
     /**
-     * 添加蹲点任务（带重复检查优化）
+     * 添加蹲点任务（带重复检查优化和智能保护判断）
      * 
      * @param userId 用户ID
      * @param userName 用户名称
      * @param bubbleId 能量球ID
      * @param produceTime 能量球成熟时间
      * @param fromTag 来源标记
+     * @param shieldEndTime 保护罩结束时间（可选，如果为0则会自动获取）
+     * @param bombEndTime 炸弹卡结束时间（可选，如果为0则会自动获取）
+     * @param userHomeObj 用户主页数据（可选，用于自动获取保护时间）
      */
     fun addWaitingTask(
         userId: String,
         userName: String,
         bubbleId: Long,
         produceTime: Long,
-        fromTag: String = "waiting"
+        fromTag: String = "waiting",
+        shieldEndTime: Long = 0,
+        bombEndTime: Long = 0,
+        userHomeObj: JSONObject? = null
     ) {
         managerScope.launch {
             taskMutex.withLock {
@@ -160,12 +210,37 @@ object EnergyWaitingManager {
                     return@withLock
                 }
                 
+                // 智能获取保护时间
+                var finalShieldEndTime = shieldEndTime
+                var finalBombEndTime = bombEndTime
+
+                if (userHomeObj != null) {
+                    finalShieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+                    finalBombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+
+                    // 智能判断是否应该跳过蹲点
+                    if (ForestUtil.shouldSkipWaitingDueToProtection(userHomeObj, produceTime)) {
+                        val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
+                        val timeDifference = protectionEndTime - produceTime
+                        val formattedTimeDifference = formatTime(timeDifference)
+                        Log.record(
+                            TAG,
+                            "智能跳过蹲点：[$userName]的保护罩比能量球晚到期${formattedTimeDifference}，无法收取，已跳过。"
+                        )
+                        // 移除无效的蹲点任务
+                        waitingTasks.remove(taskId)
+                        return@withLock
+                    }
+                }
+
                 val task = WaitingTask(
                     userId = userId,
                     userName = userName,
                     bubbleId = bubbleId,
                     produceTime = produceTime,
-                    fromTag = fromTag
+                    fromTag = fromTag,
+                    shieldEndTime = finalShieldEndTime,
+                    bombEndTime = finalBombEndTime
                 )
                 
                 // 移除旧任务（如果存在）
@@ -173,9 +248,18 @@ object EnergyWaitingManager {
                 
                 // 添加新任务
                 waitingTasks[taskId] = task
-                
+
+                val protectionEndTime = task.getProtectionEndTime()
+                val protectionStatus = if (protectionEndTime > currentTime) {
+                    " 保护罩到期：" + TimeUtil.getCommonDate(protectionEndTime)
+                } else {
+                    ""
+                }
                 val actionText = if (existingTask != null) "更新" else "添加"
-                Log.record(TAG, "${actionText}蹲点任务：[${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟")
+                Log.record(
+                    TAG,
+                    "${actionText}蹲点任务：[${fromTag}|${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟${protectionStatus}"
+                )
                 
                 // 启动蹲点协程
                 startWaitingCoroutine(task)
@@ -200,7 +284,7 @@ object EnergyWaitingManager {
                 // 执行收取任务
                 executeWaitingTask(task)
                 
-            } catch (e: CancellationException) {
+            } catch (_: CancellationException) {
                 Log.debug(TAG, "蹲点任务[${task.taskId}]被取消")
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "蹲点任务[${task.taskId}]执行异常", e)
@@ -238,18 +322,37 @@ object EnergyWaitingManager {
                 val timeSinceLastExecute = currentTime - lastExecuteTime.get()
                 if (timeSinceLastExecute < MIN_INTERVAL_MS) {
                     val delayTime = MIN_INTERVAL_MS - timeSinceLastExecute
-                    Log.debug(TAG, "间隔控制：延迟${delayTime/1000}秒执行蹲点任务[${task.taskId}]")
+                    Log.debug(TAG, "间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]")
                     delay(delayTime)
                 }
-                
-                Log.record(TAG, "执行蹲点任务：[${task.userName}]能量球[${task.bubbleId}]")
-                
+
                 // 更新最后执行时间
                 lastExecuteTime.set(System.currentTimeMillis())
-                
+
+                // 智能日志显示
+                val currentLogTime = System.currentTimeMillis()
+                val energyTimeRemain = (task.produceTime - currentLogTime) / 1000
+                val protectionEndTime = task.getProtectionEndTime()
+
+                if (protectionEndTime > currentLogTime) {
+                    val protectionTimeRemain = (protectionEndTime - currentLogTime) / 1000
+                    val protectionHours = protectionTimeRemain / 3600
+                    val energyHours = energyTimeRemain / 3600
+
+                    Log.record(
+                        TAG,
+                        "执行蹲点任务：[${task.fromTag}|${task.userName}]能量球[${task.bubbleId}] - 保护${protectionHours}h，能量${energyHours}h"
+                    )
+                } else {
+                    Log.record(
+                        TAG,
+                        "执行蹲点任务：[${task.fromTag}|${task.userName}]能量球[${task.bubbleId}]"
+                    )
+                }
+
                 // 调用AntForest的能量收取逻辑
                 executeEnergyCollection(task)
-                
+
                 // 任务执行完成，从队列中移除
                 // 无论是成功收取、跳过（保护罩/炸弹）还是失败，都移除任务避免重复执行
                 waitingTasks.remove(task.taskId)
@@ -274,17 +377,19 @@ object EnergyWaitingManager {
                 when {
                     result.success -> {
                         val displayName = result.userName ?: task.userName
-                        val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
-                        // 在这里累加到总能量
                         if (result.energyCount > 0) {
+                            val energyInfo = " (+${result.energyCount}g)"
+                            // 在这里累加到总能量
                             energyCollectCallback?.addToTotalCollected(result.energyCount)
+                            Log.forest("蹲点收取成功🎯[${task.fromTag}|${displayName}]${energyInfo}")
+                        } else {
+                            Log.forest("蹲点收取成功🎯[${task.fromTag}|${displayName}]，但未获取到能量值: $result")
                         }
-                        Log.forest("蹲点收取成功🎯[${displayName}]${energyInfo}")
                     }
                     else -> {
                         val displayName = result.userName ?: task.userName
                         val reason = if (result.message.isNotEmpty()) " - ${result.message}" else ""
-                        Log.debug(TAG, "蹲点任务完成：[${displayName}]${reason}")
+                        Log.debug(TAG, "蹲点任务完成：[${task.fromTag}|${displayName}]${reason}")
                     }
                 }
                 
@@ -426,12 +531,27 @@ object EnergyWaitingManager {
                 try {
                     delay(CHECK_INTERVAL_MS)
                     cleanExpiredTasks()
-                } catch (e: CancellationException) {
+                } catch (_: CancellationException) {
                     break
                 } catch (e: Exception) {
                     Log.printStackTrace(TAG, "定期清理任务异常", e)
                 }
             }
+        }
+    }
+    
+    /**
+     * 格式化时间为人性化的字符串
+     * @param milliseconds 毫秒数
+     * @return 格式化后的时间字符串
+     */
+    private fun formatTime(milliseconds: Long): String {
+        val hours = milliseconds / (1000 * 60 * 60)
+        val minutes = (milliseconds % (1000 * 60 * 60)) / (1000 * 60)
+        return when {
+            hours > 0 -> "${hours}小时${minutes}分钟"
+            minutes > 0 -> "${minutes}分钟"
+            else -> "${milliseconds / 1000}秒"
         }
     }
     

@@ -1677,6 +1677,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val userName = getAndCacheUserName(userId, userHomeObj, null)
         var waitingBubblesCount = 0
 
+        val isSelf = selfId == userId
+        var protectionLog = ""
+        if (!isSelf) {
+            val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+            val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+            val hasShield = shieldEndTime > serverTime
+            val hasBomb = bombEndTime > serverTime
+            if (hasShield || hasBomb) {
+                if (hasShield) {
+                    val remainingTime = formatTimeDifference(shieldEndTime - serverTime)
+                    protectionLog += " 保护罩剩余: $remainingTime. "
+                }
+                if (hasBomb) {
+                    val remainingTime = formatTimeDifference(bombEndTime - serverTime)
+                    protectionLog += " 炸弹卡剩余: $remainingTime."
+                }
+            }
+        }
+
         for (i in 0..<jaBubbles.length()) {
             val bubble = jaBubbles.getJSONObject(i)
             val bubbleId = bubble.getLong("id")
@@ -1702,8 +1721,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             fromTag = "waiting"
                         )
                         Log.debug(
-                            TAG, 
-                            "添加蹲点: [$userName] 能量球[$bubbleId] 将在[${TimeUtil.getCommonDate(produceTime)}]成熟"
+                            TAG,
+                            "添加蹲点: [$userName] 能量球[$bubbleId] 将在[${TimeUtil.getCommonDate(produceTime)}]成熟$protectionLog"
                         )
                     }
                 }
@@ -4356,13 +4375,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val isSelf = userId == UserMap.currentUid
         
         if (!isSelf) {
-            if (hasShield(userHomeObj, serverTime)) {
+            val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+            val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+            val protectionEndTime = maxOf(shieldEndTime, bombEndTime)
+            
+            if (shieldEndTime > serverTime) {
                 hasProtection = true
-                Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取")
+                val remainingHours = (shieldEndTime - serverTime) / (1000 * 60 * 60)
+                Log.record(TAG, "[$userName]被能量罩❤️保护着哟(还剩${remainingHours}h)，跳过收取")
             }
-            if (hasBombCard(userHomeObj, serverTime)) {
+            if (bombEndTime > serverTime) {
                 hasProtection = true
-                Log.record(TAG, "[$userName]开着炸弹卡💣，跳过收取")
+                val remainingHours = (bombEndTime - serverTime) / (1000 * 60 * 60)
+                Log.record(TAG, "[$userName]开着炸弹卡💣(还剩${remainingHours}h)，跳过收取")
             }
         }
         
@@ -4383,12 +4408,21 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 获取服务器时间
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
             // 先检查保护罩和炸弹
-            val hasProtection = checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
+            val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+            val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+            val hasShield = shieldEndTime > serverTime
+            val hasBomb = bombEndTime > serverTime
+            val hasProtection = hasShield || hasBomb
+            
             if (hasProtection) {
+                // 调用原有的日志输出方法
+                checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
                 return CollectResult(
                     success = false,
                     userName = userName,
-                    message = "有保护，已跳过"
+                    message = "有保护，已跳过",
+                    hasShield = hasShield,
+                    hasBomb = hasBomb
                 )
             }
             

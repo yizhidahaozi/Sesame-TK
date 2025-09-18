@@ -524,7 +524,6 @@ class AlarmScheduler(private val context: Context) {
             val completedJobs = backupJobs.values.count { it.isCompleted }
             val cancelledJobs = backupJobs.values.count { it.isCancelled }
             val scopeActive = alarmScope.isActive
-            
             "协程状态: 作用域=${if (scopeActive) "活跃" else "非活跃"}, " +
             "活跃任务=$activeJobs, 完成任务=$completedJobs, 取消任务=$cancelledJobs"
         } catch (e: Exception) {
@@ -559,5 +558,17 @@ class AlarmScheduler(private val context: Context) {
     companion object {
         private const val TAG = "AlarmScheduler"
         private var wakeLock: PowerManager.WakeLock? = null
+
+        @JvmStatic
+        fun releaseWakeLock() {
+            if (wakeLock?.isHeld == true) {
+                try {
+                    wakeLock?.release()
+                    Log.record(TAG, "唤醒锁已释放")
+                } catch (e: Exception) {
+                    Log.error(TAG, "释放唤醒锁失败: " + e.message)
+                }
+            }
+        }
     }
 }

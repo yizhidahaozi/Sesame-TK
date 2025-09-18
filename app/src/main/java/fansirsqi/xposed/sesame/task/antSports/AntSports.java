@@ -61,6 +61,9 @@ public class AntSports extends ModelTask {
     
     // 记录训练好友获得0金币的次数
     private int zeroTrainCoinCount = 0;
+    
+    // 运动任务黑名单
+    private StringModelField sportsTaskBlacklist;
 
 
     @Override
@@ -92,6 +95,7 @@ public class AntSports extends ModelTask {
         modelFields.addField(walkCustomPathId = new StringModelField("walkCustomPathId", "行走路线 | 自定义路线代码(debug)", "p0002023122214520001"));
         modelFields.addField(openTreasureBox = new BooleanModelField("openTreasureBox", "开启宝箱", false));
         modelFields.addField(sportsTasks = new BooleanModelField("sportsTasks", "开启运动任务", false));
+        modelFields.addField(sportsTaskBlacklist = new StringModelField("sportsTaskBlacklist", "运动任务黑名单 | 任务名称(用,分隔)", "开通包裹查询服务,添加支付宝小组件,领取价值1.7万元配置,支付宝积分可兑券"));
         modelFields.addField(receiveCoinAsset = new BooleanModelField("receiveCoinAsset", "收运动币", false));
         modelFields.addField(donateCharityCoin = new BooleanModelField("donateCharityCoin", "捐运动币 | 开启", false));
         modelFields.addField(donateCharityCoinType = new ChoiceModelField("donateCharityCoinType", "捐运动币 | 方式", DonateCharityCoinType.ONE, DonateCharityCoinType.nickNames));
@@ -179,6 +183,33 @@ public class AntSports extends ModelTask {
         }
     }
     
+    /**
+     * 检查并重置运动任务状态（每日自动开启）
+     */
+    private void checkAndResetSportsTasksStatus() {
+        // 使用Status标记来记录每日重置状态
+        String resetFlag = "sport::sportsTasksDailyReset";
+        // 如果今天还没有重置过，则进行重置
+        if (!Status.hasFlagToday(resetFlag)) {
+            // 如果运动任务功能被关闭了，自动开启
+            if (!sportsTasks.getValue()) {
+                sportsTasks.setValue(true);
+                Log.record(TAG, "新的一天，自动开启运动任务功能");
+                // 保存配置以确保设置持久化
+                try {
+                    boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
+                    Log.record(TAG, "运动任务自动开启后配置保存结果: " + (saveResult ? "成功" : "失败"));
+                } catch (Exception e) {
+                    Log.record(TAG, "运动任务自动开启后配置保存异常");
+                    Log.printStackTrace(TAG, e);
+                }
+            }
+            
+            // 设置今日已重置标记
+            Status.setFlagToday(resetFlag);
+        }
+    }
+    
     @Override
     public void run() {
         TimeCounter tc = new TimeCounter(TAG);
@@ -186,6 +217,9 @@ public class AntSports extends ModelTask {
         
         // 检查是否需要重置训练好友状态（每日自动开启）
         checkAndResetTrainFriendStatus();
+        
+        // 检查是否需要重置运动任务状态（每日自动开启）
+        checkAndResetSportsTasksStatus();
         try {
             if (!Status.hasFlagToday("sport::syncStep") && TimeUtil.isNowAfterOrCompareTimeStr("0600")) {
                 addChildTask(new ChildModelTask("syncStep", () -> {
@@ -312,10 +346,18 @@ public class AntSports extends ModelTask {
     private void sportsTasks() {
         try {
             sportsCheck_in();
+            // 运动任务查询
             JSONObject jo = new JSONObject(AntSportsRpcCall.queryCoinTaskPanel());
+          //  Log.record(TAG,"运动任务响应："+jo);
             if (jo.optBoolean("success")) {
                 JSONObject data = jo.getJSONObject("data");
                 JSONArray taskList = data.getJSONArray("taskList");
+                
+                // 统计任务完成状态
+                int totalTasks = 0;
+                int completedTasks = 0;
+                int availableTasks = 0; // 可执行的任务数
+                
                 for (int i = 0; i < taskList.length(); i++) {
                     JSONObject taskDetail = taskList.getJSONObject(i);
                     String taskId = taskDetail.getString("taskId");
@@ -326,36 +368,88 @@ public class AntSports extends ModelTask {
                     // 要完成的次数
                     int limitConfigNum = taskDetail.getInt("limitConfigNum") - currentNum;
                     
-                    // 跳过已完成的任务
-                    if (taskStatus.equals("HAS_RECEIVED")) {
-                        Log.record(TAG, "做任务得运动币👯[任务已完成：" + taskName + "]");
-                        continue;
-                    }
-                    
-                    // 跳过不需要完成的任务状态
-                    if (!taskStatus.equals("WAIT_RECEIVE") && !taskStatus.equals("WAIT_COMPLETE")) {
-                        Log.record(TAG, "做任务得运动币👯[跳过任务：" + taskName + "，状态：" + taskStatus + "]");
-                        continue;
-                    }
-                    // 检查是否需要执行任务
-                    if (limitConfigNum <= 0) {
-                        Log.record(TAG, "做任务得运动币👯[任务无需执行：" + taskName + "，已完成" + currentNum + "/" + taskDetail.getInt("limitConfigNum") + "]");
-                        continue;
-                    }
-                    
-                    Log.record(TAG, "做任务得运动币👯[开始执行任务：" + taskName + "，需完成" + limitConfigNum + "次]");
-                    for (int i1 = 0; i1 < limitConfigNum; i1++) {
-                        jo = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
-                        if (jo.optBoolean("success")) {
-                            Log.record(TAG, "做任务得运动币👯[完成任务：" + taskName + "，得" + prizeAmount + "💰]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
-                            receiveCoinAsset();
-                        } else {
-                            Log.record(TAG, "做任务得运动币👯[任务执行失败：" + taskName + "]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
-                            break; // 失败时跳出循环
+                    // 统计总任务数（排除特殊任务类型）
+                    String taskType = taskDetail.optString("taskType", "");
+                    if (!taskType.equals("SETTLEMENT")) { // 排除步数和锻炼时长等自动完成的任务
+                        totalTasks++;
+                        
+                        // 获取按钮文本
+                        String buttonText = taskDetail.optString("buttonText", "");
+                        
+                        // 检查任务是否在黑名单中
+                        String blacklistStr = sportsTaskBlacklist.getValue();
+                        if (blacklistStr != null && !blacklistStr.trim().isEmpty()) {
+                            String[] blacklist = blacklistStr.split(",");
+                            boolean isBlacklisted = false;
+                            for (String blackItem : blacklist) {
+                                if (taskName.contains(blackItem.trim())) {
+                                    isBlacklisted = true;
+                                    break;
+                                }
+                            }
+                            if (isBlacklisted) {
+                                Log.record(TAG, "做任务得运动币👯[任务已屏蔽：" + taskName + "（在黑名单中）]");
+                                completedTasks++; // 将黑名单任务视为已完成
+                                continue;
+                            }
                         }
-                        if (limitConfigNum > 1 && i1 < limitConfigNum - 1) {
-                            GlobalThreadPools.sleepCompat(10000);
+                        
+                        // 跳过已完成的任务（检查状态和按钮文本）
+                        if (taskStatus.equals("HAS_RECEIVED") || buttonText.equals("任务已完成")) {
+                            Log.record(TAG, "做任务得运动币👯[任务已完成：" + taskName + "，状态：" + taskStatus + "，按钮：" + buttonText + "]");
+                            completedTasks++;
+                            continue;
                         }
+                        
+                        // 跳过不需要完成的任务状态
+                        if (!taskStatus.equals("WAIT_RECEIVE") && !taskStatus.equals("WAIT_COMPLETE")) {
+                            Log.record(TAG, "做任务得运动币👯[跳过任务：" + taskName + "，状态：" + taskStatus + "]");
+                            continue;
+                        }
+                        
+                        // 检查是否需要执行任务
+                        if (limitConfigNum <= 0) {
+                            Log.record(TAG, "做任务得运动币👯[任务无需执行：" + taskName + "，已完成" + currentNum + "/" + taskDetail.getInt("limitConfigNum") + "]");
+                            completedTasks++;
+                            continue;
+                        }
+                        
+                        // 这是一个可执行的任务
+                        availableTasks++;
+                        
+                        Log.record(TAG, "做任务得运动币👯[开始执行任务：" + taskName + "，需完成" + limitConfigNum + "次]");
+                        for (int i1 = 0; i1 < limitConfigNum; i1++) {
+                            jo = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
+                            if (jo.optBoolean("success")) {
+                                Log.record(TAG, "做任务得运动币👯[完成任务：" + taskName + "，得" + prizeAmount + "💰]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
+                                receiveCoinAsset();
+                            } else {
+                                Log.record(TAG, "做任务得运动币👯[任务执行失败：" + taskName + "]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
+                                break; // 失败时跳出循环
+                            }
+                            if (limitConfigNum > 1 && i1 < limitConfigNum - 1) {
+                                GlobalThreadPools.sleepCompat(10000);
+                            }
+                        }
+                        // 任务执行完成后，增加完成计数
+                        completedTasks++;
+                    }
+                }
+                
+                // 检查是否所有可执行任务都已完成
+                Log.record(TAG, "运动任务完成情况：" + completedTasks + "/" + totalTasks + "，可执行任务：" + availableTasks);
+                
+                // 如果所有可执行的任务都已完成（没有可执行的任务了），自动关闭运动任务功能
+                if (totalTasks > 0 && completedTasks >= totalTasks && availableTasks == 0) {
+                    sportsTasks.setValue(false);
+                    Log.record(TAG, "所有运动任务已完成，自动关闭运动任务功能，明日将自动重新开启");
+                    // 保存配置以确保设置持久化
+                    try {
+                        boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
+                        Log.record(TAG, "运动任务自动关闭后配置保存结果: " + (saveResult ? "成功" : "失败"));
+                    } catch (Exception e) {
+                        Log.record(TAG, "运动任务自动关闭后配置保存异常");
+                        Log.printStackTrace(TAG, e);
                     }
                 }
             }

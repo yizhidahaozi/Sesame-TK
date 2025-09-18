@@ -53,7 +53,7 @@ abstract class ModelTask : Model() {
     
     /** 任务是否正在运行 */
     @Volatile
-    private var isRunning = false
+    var isRunning = false
 
     /** 增加任务运行次数 */
     fun addRunCents() {
