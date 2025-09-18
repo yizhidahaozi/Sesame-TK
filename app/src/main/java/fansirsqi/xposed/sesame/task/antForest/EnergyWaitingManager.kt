@@ -23,19 +23,26 @@ interface EnergyCollectCallback {
      * @return 收取结果信息
      */
     suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult
+    
+    /**
+     * 添加能量到总计数
+     * @param energyCount 要添加的能量数量
+     */
+    fun addToTotalCollected(energyCount: Int)
 }
 
 /**
  * 收取结果数据类
  */
-data class CollectResult(
-    val success: Boolean,
-    val userName: String?,
-    val message: String = "",
-    val hasShield: Boolean = false,
-    val hasBomb: Boolean = false,
-    val energyCount: Int = 0
-)
+    data class CollectResult(
+        val success: Boolean,
+        val userName: String?,
+        val message: String = "",
+        val hasShield: Boolean = false,
+        val hasBomb: Boolean = false,
+        val energyCount: Int = 0,
+        val totalCollected: Int = 0  // 累加后的总能量
+    )
 
 /**
  * 能量球蹲点管理器
@@ -269,6 +276,12 @@ object EnergyWaitingManager {
                     result.success -> {
                         val displayName = result.userName ?: task.userName
                         val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
+                        
+                        // 在这里累加到总能量
+                        if (result.energyCount > 0) {
+                            energyCollectCallback?.addToTotalCollected(result.energyCount)
+                        }
+                        
                         Log.forest("蹲点收取成功🎯[${displayName}]${energyInfo}")
                     }
                     else -> {

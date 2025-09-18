@@ -2504,9 +2504,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.runtime(TAG, "collectEnergy err")
                 Log.printStackTrace(e)
             } finally {
-                val str_totalCollected =
+                val strTotalCollected =
                     "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g"
-                updateLastExecText(str_totalCollected)
+                updateLastExecText(strTotalCollected)
                 notifyMain()
             }
         }
@@ -4396,22 +4396,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             }
             
-            // 记录收取前的总能量
-            val beforeTotalCollected = totalCollected
-            
             // 调用原有的collectEnergy方法
             val result = collectEnergy(userId, userHomeObj, fromTag)
             
-            // 计算本次收取的能量数量
-            val energyCount = totalCollected - beforeTotalCollected
-            
-            Log.debug(TAG, "蹲点收取结果：用户[${userName}] result=${result != null} 收取能量=${energyCount}g")
-            
             if (result != null) {
+                // 尝试获取收取的能量数量
+                val energyCount = extractCollectedEnergyCount(result)
+            
+                // 注意：能量累加现在在EnergyWaitingManager中通过回调处理
                 return CollectResult(
                     success = true,
                     userName = userName,
                     energyCount = energyCount,
+                    totalCollected = totalCollected,  // 传递累加后的总能量
                     message = "收取成功"
                 )
             } else {
@@ -4433,27 +4430,43 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     
     /**
      * 从收取结果中提取收取的能量数量
+     * 按照原有collectEnergy方法的逻辑：只有collected > 0才算成功收取
      */
     private fun extractCollectedEnergyCount(result: JSONObject): Int {
         return try {
-            // 尝试多种可能的字段名
-            when {
-                result.has("collectEnergy") -> result.getInt("collectEnergy")
-                result.has("totalCollectEnergy") -> result.getInt("totalCollectEnergy")
-                result.has("energy") -> result.getInt("energy")
-                result.has("bubbles") -> {
-                    // 从bubbles数组中统计收取的能量
-                    val bubbles = result.getJSONArray("bubbles")
-                    var totalEnergy = 0
-                    for (i in 0..<bubbles.length()) {
-                        val bubble = bubbles.getJSONObject(i)
-                        if (bubble.has("collectedEnergy")) {
-                            totalEnergy += bubble.getInt("collectedEnergy")
-                        }
-                    }
-                    totalEnergy
+            // 按照原有collectEnergy方法的逻辑提取能量
+            if (result.has("bubbles")) {
+                val jaBubbles = result.getJSONArray("bubbles")
+                var collected = 0
+                
+                // 遍历所有bubble，累加collectedEnergy
+                for (i in 0..<jaBubbles.length()) {
+                    val bubble = jaBubbles.getJSONObject(i)
+                    collected += bubble.getInt("collectedEnergy")
                 }
-                else -> 0
+                
+                // 只有collected > 0才算收取成功，返回能量数量
+                if (collected > 0) {
+                    Log.debug(TAG, "从bubbles中提取到能量数量: ${collected}g")
+                    return collected
+                } else {
+                    Log.debug(TAG, "收取能量为0，视为未成功收取")
+                    return 0
+                }
+            } else {
+                // 尝试其他可能的字段名作为备选
+                val energyCount = when {
+                    result.has("collectEnergy") -> result.getInt("collectEnergy")
+                    result.has("totalCollectEnergy") -> result.getInt("totalCollectEnergy")
+                    result.has("energy") -> result.getInt("energy")
+                    else -> {
+                        Log.debug(TAG, "未找到能量字段，返回0")
+                        0
+                    }
+                }
+                
+                // 同样只有大于0才返回
+                return if (energyCount > 0) energyCount else 0
             }
         } catch (e: Exception) {
             Log.debug(TAG, "提取能量数量失败: ${e.message}")
@@ -4465,6 +4478,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * 实现EnergyCollectCallback接口
      * 为蹲点管理器提供能量收取功能（增强版）
      */
+    
+    override fun addToTotalCollected(energyCount: Int) {
+        totalCollected += energyCount
+    }
     override suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult {
         return try {
             withContext(Dispatchers.Default) {
