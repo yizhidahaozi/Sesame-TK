@@ -1640,8 +1640,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 collectVivaEnergy(userId, userHomeObj, availableBubbles,  fromTag)
             }
 
-
-
             return userHomeObj
         } catch (e: JSONException) {
             Log.printStackTrace(TAG, "collectUserEnergy JSON解析错误", e)
@@ -4382,10 +4380,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     ): CollectResult {
         try {
             Log.debug(TAG, "蹲点收取开始：用户[${userName}] userId[${userId}] fromTag[${fromTag}]")
-            
             // 获取服务器时间
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
-            
             // 先检查保护罩和炸弹
             val hasProtection = checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
             if (hasProtection) {
@@ -4398,11 +4394,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             
             // 调用原有的collectEnergy方法
             val result = collectEnergy(userId, userHomeObj, fromTag)
-            
             if (result != null) {
                 // 尝试获取收取的能量数量
                 val energyCount = extractCollectedEnergyCount(result)
-            
                 // 注意：能量累加现在在EnergyWaitingManager中通过回调处理
                 return CollectResult(
                     success = true,

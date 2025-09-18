@@ -269,19 +269,16 @@ object EnergyWaitingManager {
             try {
                 // 通过回调获取收取结果
                 val result = collectEnergyFromWaiting(task)
-                
                 // 根据结果进行不同的处理
                 // 注意：保护罩和炸弹的检查已经在原有的collectEnergy方法中处理，会产生相应的日志
                 when {
                     result.success -> {
                         val displayName = result.userName ?: task.userName
                         val energyInfo = if (result.energyCount > 0) " (+${result.energyCount}g)" else ""
-                        
                         // 在这里累加到总能量
                         if (result.energyCount > 0) {
                             energyCollectCallback?.addToTotalCollected(result.energyCount)
                         }
-                        
                         Log.forest("蹲点收取成功🎯[${displayName}]${energyInfo}")
                     }
                     else -> {
