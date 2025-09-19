@@ -4343,7 +4343,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
          */
         private var errorWait = false
         var ecoLifeOpen: BooleanModelField? = null
-        private var canConsumeAnimalProp = false
+        private var canConsumeAnimalProp = true
         private var totalCollected = 0
         private const val totalHelpCollected = 0
         private const val totalWatered = 0
