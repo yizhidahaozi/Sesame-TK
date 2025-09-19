@@ -1616,13 +1616,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return userHomeObj
             }
             // 4. 获取所有可收集的能量球
-            val availableBubbles: MutableList<Long> = ArrayList()
-            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
-            // 如果没有任何能量球（可收），则标记为空林并直接返回
+            val availableBubbles: MutableList<Long> = ArrayList()         
+	// 如果没有任何能量球（可收），则标记为空林并直接返回
             if (availableBubbles.isEmpty()) {
                 emptyForestCache.put(userId, System.currentTimeMillis())
                 return userHomeObj
             }
+         extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
             // 检查是否有能量罩保护（影响当前收取）
             var hasProtection = false
             if (!isSelf) {
