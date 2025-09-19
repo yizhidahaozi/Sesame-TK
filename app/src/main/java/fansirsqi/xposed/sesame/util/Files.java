@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.util;
 
+import fansirsqi.xposed.sesame.util.CoroutineUtils;
 import android.annotation.SuppressLint;
 import android.os.Environment;
 
@@ -688,12 +689,7 @@ public class Files {
             }
             retryCount--;
             Log.runtime(TAG, "删除失败，重试中: " + file.getAbsolutePath());
-            try {
-                Thread.sleep(500); // 等待 500ms 后重试
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+            CoroutineUtils.sleepCompat(500); // 等待 500ms 后重试
         }
         Log.error(TAG, "删除失败: " + file.getAbsolutePath());
         return false;

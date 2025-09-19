@@ -455,7 +455,7 @@ class MainActivity : BaseActivity() {
                 // 清空文件后写入初始化日志
                 if (clearedCount > 0) {
                     // 等待一小段时间确保文件操作完成
-                    Thread.sleep(100)
+                    fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(100)
                     Log.runtime("MainActivity", "runtime日志已清空并重新开始记录")
                     Log.record("MainActivity", "record日志已清空并重新开始记录")
                 }
@@ -472,7 +472,7 @@ class MainActivity : BaseActivity() {
     }
 
     fun updateSubTitle(runType: String) {
-        Log.runtime(TAG, "updateSubTitle$runType")
+       // Log.runtime(TAG, "updateSubTitle$runType")
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]"
         when (runType) {
             RunType.DISABLE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))

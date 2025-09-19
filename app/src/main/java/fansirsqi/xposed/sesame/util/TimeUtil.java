@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.util;
 
+import fansirsqi.xposed.sesame.util.CoroutineUtils;
 import android.annotation.SuppressLint;
 
 import java.text.DateFormat;
@@ -239,12 +240,12 @@ public class TimeUtil {
         return Calendar.getInstance();
     }
 
-    public static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+
+    /**
+     * 协程兼容的延迟方法
+     */
+    public static void sleepCompat(long millis) {
+        fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(millis);
     }
 
     /**
