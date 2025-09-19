@@ -1701,6 +1701,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val bubbleId = bubble.getLong("id")
             val statusStr = bubble.getString("collectStatus")
             val status = CollectStatus.valueOf(statusStr)
+            val bubbleCount = bubble.getInt("fullEnergy")
 
             when (status) {
                 CollectStatus.AVAILABLE -> {
@@ -1708,6 +1709,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     availableBubbles.add(bubbleId)
                 }
                 CollectStatus.WAITING -> {
+                // 等待成熟的能量球，检查数量
+                	if (bubbleCount <= 0) {
+                    	Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
+                    	continue
+                	}
                     // 等待成熟的能量球，添加到蹲点队列
                     val produceTime = bubble.optLong("produceTime", 0L)
                     if (produceTime > 0 && produceTime > serverTime) {
@@ -1718,7 +1724,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             userName = userName ?: "未知用户",
                             bubbleId = bubbleId,
                             produceTime = produceTime,
-                            fromTag = "waiting"
+                            fromTag = "蹲点"
                         )
                         Log.debug(
                             TAG,
