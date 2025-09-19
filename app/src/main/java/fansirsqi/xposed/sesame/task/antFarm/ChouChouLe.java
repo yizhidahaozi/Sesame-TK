@@ -79,7 +79,7 @@ public class ChouChouLe {
                 for (TaskInfo task : tasks) {
                     if (TaskStatus.FINISHED.name().equals(task.taskStatus)) {
                         if (receiveTaskAward(drawType, task.taskId)) {//领取奖励
-                            GlobalThreadPools.sleep(5 * 1000L);
+                            GlobalThreadPools.sleepCompat(5 * 1000L);
                             doubleCheck = true;
                         }
                     } else if (TaskStatus.TODO.name().equals(task.taskStatus)) {
@@ -125,9 +125,9 @@ public class ChouChouLe {
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm((drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐") + "🧾️[任务: " + task.title + "]");
                 if(task.title.equals("消耗饲料换机会")) {
-                    GlobalThreadPools.sleep(1 * 1000L);
+                    GlobalThreadPools.sleepCompat(1 * 1000L);
                 } else {
-                    GlobalThreadPools.sleep(5 * 1000L);
+                    GlobalThreadPools.sleepCompat(5 * 1000L);
                 }
                 return true;
             }
@@ -176,7 +176,7 @@ public class ChouChouLe {
             int drawTimes = jo.optInt("drawTimes", 0);
             for (int i = 0; i < drawTimes; i++) {
                 drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachine());
-                GlobalThreadPools.sleep(5 * 1000L);
+                GlobalThreadPools.sleepCompat(5 * 1000L);
             }
 
         } catch (Throwable t) {
@@ -209,7 +209,7 @@ public class ChouChouLe {
             for (int i = 0; i < leftDrawTimes; i++) {
                 String call = activityId.equals("null") ? AntFarmRpcCall.DrawPrize() : AntFarmRpcCall.DrawPrize(activityId);
                 drawPrize("抽抽乐", call);
-                GlobalThreadPools.sleep(5 * 1000L);
+                GlobalThreadPools.sleepCompat(5 * 1000L);
             }
 
         } catch (Throwable t) {

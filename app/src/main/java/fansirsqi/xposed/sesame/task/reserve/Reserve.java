@@ -126,7 +126,7 @@ public class Reserve extends ModelTask {
             Log.record(TAG, "开始执行-" + getName());
             String s = ReserveRpcCall.queryTreeItemsForExchange();
             if (s == null) {
-                GlobalThreadPools.sleep(RandomUtil.delay());
+                GlobalThreadPools.sleepCompat(RandomUtil.delay());
                 s = ReserveRpcCall.queryTreeItemsForExchange();
             }
             JSONObject jo = new JSONObject(s);
@@ -222,13 +222,13 @@ public class Reserve extends ModelTask {
                     // Statistics.reserveToday(projectId, count);
                     break;
                 }
-                GlobalThreadPools.sleep(300);
+                GlobalThreadPools.sleepCompat(300);
                 canApply = queryTreeForExchange(projectId);
                 if (!canApply) {
                     // Statistics.reserveToday(projectId, count);
                     break;
                 } else {
-                    GlobalThreadPools.sleep(300);
+                    GlobalThreadPools.sleepCompat(300);
                 }
                 if (!Status.canReserveToday(projectId, count))
                     break;

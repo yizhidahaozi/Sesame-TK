@@ -71,7 +71,7 @@ public class AncientTree extends ModelTask {
                 if (!Status.canAncientTreeToday(cityCode))
                     continue;
                 ancientTreeProtect(cityCode);
-                GlobalThreadPools.sleep(1000L);
+                GlobalThreadPools.sleepCompat(1000L);
             }
         } catch (Throwable th) {
             Log.runtime(TAG, "ancientTree err:");
@@ -95,7 +95,7 @@ public class AncientTree extends ModelTask {
                     JSONObject districtInfo = districtBriefInfo.getJSONObject("districtInfo");
                     String districtCode = districtInfo.getString("districtCode");
                     districtDetail(districtCode);
-                    GlobalThreadPools.sleep(1000L);
+                    GlobalThreadPools.sleepCompat(1000L);
                 }
                 Status.ancientTreeToday(cityCode);
             }
@@ -142,7 +142,7 @@ public class AncientTree extends ModelTask {
                             cityCode = ancientTreeInfo.getString("cityCode");
                             if (currentEnergy < protectExpense)
                                 break;
-                            GlobalThreadPools.sleep(200);
+                            GlobalThreadPools.sleepCompat(200);
                             jo = new JSONObject(AncientTreeRpcCall.protect(activityId, projectId, cityCode));
                             if (ResChecker.checkRes(TAG,jo)) {
                                 Log.forest("保护古树🎐[" + cityName + "-" + districtName
@@ -156,7 +156,7 @@ public class AncientTree extends ModelTask {
                         Log.record(jo.getString("resultDesc"));
                         Log.runtime(ancientTreeDetail.toString());
                     }
-                    GlobalThreadPools.sleep(500L);
+                    GlobalThreadPools.sleepCompat(500L);
                 }
             }
         } catch (Throwable th) {

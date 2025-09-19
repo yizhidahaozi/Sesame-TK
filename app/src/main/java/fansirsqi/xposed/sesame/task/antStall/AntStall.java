@@ -184,7 +184,7 @@ public class AntStall extends ModelTask {
                 if (stallAutoTask.getValue()) {
                     taskList();
                     tc.countDebug("自动任务第一次");
-                    GlobalThreadPools.sleep(500);
+                    GlobalThreadPools.sleepCompat(500);
                     taskList();
                     tc.countDebug("自动任务第二次");
                 }
@@ -395,7 +395,7 @@ public class AntStall extends ModelTask {
                                     if (stallAutoClose.getValue()) {
                                         shopClose(shopId, rentLastBill, rentLastUser);
                                     }
-                                    GlobalThreadPools.sleep(300L);
+                                    GlobalThreadPools.sleepCompat(300L);
                                     if (stallAutoOpen.getValue()) {
                                         openShop();
                                     }
@@ -587,7 +587,7 @@ public class AntStall extends ModelTask {
                             continue;
                         }
                         Log.farm("蚂蚁新村👣任务[" + title + "]完成");
-                        GlobalThreadPools.sleep(200L);
+                        GlobalThreadPools.sleepCompat(200L);
                         continue;
                     }
                     switch (taskType) {
@@ -598,7 +598,7 @@ public class AntStall extends ModelTask {
                             break;
                         case "ANTSTALL_NORMAL_INVITE_REGISTER":
                             if (inviteRegister()) {
-                                GlobalThreadPools.sleep(200L);
+                                GlobalThreadPools.sleepCompat(200L);
                                 continue;
                             }
                             break;
@@ -619,7 +619,7 @@ public class AntStall extends ModelTask {
 //                                Log.runtime(TAG, "taskList.queryCallAppSchema err:" + jo.optString("resultDesc"));
 //                            }
 //                            Log.record("延时5S 芭芭农场");
-//                            GlobalThreadPools.sleep(5000);
+//                            GlobalThreadPools.sleepCompat(5000);
 //                            AntStallRpcCall.home();
 //                            AntStallRpcCall.taskList();
                             break;
@@ -638,13 +638,13 @@ public class AntStall extends ModelTask {
                                 continue;
                             }
 //                            Log.record("延时5S 木兰市集");
-//                            GlobalThreadPools.sleep(5000);
+//                            GlobalThreadPools.sleepCompat(5000);
                             for (int j = 0; j < jsonArray.length(); j++) {
                                 try{
                                     JSONObject jsonObject = jsonArray.getJSONObject(j);
                                     s = AntStallRpcCall.finish(pid, jsonObject);
                                     Log.record("延时5S 木兰市集");
-                                    GlobalThreadPools.sleep(5000);
+                                    GlobalThreadPools.sleepCompat(5000);
                                     jo = new JSONObject(s);
                                     if (!jo.optBoolean("success")) {
                                         Log.runtime(TAG, "taskList.finish err:" + jo.optString("resultDesc"));
@@ -656,7 +656,7 @@ public class AntStall extends ModelTask {
                             }
                             break;
                     }
-                    GlobalThreadPools.sleep(200L);
+                    GlobalThreadPools.sleepCompat(200L);
                 } catch (Throwable t) {
                     Log.runtime(TAG, "taskList for err:");
                     Log.printStackTrace(TAG, t);
@@ -809,7 +809,7 @@ public class AntStall extends ModelTask {
                     continue;
                 }
                 Log.farm("新村助力🎉成功[" + name + "]");
-                GlobalThreadPools.sleep(5000);
+                GlobalThreadPools.sleepCompat(5000);
             }
             //暂时一天只做一次
             Status.antStallAssistFriendToday();
@@ -943,7 +943,7 @@ public class AntStall extends ModelTask {
             Log.printStackTrace(TAG, th);
         } finally {
             try {
-                GlobalThreadPools.sleep(1000);
+                GlobalThreadPools.sleepCompat(1000);
             } catch (Exception e) {
                 Log.printStackTrace(e);
             }
@@ -1072,7 +1072,7 @@ public class AntStall extends ModelTask {
                             Log.farm("蚂蚁新村🚫在[" + UserMap.getMaskName(friendId) + "]贴罚单");
                         } finally {
                             try {
-                                GlobalThreadPools.sleep(1000);
+                                GlobalThreadPools.sleepCompat(1000);
                             } catch (Exception e) {
                                 Log.printStackTrace(e);
                             }
@@ -1080,7 +1080,7 @@ public class AntStall extends ModelTask {
                     }
                 } finally {
                     try {
-                        GlobalThreadPools.sleep(1500);
+                        GlobalThreadPools.sleepCompat(1500);
                     } catch (Exception e) {
                         Log.printStackTrace(e);
                     }

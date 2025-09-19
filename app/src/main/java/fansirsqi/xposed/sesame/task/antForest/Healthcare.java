@@ -33,7 +33,7 @@ public class Healthcare {
                 if (ja.length() == 0 || !harvestForestEnergy(scene, ja)) {
                     return;
                 }
-                TimeUtil.sleep(1000);
+                TimeUtil.sleepCompat(1000);
             }
         } catch (Throwable th) {
             Log.runtime(TAG, "queryForestEnergy err:");

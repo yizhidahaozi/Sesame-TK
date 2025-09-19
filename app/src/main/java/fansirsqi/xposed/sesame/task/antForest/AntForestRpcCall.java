@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.task.antForest;
 
-import static fansirsqi.xposed.sesame.task.antForest.AntForest.TAG;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -162,7 +161,7 @@ public class AntForestRpcCall {
             return RequestManager.requestString("alipay.antforest.forest.h5.takeLook", 
                     "[" + requestData + "]");
         } catch (JSONException e) {
-            Log.printStackTrace(TAG, "takeLook构建请求参数失败", e);
+            Log.printStackTrace("AntForestRpcCall", "takeLook构建请求参数失败", e);
             return "";
         }
     }

@@ -120,7 +120,7 @@ public class GreenFinance extends ModelTask {
             prizes();
             //绿色经营
             doTask("AP13159535", TAG, "绿色经营📊");
-            GlobalThreadPools.sleep(500);
+            GlobalThreadPools.sleepCompat(500);
         } catch (Throwable th) {
             Log.runtime(TAG, "index err:");
             Log.printStackTrace(TAG, th);
@@ -229,7 +229,7 @@ public class GreenFinance extends ModelTask {
                 return;
             }
             s = GreenFinanceRpcCall.signInTrigger(sceneId);
-            GlobalThreadPools.sleep(300);
+            GlobalThreadPools.sleepCompat(300);
             jo = new JSONObject(s);
             if (jo.optBoolean("success")) {
                 Log.other("绿色经营📊签到成功");
@@ -286,7 +286,7 @@ public class GreenFinance extends ModelTask {
                     continue;
                 }
                 str = GreenFinanceRpcCall.submitTick(type, jsonObject.getString("behaviorCode"));
-                GlobalThreadPools.sleep(1500);
+                GlobalThreadPools.sleepCompat(1500);
                 JSONObject object = new JSONObject(str);
                 if (!object.optBoolean("success")
                         || !String.valueOf(true).equals(JsonUtil.getValueByPath(object, "result.result"))) {
@@ -310,7 +310,7 @@ public class GreenFinance extends ModelTask {
         }
         try {
             String str = GreenFinanceRpcCall.queryExpireMcaPoint(1);
-            GlobalThreadPools.sleep(300);
+            GlobalThreadPools.sleepCompat(300);
             JSONObject jsonObject = new JSONObject(str);
             if (!jsonObject.optBoolean("success")) {
                 Log.runtime(TAG + ".donation.queryExpireMcaPoint", jsonObject.optString("resultDesc"));
@@ -327,7 +327,7 @@ public class GreenFinance extends ModelTask {
             //不管是否可以捐小于非100的倍数了，，第一次捐200，最后按amount-200*n
             Log.other("绿色经营📊1天内过期的金币[" + amount + "]");
             str = GreenFinanceRpcCall.queryAllDonationProjectNew();
-            GlobalThreadPools.sleep(300);
+            GlobalThreadPools.sleepCompat(300);
             jsonObject = new JSONObject(str);
             if (!jsonObject.optBoolean("success")) {
                 Log.runtime(TAG + ".donation.queryAllDonationProjectNew", jsonObject.optString("resultDesc"));
@@ -356,7 +356,7 @@ public class GreenFinance extends ModelTask {
                     am = String.valueOf(r[1]);
                 }
                 str = GreenFinanceRpcCall.donation(id, am);
-                GlobalThreadPools.sleep(1000);
+                GlobalThreadPools.sleepCompat(1000);
                 jsonObject = new JSONObject(str);
                 if (!jsonObject.optBoolean("success")) {
                     Log.runtime(TAG + ".donation." + id, jsonObject.optString("resultDesc"));
@@ -425,7 +425,7 @@ public class GreenFinance extends ModelTask {
             while (true) {
                 try {
                     String str = GreenFinanceRpcCall.queryRankingList(n);
-                    GlobalThreadPools.sleep(1500);
+                    GlobalThreadPools.sleepCompat(1500);
                     JSONObject jsonObject = new JSONObject(str);
                     if (!jsonObject.optBoolean("success")) {
                         Log.other("绿色经营🙋，好友金币巡查失败");
@@ -449,7 +449,7 @@ public class GreenFinance extends ModelTask {
                             continue;
                         }
                         str = GreenFinanceRpcCall.queryGuestIndexPoints(friendId);
-                        GlobalThreadPools.sleep(1000);
+                        GlobalThreadPools.sleepCompat(1000);
                         jsonObject = new JSONObject(str);
                         if (!jsonObject.optBoolean("success")) {
                             Log.runtime(TAG + ".batchStealFriend.queryGuestIndexPoints", jsonObject.optString("resultDesc"));
@@ -470,7 +470,7 @@ public class GreenFinance extends ModelTask {
                             continue;
                         }
                         str = GreenFinanceRpcCall.batchSteal(jsonArray, friendId);
-                        GlobalThreadPools.sleep(1000);
+                        GlobalThreadPools.sleepCompat(1000);
                         jsonObject = new JSONObject(str);
                         if (!jsonObject.optBoolean("success")) {
                             Log.runtime(TAG + ".batchStealFriend.batchSteal", jsonObject.optString("resultDesc"));

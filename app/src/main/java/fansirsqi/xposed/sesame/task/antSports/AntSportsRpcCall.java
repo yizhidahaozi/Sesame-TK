@@ -282,8 +282,8 @@ public class AntSportsRpcCall {
         return RequestManager.requestString("alipay.antsports.club.home.queryClubHome",
                 "[{\"chInfo\":\"healthstep\",\"timeZone\":\"Asia/Shanghai\"}]");
     }
-    public static String collectBubble(String bubbleId) {
-        return RequestManager.requestString("alipay.antsports.club.home.collectBubble",
+    public static void collectBubble(String bubbleId) {
+        RequestManager.requestString("alipay.antsports.club.home.collectBubble",
                 "[{\"bubbleId\":\"" + bubbleId + "\",\"chInfo\":\"healthstep\"}]");
     }
     public static String queryTrainItem() {

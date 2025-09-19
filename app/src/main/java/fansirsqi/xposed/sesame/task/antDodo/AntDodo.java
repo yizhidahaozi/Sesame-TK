@@ -258,7 +258,7 @@ public class AntDodo extends ModelTask {
 
                             }
                         }
-                        GlobalThreadPools.sleep(500);
+                        GlobalThreadPools.sleepCompat(500);
                     }
                 }
                 if (!doubleCheck) break;
@@ -317,7 +317,7 @@ public class AntDodo extends ModelTask {
                         } else {
                             Log.forest("使用道具🎭[" + propName + "]");
                         }
-                        GlobalThreadPools.sleep(300);
+                        GlobalThreadPools.sleepCompat(300);
                         if (holdsNum > 1) {
                             continue th;
                         }
@@ -363,7 +363,7 @@ public class AntDodo extends ModelTask {
                     JSONObject animal = animalForUser.getJSONObject("animal");
                     for (int j = 0; j < count; j++) {
                         sendCard(animal, targetUser);
-                        GlobalThreadPools.sleep(500L);
+                        GlobalThreadPools.sleepCompat(500L);
                     }
                 }
             }
