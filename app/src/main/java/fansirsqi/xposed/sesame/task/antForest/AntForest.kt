@@ -1617,12 +1617,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             // 4. 获取所有可收集的能量球
             val availableBubbles: MutableList<Long> = ArrayList()         
-	// 如果没有任何能量球（可收），则标记为空林并直接返回
+	            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
             if (availableBubbles.isEmpty()) {
                 emptyForestCache.put(userId, System.currentTimeMillis())
                 return userHomeObj
             }
-         extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
+         
             // 检查是否有能量罩保护（影响当前收取）
             var hasProtection = false
             if (!isSelf) {
@@ -1871,13 +1871,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             tc.countDebug("处理" + rankingName + "靠前的好友")
             // 分批并行处理后续的（协程版本）
-            if (totalDatas.length() <= 20) {
+            if (totalDatas.length() <= 15) {
                 Log.record(TAG, rankingName + "没有更多的好友需要处理，跳过")
                 return@withContext
             }
             val idList: MutableList<String?> = ArrayList()
-            val batchSize = 30
-            val remainingSize = totalDatas.length() - 20
+            val batchSize = 15
+            val remainingSize = totalDatas.length() - 15
             val batches = (remainingSize + batchSize - 1) / batchSize
             Log.record(
                 TAG,
@@ -4343,7 +4343,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
          */
         private var errorWait = false
         var ecoLifeOpen: BooleanModelField? = null
-        private var canConsumeAnimalProp = true
+        private var canConsumeAnimalProp = false
         private var totalCollected = 0
         private const val totalHelpCollected = 0
         private const val totalWatered = 0
