@@ -73,7 +73,7 @@ object RpcIntervalLimit {
             val sleep = interval - (now - lastTime)
 
             if (sleep > 0) {
-                GlobalThreadPools.sleep(sleep)
+                GlobalThreadPools.sleepCompat(sleep)
             }
 
             intervalLimit.time = now

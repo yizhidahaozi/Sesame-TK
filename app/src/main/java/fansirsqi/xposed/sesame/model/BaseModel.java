@@ -32,7 +32,7 @@ public class BaseModel extends Model {
 
     @Getter
     public static final IntegerModelField taskWaitTime =
-            new IntegerModelField("taskWaitTime", "任务等待时间(-1:无限)", 10, -1, 12 * 60);
+            new IntegerModelField("taskWaitTime", "任务等待时间(-1:无限)", 4, -1, 12 * 60);
 
     /**
      * 定时执行的时间点列表
@@ -56,14 +56,14 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final ListModelField.ListJoinCommaToStringModelField energyTime =
-            new ListModelField.ListJoinCommaToStringModelField("energyTime", "只收能量时间(范围|关闭:-1)", ListUtil.newArrayList("0659-0731"));
+            new ListModelField.ListJoinCommaToStringModelField("energyTime", "只收能量时间(范围|关闭:-1)", ListUtil.newArrayList("0700-0730"));
 
     /**
      * 模块休眠时间范围
      */
     @Getter
     public static final ListModelField.ListJoinCommaToStringModelField modelSleepTime =
-            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("-1"));
+            new ListModelField.ListJoinCommaToStringModelField("modelSleepTime", "模块休眠时间(范围|关闭:-1)", ListUtil.newArrayList("0200-0201"));
 
     /**
      * 定时任务模式选择
@@ -198,6 +198,11 @@ public class BaseModel extends Model {
         try {
             Log.runtime(TAG, "🧹清理所有数据");
             IdMapManager.getInstance(BeachMap.class).clear();
+//            IdMapManager.getInstance(ReserveaMap.class).clear();
+//            IdMapManager.getInstance(CooperateMap.class).clear();
+//            IdMapManager.getInstance(MemberBenefitsMap.class).clear();
+//            IdMapManager.getInstance(ParadiseCoinBenefitIdMap.class).clear();
+//            IdMapManager.getInstance(VitalityRewardsMap.class).clear();
             //其他也可以清理清理
         } catch (Exception e) {
             Log.printStackTrace(e);
