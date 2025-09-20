@@ -409,9 +409,9 @@ public class AntSports extends ModelTask {
                             String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
 
                             try {
-                                JSONObject data = new JSONObject(result);
+                                JSONObject resultData = new JSONObject(result);
                                 Log.record(TAG, "做任务得运动币👯[领取成功：" + taskName +
-                                    "，获得：" + data.getString("changeAmount") + "运动币]");
+                                    "，获得：" + resultData.getString("changeAmount") + "运动币]");
                                 completedTasks++;
                                 continue;
                             } catch (Exception e) {
