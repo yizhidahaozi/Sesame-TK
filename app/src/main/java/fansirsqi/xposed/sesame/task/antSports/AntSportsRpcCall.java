@@ -60,6 +60,30 @@ public class AntSportsRpcCall {
                 "]";
         return RequestManager.requestString("com.alipay.sportshealth.biz.rpc.SportsHealthCoinTaskRpc.signInCoinTask", args1);
     }
+// 领取任务奖励 - 默认不领取所有能量球
+public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId) {
+    return pickBubbleTaskEnergy(medEnergyBallInfoRecordId, false);
+}
+
+// 领取任务奖励 - 可指定是否领取所有能量球
+public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, boolean pickAllEnergyBall) {
+    String args1 = "[\n" +
+        "    {\n" +
+        "        \"apiVersion\": \"energy\",\n" +
+        "        \"chInfo\": \"medical_health\",\n" +
+        "        \"clientOS\": \"android\",\n" +
+        "        \"features\": " + features +
+        "        \"medEnergyBallInfoRecordIds\": [\"" + medEnergyBallInfoRecordId + "\"],\n" +
+        "        \"pickAllEnergyBall\": " + pickAllEnergyBall + ",\n" +
+        "        \"source\": \"SPORT\"\n" +
+        "    }\n" +
+        "]";
+    return RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", args1);
+}
+
+
+
+
     public static String queryCoinBubbleModule() {
         return RequestManager.requestString("com.alipay.sportshealth.biz.rpc.sportsHealthHomeRpc.queryCoinBubbleModule",
                 "[{\"bubbleId\":\"\",\"canAddHome\":false,\"chInfo\":\"" + chInfo

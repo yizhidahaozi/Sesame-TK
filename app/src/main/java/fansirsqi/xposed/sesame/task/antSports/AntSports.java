@@ -373,8 +373,11 @@ public class AntSports extends ModelTask {
                     if (!taskType.equals("SETTLEMENT")) { // 排除步数和锻炼时长等自动完成的任务
                         totalTasks++;
                         
-                        // 获取按钮文本
-                        String buttonText = taskDetail.optString("buttonText", "");
+                        
+                        // 获取按钮文本和assetId
+                        String buttonText = taskDetail.getString("buttonText");
+                        String assetId = taskDetail.getString("assetId");
+ 
                         
                         // 检查任务是否在黑名单中
                         String blacklistStr = sportsTaskBlacklist.getValue();
@@ -395,11 +398,26 @@ public class AntSports extends ModelTask {
                         }
                         
                         // 跳过已完成的任务（检查状态和按钮文本）
-                        if (taskStatus.equals("HAS_RECEIVED") || buttonText.equals("任务已完成")) {
+                        if (buttonText.equals("任务已完成")) {
                             Log.record(TAG, "做任务得运动币👯[任务已完成：" + taskName + "，状态：" + taskStatus + "，按钮：" + buttonText + "]");
                             completedTasks++;
                             continue;
                         }
+
+                        // 判断并领取奖励
+                        if (buttonText.equals("领取奖励")) {
+                            String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
+
+                            try {
+                                JSONObject resultData = new JSONObject(result);
+                                Log.record(TAG, "做任务得运动币👯[领取成功：" + taskName +
+                                    "，获得：" + resultData.getString("changeAmount") + "运动币]");
+                                completedTasks++;
+                                continue;
+                            } catch (Exception e) {
+                                Log.record(TAG, "做任务得运动币👯[领取异常：" + e.getMessage() + "]");
+                            }
+                        }                        
                         
                         // 跳过不需要完成的任务状态
                         if (!taskStatus.equals("WAIT_RECEIVE") && !taskStatus.equals("WAIT_COMPLETE")) {
