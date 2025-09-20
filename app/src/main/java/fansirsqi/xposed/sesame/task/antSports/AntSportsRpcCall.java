@@ -81,35 +81,9 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
     return RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", args1);
 }
 
-// 领取多个任务奖励 - 默认不领取所有能量球
-public static String pickBubbleTaskEnergy(List<String> medEnergyBallInfoRecordIds) {
-    return pickBubbleTaskEnergy(medEnergyBallInfoRecordIds, false);
-}
 
-// 领取多个任务奖励 - 可指定是否领取所有能量球
-public static String pickBubbleTaskEnergy(List<String> medEnergyBallInfoRecordIds, boolean pickAllEnergyBall) {
-    String recordIdsJson = "[";
-    for (int i = 0; i < medEnergyBallInfoRecordIds.size(); i++) {
-        if (i > 0) {
-            recordIdsJson += ",";
-        }
-        recordIdsJson += "\"" + medEnergyBallInfoRecordIds.get(i) + "\"";
-    }
-    recordIdsJson += "]";
-    
-    String args1 = "[\n" +
-        "    {\n" +
-        "        \"apiVersion\": \"energy\",\n" +
-        "        \"chInfo\": \"medical_health\",\n" +
-        "        \"clientOS\": \"android\",\n" +
-        "        \"features\": " + features +
-        "        \"medEnergyBallInfoRecordIds\": " + recordIdsJson + ",\n" +
-        "        \"pickAllEnergyBall\": " + pickAllEnergyBall + ",\n" +
-        "        \"source\": \"SPORT\"\n" +
-        "    }\n" +
-        "]";
-    return RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", args1);
-}    
+
+
     public static String queryCoinBubbleModule() {
         return RequestManager.requestString("com.alipay.sportshealth.biz.rpc.sportsHealthHomeRpc.queryCoinBubbleModule",
                 "[{\"bubbleId\":\"\",\"canAddHome\":false,\"chInfo\":\"" + chInfo
