@@ -1521,10 +1521,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             friendHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询好友主页失败:", friendHomeObj)) {
-                Log.error(
-                    TAG,
-                    "查询好友主页失败: " + friendHomeObj.optString("resultDesc", "未知错误")
-                )
                 return null
             }
             val end = System.currentTimeMillis()
