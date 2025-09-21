@@ -1521,6 +1521,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             friendHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询好友主页失败:", friendHomeObj)) {
+                Log.error(
+                    TAG,
+                    "查询好友主页失败: " + friendHomeObj.optString("resultDesc", "未知错误")
+                )
                 return null
             }
             val end = System.currentTimeMillis()
@@ -1612,13 +1616,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return userHomeObj
             }
             // 4. 获取所有可收集的能量球
-            val availableBubbles: MutableList<Long> = ArrayList()
-            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
-            // 如果没有任何能量球（可收），则标记为空林并直接返回
+            val availableBubbles: MutableList<Long> = ArrayList()         
+	            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
             if (availableBubbles.isEmpty()) {
                 emptyForestCache.put(userId, System.currentTimeMillis())
                 return userHomeObj
             }
+         
             // 检查是否有能量罩保护（影响当前收取）
             var hasProtection = false
             if (!isSelf) {
@@ -1705,10 +1709,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     availableBubbles.add(bubbleId)
                 }
                 CollectStatus.WAITING -> {
-                    if (bubbleCount <= 0) {
-                        Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
-                        continue
-                    }
+                // 等待成熟的能量球，检查数量
+                	if (bubbleCount <= 0) {
+                    	Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
+                    	continue
+                	}
                     // 等待成熟的能量球，添加到蹲点队列
                     val produceTime = bubble.optLong("produceTime", 0L)
                     if (produceTime > 0 && produceTime > serverTime) {
@@ -1872,13 +1877,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             tc.countDebug("处理" + rankingName + "靠前的好友")
             // 分批并行处理后续的（协程版本）
-            if (totalDatas.length() <= 20) {
+            if (totalDatas.length() <= 15) {
                 Log.record(TAG, rankingName + "没有更多的好友需要处理，跳过")
                 return@withContext
             }
             val idList: MutableList<String?> = ArrayList()
-            val batchSize = 20
-            val remainingSize = totalDatas.length() - 20
+            val batchSize = 15
+            val remainingSize = totalDatas.length() - 15
             val batches = (remainingSize + batchSize - 1) / batchSize
             Log.record(
                 TAG,
@@ -2006,7 +2011,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     continue
                 }
                 // 查询好友主页并收取能量
-                val friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK")
+                val friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK_FRIEND")
                 if (friendHomeObj != null) {
                     foundCount++
                     var friendName = UserMap.getMaskName(friendId)

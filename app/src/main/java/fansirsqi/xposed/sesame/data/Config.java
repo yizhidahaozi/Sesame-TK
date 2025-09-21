@@ -152,26 +152,12 @@ public class Config {
         }
         boolean success;
         try {
-            File configFile;
             if (StringUtil.isEmpty(userId)) {
                 userId = "默认";
-                configFile = Files.getDefaultConfigV2File();
                 success = Files.setDefaultConfigV2File(json);
             } else {
-                configFile = Files.getConfigV2File(userId);
                 success = Files.setConfigV2File(userId, json);
             }
-            
-            // 创建备份文件（用于异常恢复）
-            if (success && configFile != null) {
-                try {
-                    File backupFile = new File(configFile.getPath() + ".backup");
-                    Files.write2File(json, backupFile);
-                } catch (Exception backupException) {
-                    Log.runtime(TAG, "创建配置备份文件失败，但主配置保存成功");
-                }
-            }
-            
             if (!success) {
                 throw new IOException("配置文件保存失败");
             }
@@ -246,41 +232,14 @@ public class Config {
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, t);
-            Log.runtime(TAG, "配置加载异常，尝试备份恢复: " + userName);
-            
-            // 增强异常处理：先尝试从备份恢复，再考虑重置
-            boolean recoveredFromBackup = false;
+            Log.runtime(TAG, "重置配置: " + userName);
             try {
-                // 尝试从备份文件恢复配置
+                unload();
                 if (configV2File != null) {
-                    File backupFile = new File(configV2File.getPath() + ".backup");
-                    if (backupFile.exists()) {
-                        String backupJson = Files.readFromFile(backupFile);
-                        if (backupJson != null && !backupJson.trim().isEmpty()) {
-                            JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(backupJson);
-                            Log.runtime(TAG, "从备份文件恢复配置成功: " + userName);
-                            // 恢复成功后，更新主配置文件
-                            Files.write2File(backupJson, configV2File);
-                            recoveredFromBackup = true;
-                        }
-                    }
+                    Files.write2File(toSaveStr(), configV2File);
                 }
-            } catch (Exception backupException) {
-                Log.runtime(TAG, "从备份恢复配置失败: " + userName);
-                Log.printStackTrace(TAG, backupException);
-            }
-            
-            // 如果备份恢复失败，才进行重置
-            if (!recoveredFromBackup) {
-                Log.runtime(TAG, "无法从备份恢复，重置配置: " + userName);
-                try {
-                    unload();
-                    if (configV2File != null) {
-                        Files.write2File(toSaveStr(), configV2File);
-                    }
-                } catch (Exception e) {
-                    Log.printStackTrace(TAG, "重置配置失败", e);
-                }
+            } catch (Exception e) {
+                Log.printStackTrace(TAG, "重置配置失败", e);
             }
         }
         INSTANCE.setInit(true);
@@ -289,47 +248,15 @@ public class Config {
     }
 
     /**
-     * 卸载当前配置（在重置前会自动保存当前配置以防丢失）
+     * 卸载当前配置
      */
     public static synchronized void unload() {
-        try {
-            // 在重置配置前，先尝试保存当前配置以防丢失
-            if (INSTANCE.init) {
-                String currentUserId = getCurrentUserId();
-                if (currentUserId != null) {
-                    boolean saved = save(currentUserId, false);
-                    if (saved) {
-                        Log.runtime(TAG, "配置卸载前自动保存成功");
-                    } else {
-                        Log.runtime(TAG, "配置卸载前自动保存失败，但继续卸载流程");
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.runtime(TAG, "配置卸载前保存时发生异常，但继续卸载流程");
-            Log.printStackTrace(TAG, e);
-        }
-        
-        // 重置所有字段为默认值
         for (ModelFields modelFields : INSTANCE.modelFieldsMap.values()) {
             for (ModelField<?> modelField : modelFields.values()) {
                 if (modelField != null) {
                     modelField.reset();
                 }
             }
-        }
-    }
-
-    /**
-     * 获取当前用户ID（用于配置保存）
-     */
-    private static String getCurrentUserId() {
-        try {
-            // 尝试获取当前用户ID，如果获取失败则返回null
-            return UserMap.getCurrentUid();
-        } catch (Exception e) {
-            Log.runtime(TAG, "获取当前用户ID失败");
-            return null;
         }
     }
 
