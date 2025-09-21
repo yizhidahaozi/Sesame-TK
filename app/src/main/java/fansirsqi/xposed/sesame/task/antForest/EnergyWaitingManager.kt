@@ -148,8 +148,8 @@ object EnergyWaitingManager {
     // 任务检查间隔（毫秒）
     private const val CHECK_INTERVAL_MS = 30000L // 30秒检查一次
     
-    // 提前收取时间（毫秒） - 提前5分钟尝试收取
-    private const val ADVANCE_TIME_MS = 5 * 60 * 1000L
+    // 蹲点收取时间（毫秒） - 2秒尝试收取
+    private const val ADVANCE_TIME_MS =  2000L
     
     // 能量收取回调
     private var energyCollectCallback: EnergyCollectCallback? = null
@@ -274,7 +274,7 @@ object EnergyWaitingManager {
         managerScope.launch {
             try {
                 val currentTime = System.currentTimeMillis()
-                val waitTime = task.produceTime - currentTime - ADVANCE_TIME_MS
+                val waitTime = task.produceTime - currentTime + ADVANCE_TIME_MS
                 
                 if (waitTime > 0) {
                     Log.debug(TAG, "蹲点任务[${task.taskId}]等待${waitTime/1000}秒后执行")
