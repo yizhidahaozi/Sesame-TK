@@ -81,6 +81,7 @@ public class AntForestRpcCall {
             JSONObject arg = new JSONObject();
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("userIdList", userIdList);
+            arg.put("needFillUserInfo", false); // 添加needFillUserInfo参数，默认为true
             String param = "[" + arg + "]";
             JSONObject joRelationLocal = new JSONObject();
             joRelationLocal.put("pathList", new JSONArray().put("friendRanking"));
@@ -129,7 +130,7 @@ public class AntForestRpcCall {
             arg1.put("wateringBubbleConfig", "0");
             arg.put("canRobFlags", "T,F,F,F,F");
             arg.put("configVersionMap", arg1);
-            arg.put("source", "chInfo_ch_appid-60000002");
+            arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("userId", userId);
             arg.put("fromAct", fromAct);
             arg.put("version", VERSION);

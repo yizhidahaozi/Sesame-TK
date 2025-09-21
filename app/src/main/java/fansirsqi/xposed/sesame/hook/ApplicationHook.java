@@ -444,7 +444,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         String targetUid = HookUtil.INSTANCE.getUserId(appLloadPackageParam.classLoader);
                                         if (targetUid == null || !targetUid.equals(currentUid)) {
                                             Log.record(TAG, "用户切换或为空，重新登录");
-                                            reLogin();
+                                            new Thread(ApplicationHook::reLogin).start();
                                             return;
                                         }
                                         lastExecTime = currentTime; // 更新最后执行时间
@@ -739,6 +739,18 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     Status.unload();
                     Notify.stop();
                     RpcIntervalLimit.INSTANCE.clearIntervalLimit();
+                    // 在强制销毁前，额外保存一次配置（双重保险）
+                    try {
+                        String currentUserId = UserMap.getCurrentUid();
+                        if (currentUserId != null && Config.isLoaded()) {
+                            boolean saved = Config.save(currentUserId, true); // 强制保存
+                            Log.runtime(TAG, saved ? "强制销毁前配置保存成功" : "强制销毁前配置保存失败");
+                        }
+                    } catch (Exception e) {
+                        Log.runtime(TAG, "强制销毁前保存配置时发生异常");
+                        Log.printStackTrace(TAG, e);
+                    }
+                    
                     Config.unload();
                     UserMap.unload();
                 }
@@ -792,7 +804,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             if (inactiveTime > MAX_INACTIVE_TIME ||
                     (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
                 Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，尝试重新登录");
-                reLogin();
+                new Thread(ApplicationHook::reLogin).start();
             }
         } catch (Exception e) {
             Log.runtime(TAG, "checkInactiveTime err:" + e.getMessage());
@@ -951,10 +963,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     } else {
                         delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
                     }
-                    
                     // 使用统一的闹钟调度器
                     alarmManager.scheduleDelayedExecution(delayMillis);
-
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

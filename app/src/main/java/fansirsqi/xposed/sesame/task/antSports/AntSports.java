@@ -367,18 +367,13 @@ public class AntSports extends ModelTask {
                     int currentNum = taskDetail.getInt("currentNum");
                     // 要完成的次数
                     int limitConfigNum = taskDetail.getInt("limitConfigNum") - currentNum;
-                    
+                    String buttonText = taskDetail.getString("buttonText");
+
                     // 统计总任务数（排除特殊任务类型）
                     String taskType = taskDetail.optString("taskType", "");
                     if (!taskType.equals("SETTLEMENT")) { // 排除步数和锻炼时长等自动完成的任务
                         totalTasks++;
-                        
-                        
-                        // 获取按钮文本和assetId
-                        String buttonText = taskDetail.getString("buttonText");
-                        String assetId = taskDetail.getString("assetId");
- 
-                        
+
                         // 检查任务是否在黑名单中
                         String blacklistStr = sportsTaskBlacklist.getValue();
                         if (blacklistStr != null && !blacklistStr.trim().isEmpty()) {
@@ -396,28 +391,31 @@ public class AntSports extends ModelTask {
                                 continue;
                             }
                         }
-                        
+
+
                         // 跳过已完成的任务（检查状态和按钮文本）
-                        if (buttonText.equals("任务已完成")) {
-                            Log.record(TAG, "做任务得运动币👯[任务已完成：" + taskName + "，状态：" + taskStatus + "，按钮：" + buttonText + "]");
+                        if ( buttonText.equals("任务已完成")) {
                             completedTasks++;
                             continue;
                         }
 
-                        // 判断并领取奖励
-                        if (buttonText.equals("领取奖励")) {
-                            String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
 
+                        // 处理可领取奖励的任务
+                        if (buttonText.equals("领取奖励")) {
+                            Log.record(TAG, "做任务得运动币👯[发现可领取奖励任务：" + taskName + "，状态：" + taskStatus + "]");
+                            String assetId = taskDetail.getString("assetId");
+                            String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
                             try {
                                 JSONObject resultData = new JSONObject(result);
                                 Log.record(TAG, "做任务得运动币👯[领取成功：" + taskName +
-                                    "，获得：" + resultData.getString("changeAmount") + "运动币]");
+                                        "，获得：" + resultData.getString("changeAmount") + "运动币]");
                                 completedTasks++;
                                 continue;
                             } catch (Exception e) {
                                 Log.record(TAG, "做任务得运动币👯[领取异常：" + e.getMessage() + "]");
                             }
-                        }                        
+                            continue;
+                        }
                         
                         // 跳过不需要完成的任务状态
                         if (!taskStatus.equals("WAIT_RECEIVE") && !taskStatus.equals("WAIT_COMPLETE")) {
