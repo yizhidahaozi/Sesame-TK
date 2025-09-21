@@ -40,6 +40,55 @@ public class NewRpcBridge implements RpcBridge {
             "繁忙", "拒绝", "网络不可用", "重试"
     ));
 
+    // 需要屏蔽错误日志的RPC方法列表
+    ArrayList<String> silentErrorMethods = new ArrayList<>(Arrays.asList(
+            "com.alipay.adexchange.ad.facade.xlightPlugin"
+    ));
+
+    /**
+     * 检查指定的RPC方法是否应该显示错误日志
+     * 
+     * @param methodName RPC方法名称
+     * @return 如果应该显示错误日志返回true，否则返回false
+     */
+    private boolean shouldShowErrorLog(String methodName) {
+        return !silentErrorMethods.contains(methodName);
+    }
+
+    /**
+     * 记录RPC请求返回null的原因
+     * 
+     * @param rpcEntity RPC请求实体
+     * @param reason 返回null的原因
+     * @param count 当前重试次数
+     */
+    private void logNullResponse(RpcEntity rpcEntity, String reason, int count) {
+        String methodName = rpcEntity != null ? rpcEntity.getRequestMethod() : "unknown";
+        if (shouldShowErrorLog(methodName)) {
+            Log.error(TAG, "RPC返回null | 方法: " + methodName + " | 原因: " + reason + " | 重试: " + count);
+        }
+    }
+
+    /**
+     * 尝试重新初始化RPC桥接（仅重新初始化技术组件，不影响配置）
+     * 
+     * @return 重新初始化是否成功
+     */
+    private boolean tryReInitialize() {
+        try {
+            Log.debug(TAG, "检测到RPC方法为null，尝试重新初始化RPC技术组件...");
+            // 注意：此方法只重新初始化技术组件，不会影响配置列表
+            // errorMark, errorStringMark, silentErrorMethods 等配置保持不变
+            load();
+            Log.debug(TAG, "RPC技术组件重新初始化成功，配置保持不变");
+            return true;
+        } catch (Exception e) {
+            Log.debug(TAG, "RPC技术组件重新初始化失败:");
+            Log.printStackTrace(e);
+            return false;
+        }
+    }
+
     @Override
     public RpcVersion getVersion() {
         return RpcVersion.NEW;
@@ -151,7 +200,9 @@ public class NewRpcBridge implements RpcBridge {
      */
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
-        if (ApplicationHook.isOffline() || newRpcCallMethod == null) {
+
+        if (newRpcCallMethod == null) {
+            ApplicationHook.restartByBroadcast();
             return null;
         }
         try {
@@ -160,6 +211,16 @@ public class NewRpcBridge implements RpcBridge {
                 count++;
                 try {
                     RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(rpcEntity.getRequestMethod()));
+                    // 再次检查RPC方法是否为null（防止并发情况下被unload）
+                    if (newRpcCallMethod == null) {
+                        if (count == 1 && tryReInitialize()) {
+                            // 重新初始化成功，继续下一次循环重试
+                            Log.runtime(TAG, "RPC方法在执行前变为null，尝试重新初始化成功");
+                            continue;
+                        }
+                        return null;
+                    }
+                    
                     newRpcCallMethod.invoke(
                             newRpcInstance, rpcEntity.getRequestMethod(), false, false, "json", parseObjectMethod.invoke(null,
                                     rpcEntity.getRpcFullRequestData()), "", null, true, false, 0, false, "", null, null, null, Proxy.newProxyInstance(loader,
@@ -181,8 +242,11 @@ public class NewRpcBridge implements RpcBridge {
                                                         && !(Boolean) XposedHelpers.callMethod(obj, "containsKey", "isSuccess")) {
                                                     rpcEntity.setError();
 
+                                                    // 如果方法不在屏蔽列表中，则显示错误日志
+                                                    if (shouldShowErrorLog(rpcEntity.getRequestMethod())) {
                                                     Log.error(TAG, "new rpc response1 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() + "\n " +
                                                             "args: " + rpcEntity.getRequestData() + " |\n data: " + rpcEntity.getResponseString());
+                                                    }
                                                 }
                                             } catch (Exception e) {
                                                 rpcEntity.setError();
@@ -195,6 +259,7 @@ public class NewRpcBridge implements RpcBridge {
                                     })
                     );
                     if (!rpcEntity.getHasResult()) {
+                        logNullResponse(rpcEntity, "无响应结果", count);
                         return null;
                     }
                     if (!rpcEntity.getHasError()) {
@@ -224,6 +289,7 @@ public class NewRpcBridge implements RpcBridge {
                                     ApplicationHook.reLoginByBroadcast();
                                 }
                             }
+                            logNullResponse(rpcEntity, "网络错误: " + errorCode + "/" + errorMessage, count);
                             return null;
                         }
                         return rpcEntity;
@@ -246,6 +312,7 @@ public class NewRpcBridge implements RpcBridge {
                     }
                 }
             } while (count < tryCount);
+            logNullResponse(rpcEntity, "重试次数耗尽", tryCount);
             return null;
         } finally {
             Log.system(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n"+"\n"+"堆栈:"+new Exception().getStackTrace()[1].toString());

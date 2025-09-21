@@ -381,9 +381,10 @@ object EnergyWaitingManager {
                             val energyInfo = " (+${result.energyCount}g)"
                             // 在这里累加到总能量
                             energyCollectCallback?.addToTotalCollected(result.energyCount)
-                            Log.forest("蹲点收取成功🎯[${task.fromTag}|${displayName}]${energyInfo}")
+                            Log.forest("${task.fromTag}收取成功🎯${energyInfo}[|${displayName}]")
                         } else {
-                            Log.forest("蹲点收取成功🎯[${task.fromTag}|${displayName}]，但未获取到能量值: $result")
+                            // 数量为0g，不显示"收取成功"
+                            Log.forest("${task.fromTag}收取完成[|${displayName}]，但未获得能量:")
                         }
                     }
                     else -> {
