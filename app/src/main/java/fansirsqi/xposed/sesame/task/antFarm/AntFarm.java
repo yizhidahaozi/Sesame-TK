@@ -1555,6 +1555,12 @@ public class AntFarm extends ModelTask {
                 return false;
             }
             
+            // 检查小鸡是否正在吃饭，如果在吃饭则直接返回
+            if (AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
+                Log.record(TAG, "投喂小鸡🥣[小鸡正在吃饭中，跳过投喂]");
+                return false;
+            }
+            
             if (foodStock < 180) {
                 Log.record(TAG, "喂鸡饲料不足");
             } else {
@@ -1569,7 +1575,14 @@ public class AntFarm extends ModelTask {
                     }
                     return true;
                 } else {
-                    Log.runtime(TAG, "投喂小鸡失败: " + jo);
+                    // 检查特定的错误码
+                    String resultCode = jo.optString("resultCode", "");
+                    String memo = jo.optString("memo", "");
+                    if ("311".equals(resultCode)) {
+                        Log.record(TAG, "投喂小鸡🥣[" + memo + "]");
+                    } else {
+                        Log.runtime(TAG, "投喂小鸡失败: " + jo);
+                    }
                 }
             }
         } catch (Throwable t) {
