@@ -19,7 +19,6 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -192,23 +191,9 @@ object EnergyWaitingManager {
         }
     }
     
-    // 获取动态检查间隔 - 根据最近任务时间调整
-    private fun getDynamicCheckInterval(): Long {
-        val currentTime = System.currentTimeMillis()
-        val nearestTaskTime = waitingTasks.values.minByOrNull { 
-            calculatePreciseCollectTime(it)
-        }?.let { task ->
-            calculatePreciseCollectTime(task)
-        }
-        
-        return if (nearestTaskTime != null) {
-            val timeToNext = nearestTaskTime - currentTime
-            // 使用用户模式管理器的建议间隔
-            val userId = waitingTasks.values.first().userId
-            UserEnergyPatternManager.getSuggestedInterval(userId, timeToNext)
-        } else {
-            BASE_CHECK_INTERVAL_MS
-        }
+    // 获取清理任务间隔 - 固定间隔清理过期任务
+    private fun getCleanupInterval(): Long {
+        return BASE_CHECK_INTERVAL_MS // 30秒清理一次
     }
     
     // 能量收取回调
@@ -338,37 +323,21 @@ object EnergyWaitingManager {
                 val waitTime = preciseCollectTime - currentTime
                 
                 if (waitTime > 0) {
-                    // 计算检查间隔，临近时更频繁检查
-                    val checkInterval = UserEnergyPatternManager.getSuggestedInterval(task.userId, waitTime)
-                    
                     val protectionInfo = if (task.hasProtection(currentTime)) {
                         "保护结束后"
                     } else {
                         "能量成熟后"
                     }
                     
-                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]等待${waitTime/1000}秒${protectionInfo}收取，检查间隔${checkInterval/1000}秒")
+                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]等待${waitTime/1000}秒${protectionInfo}立即收取")
                     
-                    // 分阶段等待，定期检查任务状态
-                    var remainingWait = waitTime
-                    while (remainingWait > 0 && isActive) {
-                        val nextDelay = min(checkInterval, remainingWait)
-                        delay(nextDelay)
-                        remainingWait -= nextDelay
-                        
-                        // 检查任务是否仍然有效
-                        if (!waitingTasks.containsKey(task.taskId)) {
-                            Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，停止等待")
-                            return@launch
-                        }
-                        
-                        // 重新计算精确时机（保护状态可能变化）
-                        val newPreciseTime = calculatePreciseCollectTime(task)
-                        val adjustment = newPreciseTime - preciseCollectTime
-                        if (kotlin.math.abs(adjustment) > 5000L) { // 调整超过5秒才重新计算
-                            remainingWait = max(0L, newPreciseTime - System.currentTimeMillis())
-                            Log.debug(TAG, "精确蹲点任务[${task.taskId}]调整等待时间：${adjustment/1000}秒")
-                        }
+                    // 直接等待到精确时间，无需间隔检查
+                    delay(waitTime)
+                    
+                    // 执行前再次确认任务是否有效
+                    if (!waitingTasks.containsKey(task.taskId)) {
+                        Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，取消执行")
+                        return@launch
                     }
                 }
                 
@@ -584,7 +553,7 @@ object EnergyWaitingManager {
             while (isActive) {
                 try {
                     // 使用动态间隔进行清理
-                    val cleanupInterval = getDynamicCheckInterval()
+                    val cleanupInterval = getCleanupInterval()
                     delay(cleanupInterval)
                     cleanExpiredTasks()
                     
