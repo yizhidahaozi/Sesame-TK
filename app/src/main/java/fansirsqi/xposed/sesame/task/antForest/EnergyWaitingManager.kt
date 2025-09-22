@@ -18,6 +18,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.random.Random
 
 /**
  * 能量收取回调接口
@@ -51,15 +54,58 @@ interface EnergyCollectCallback {
     )
 
 /**
- * 能量球蹲点管理器
+ * 智能重试策略
+ */
+class SmartRetryStrategy {
+    companion object {
+        private val retryDelays = listOf(10000L, 30000L, 60000L, 180000L) // 10秒，30秒，1分钟，3分钟
+    }
+    
+    /**
+     * 获取重试延迟时间
+     */
+    fun getRetryDelay(retryCount: Int, lastError: String?): Long {
+        val baseDelay = retryDelays.getOrElse(retryCount) { 180000L }
+        
+        // 根据错误类型调整延迟
+        val multiplier = when {
+            lastError?.contains("网络") == true -> 2.0 // 网络错误：延长等待
+            lastError?.contains("频繁") == true -> 3.0 // 频繁请求：大幅延长
+            lastError?.contains("保护") == true -> 1.0 // 保护状态：正常等待
+            else -> 1.0
+        }
+        
+        // 添加随机抖动，避免同时重试
+        val jitter = Random.nextLong(-2000L, 2000L)
+        return (baseDelay * multiplier).toLong() + jitter
+    }
+    
+    /**
+     * 判断是否应该重试
+     */
+    fun shouldRetry(retryCount: Int, error: String?, timeToTarget: Long): Boolean {
+        if (retryCount >= 3) return false // 最多重试3次
+        if (timeToTarget < 10000L) return false // 剩余时间不足10秒不重试
+        
+        // 根据错误类型决定是否重试
+        return when {
+            error?.contains("网络") == true -> true // 网络错误可重试
+            error?.contains("临时") == true -> true // 临时错误可重试
+            error?.contains("保护") == true -> false // 保护状态不重试，等保护结束
+            else -> retryCount < 2 // 其他错误最多重试2次
+        }
+    }
+}
+
+/**
+ * 能量球蹲点管理器（精确时机版）
  * 
- * 负责管理和调度蚂蚁森林中等待成熟的能量球的蹲点任务。
- * 
- * 主要功能：
- * 1. 管理等待成熟的能量球队列
- * 2. 基于协程的定时任务调度
- * 3. 自动重试和错误处理
- * 4. 智能间隔控制
+ * 单一职责：精确管理能量球的蹲点时机
+ * 核心原则：
+ * 1. 无保护时：严格按能量球成熟时间收取
+ * 2. 有保护时：等到保护结束后立即收取
+ * 3. 不提前收取：避免无效请求
+ * 4. 精确时机：确保在正确的时间点执行收取
  * 
  * @author Sesame-TK Team
  */
@@ -84,8 +130,6 @@ object EnergyWaitingManager {
         
         fun withRetry(): WaitingTask = this.copy(retryCount = retryCount + 1)
         
-        fun canRetry(): Boolean = retryCount < maxRetries
-        
         /**
          * 检查是否有保护（保护罩或炸弹卡）
          */
@@ -99,38 +143,19 @@ object EnergyWaitingManager {
         fun getProtectionEndTime(): Long {
             return maxOf(shieldEndTime, bombEndTime)
         }
-        
-        /**
-         * 检查是否应该跳过蹲点
-         * 如果保护时间比能量球成熟时间还要长，就跳过
-         */
-        fun shouldSkipDueToProtection(currentTime: Long = System.currentTimeMillis()): Boolean {
-            val protectionEndTime = getProtectionEndTime()
-            return protectionEndTime > produceTime
-        }
-        
-        /**
-         * 获取实际应该收取的时间
-         * 如果有保护，则在保护结束后收取；否则在能量球成熟时收取
-         */
-        fun getActualCollectTime(currentTime: Long = System.currentTimeMillis()): Long {
-            val protectionEndTime = getProtectionEndTime()
-            return if (protectionEndTime > currentTime) {
-                maxOf(protectionEndTime, produceTime)
-            } else {
-                produceTime
-            }
-        }
     }
     
     // 蹲点任务存储
     private val waitingTasks = ConcurrentHashMap<String, WaitingTask>()
     
+    // 智能重试策略
+    private val smartRetryStrategy = SmartRetryStrategy()
+    
     // 协程作用域
     private val managerScope = CoroutineScope(
         Dispatchers.Default + 
         SupervisorJob() + 
-        CoroutineName("EnergyWaitingManager")
+        CoroutineName("PreciseEnergyWaitingManager")
     )
     
     // 互斥锁，防止并发操作
@@ -139,17 +164,46 @@ object EnergyWaitingManager {
     // 最后执行时间，用于间隔控制
     private val lastExecuteTime = AtomicLong(0)
     
-    // 最小间隔时间（毫秒）
-    private const val MIN_INTERVAL_MS = 30000L // 30秒
+    // 最小间隔时间（毫秒） - 防止频繁请求
+    private const val MIN_INTERVAL_MS = 10000L // 10秒
     
     // 最大等待时间（毫秒） - 6小时
     private const val MAX_WAIT_TIME_MS = 6 * 60 * 60 * 1000L
     
-    // 任务检查间隔（毫秒）
-    private const val CHECK_INTERVAL_MS = 30000L // 30秒检查一次
+    // 基础检查间隔（毫秒）
+    private const val BASE_CHECK_INTERVAL_MS = 30000L // 30秒检查一次
     
-    // 等待收取时间（毫秒） - 等待2秒收取
-    private const val ADVANCE_TIME_MS = 2000L
+    // 精确时机计算 - 延后2秒收取，确保时机正确
+    private fun calculatePreciseCollectTime(task: WaitingTask): Long {
+        val currentTime = System.currentTimeMillis()
+        val protectionEndTime = task.getProtectionEndTime()
+        
+        return when {
+            // 有保护：等到保护结束后延后2秒收取
+            protectionEndTime > currentTime -> protectionEndTime + 2000L // 保护结束后2秒
+            // 无保护：能量成熟后延后2秒收取
+            else -> task.produceTime + 2000L // 成熟后2秒
+        }
+    }
+    
+    // 获取动态检查间隔 - 根据最近任务时间调整
+    private fun getDynamicCheckInterval(): Long {
+        val currentTime = System.currentTimeMillis()
+        val nearestTaskTime = waitingTasks.values.minByOrNull { 
+            calculatePreciseCollectTime(it)
+        }?.let { task ->
+            calculatePreciseCollectTime(task)
+        }
+        
+        return if (nearestTaskTime != null) {
+            val timeToNext = nearestTaskTime - currentTime
+            // 使用用户模式管理器的建议间隔
+            val userId = waitingTasks.values.first().userId
+            UserEnergyPatternManager.getSuggestedInterval(userId, timeToNext)
+        } else {
+            BASE_CHECK_INTERVAL_MS
+        }
+    }
     
     // 能量收取回调
     private var energyCollectCallback: EnergyCollectCallback? = null
@@ -171,7 +225,7 @@ object EnergyWaitingManager {
         userName: String,
         bubbleId: Long,
         produceTime: Long,
-        fromTag: String = "",
+        fromTag: String = "waiting",
         shieldEndTime: Long = 0,
         bombEndTime: Long = 0,
         userHomeObj: JSONObject? = null
@@ -261,44 +315,81 @@ object EnergyWaitingManager {
                     "${actionText}蹲点任务：[${fromTag}|${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟${protectionStatus}"
                 )
                 
-                // 启动蹲点协程
-                startWaitingCoroutine(task)
+                // 启动精确蹲点协程
+                startPreciseWaitingCoroutine(task)
             }
         }
     }
     
     /**
-     * 启动蹲点协程
+     * 启动精确蹲点协程
+     * 核心原则：不提前收取，严格按时机执行
      */
-    private fun startWaitingCoroutine(task: WaitingTask) {
+    private fun startPreciseWaitingCoroutine(task: WaitingTask) {
         managerScope.launch {
             try {
                 val currentTime = System.currentTimeMillis()
-                val waitTime = task.produceTime - currentTime + ADVANCE_TIME_MS
+                val preciseCollectTime = calculatePreciseCollectTime(task)
+                val waitTime = preciseCollectTime - currentTime
                 
                 if (waitTime > 0) {
-                    Log.debug(TAG, "蹲点任务[${task.taskId}]等待${waitTime/1000}秒后执行")
-                    delay(waitTime)
+                    // 计算检查间隔，临近时更频繁检查
+                    val checkInterval = UserEnergyPatternManager.getSuggestedInterval(task.userId, waitTime)
+                    
+                    val protectionInfo = if (task.hasProtection(currentTime)) {
+                        "保护结束后"
+                    } else {
+                        "能量成熟后"
+                    }
+                    
+                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]等待${waitTime/1000}秒${protectionInfo}收取，检查间隔${checkInterval/1000}秒")
+                    
+                    // 分阶段等待，定期检查任务状态
+                    var remainingWait = waitTime
+                    while (remainingWait > 0 && isActive) {
+                        val nextDelay = min(checkInterval, remainingWait)
+                        delay(nextDelay)
+                        remainingWait -= nextDelay
+                        
+                        // 检查任务是否仍然有效
+                        if (!waitingTasks.containsKey(task.taskId)) {
+                            Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，停止等待")
+                            return@launch
+                        }
+                        
+                        // 重新计算精确时机（保护状态可能变化）
+                        val newPreciseTime = calculatePreciseCollectTime(task)
+                        val adjustment = newPreciseTime - preciseCollectTime
+                        if (kotlin.math.abs(adjustment) > 5000L) { // 调整超过5秒才重新计算
+                            remainingWait = max(0L, newPreciseTime - System.currentTimeMillis())
+                            Log.debug(TAG, "精确蹲点任务[${task.taskId}]调整等待时间：${adjustment/1000}秒")
+                        }
+                    }
                 }
                 
                 // 执行收取任务
-                executeWaitingTask(task)
+                executePreciseWaitingTask(task)
                 
             } catch (_: CancellationException) {
-                Log.debug(TAG, "蹲点任务[${task.taskId}]被取消")
+                Log.debug(TAG, "精确蹲点任务[${task.taskId}]被取消")
             } catch (e: Exception) {
-                Log.printStackTrace(TAG, "蹲点任务[${task.taskId}]执行异常", e)
+                Log.printStackTrace(TAG, "精确蹲点任务[${task.taskId}]执行异常", e)
                 
-                // 重试逻辑
-                if (task.canRetry()) {
+                // 精确重试逻辑
+                val currentTime = System.currentTimeMillis()
+                val timeToTarget = calculatePreciseCollectTime(task) - currentTime
+                
+                if (smartRetryStrategy.shouldRetry(task.retryCount, e.message, timeToTarget)) {
                     val retryTask = task.withRetry()
                     waitingTasks[task.taskId] = retryTask
                     
-                    // 延迟重试
-                    delay(60000) // 1分钟后重试
-                    startWaitingCoroutine(retryTask)
+                    // 重试延迟
+                    val retryDelay = smartRetryStrategy.getRetryDelay(task.retryCount, e.message)
+                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]将在${retryDelay/1000}秒后重试")
+                    delay(retryDelay)
+                    startPreciseWaitingCoroutine(retryTask)
                 } else {
-                    Log.error(TAG, "蹲点任务[${task.taskId}]重试次数已达上限，放弃")
+                    Log.error(TAG, "精确蹲点任务[${task.taskId}]不满足重试条件，放弃")
                     waitingTasks.remove(task.taskId)
                 }
             }
@@ -306,102 +397,89 @@ object EnergyWaitingManager {
     }
     
     /**
-     * 执行蹲点收取任务
+     * 执行精确蹲点收取任务
+     * 核心原则：在正确的时机执行，不提前不延后
      */
-    private suspend fun executeWaitingTask(task: WaitingTask) {
+    private suspend fun executePreciseWaitingTask(task: WaitingTask) {
         taskMutex.withLock {
             try {
                 // 检查任务是否仍然有效
                 if (!waitingTasks.containsKey(task.taskId)) {
-                    Log.debug(TAG, "蹲点任务[${task.taskId}]已被移除，跳过执行")
+                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，跳过执行")
                     return@withLock
                 }
                 
-                // 间隔控制
+                // 最小间隔控制：防止频繁请求
                 val currentTime = System.currentTimeMillis()
                 val timeSinceLastExecute = currentTime - lastExecuteTime.get()
+                
                 if (timeSinceLastExecute < MIN_INTERVAL_MS) {
                     val delayTime = MIN_INTERVAL_MS - timeSinceLastExecute
                     Log.debug(TAG, "间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]")
                     delay(delayTime)
                 }
-
+                
                 // 更新最后执行时间
                 lastExecuteTime.set(System.currentTimeMillis())
-
-                // 智能日志显示
-                val currentLogTime = System.currentTimeMillis()
-                val energyTimeRemain = (task.produceTime - currentLogTime) / 1000
+                
+                // 验证执行时机是否正确
+                val actualTime = System.currentTimeMillis()
+                val energyTimeRemain = (task.produceTime - actualTime) / 1000
                 val protectionEndTime = task.getProtectionEndTime()
-
-                if (protectionEndTime > currentLogTime) {
-                    val protectionTimeRemain = (protectionEndTime - currentLogTime) / 1000
-                    val protectionHours = protectionTimeRemain / 3600
-                    val energyHours = energyTimeRemain / 3600
-
-                    Log.record(
-                        TAG,
-                        "执行蹲点任务：[${task.fromTag}|${task.userName}]能量球[${task.bubbleId}] - 保护${protectionHours}h，能量${energyHours}h"
-                    )
+                
+                val timingInfo = if (protectionEndTime > actualTime) {
+                    val protectionRemain = (protectionEndTime - actualTime) / 1000
+                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后2秒收取"
+                } else if (energyTimeRemain > 0) {
+                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后2秒收取"
                 } else {
-                    Log.record(
-                        TAG,
-                        "执行蹲点任务：[${task.fromTag}|${task.userName}]能量球[${task.bubbleId}]"
-                    )
+                    "能量已成熟 - 延后2秒收取"
                 }
-
-                // 调用AntForest的能量收取逻辑
-                executeEnergyCollection(task)
-
-                // 任务执行完成，从队列中移除
-                // 无论是成功收取、跳过（保护罩/炸弹）还是失败，都移除任务避免重复执行
-                waitingTasks.remove(task.taskId)
+                
+                Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
+                
+                // 最终时机检查：如果还有保护或能量未成熟，等待一下
+                if (protectionEndTime > actualTime || task.produceTime > actualTime) {
+                    val additionalWait = max(
+                        protectionEndTime - actualTime,
+                        task.produceTime - actualTime
+                    ) + 2000L // 额外等待2秒确保时机正确
+                    
+                    if (additionalWait > 0 && additionalWait < 60000L) { // 最多额外等待1分钟
+                        Log.debug(TAG, "最终时机检查：额外等待${additionalWait/1000}秒确保时机正确")
+                        delay(additionalWait)
+                    }
+                }
+                
+                // 执行收取
+                val startTime = System.currentTimeMillis()
+                val result = collectEnergyFromWaiting(task)
+                val executeTime = System.currentTimeMillis() - startTime
+                
+                // 更新用户模式数据
+                UserEnergyPatternManager.updateUserPattern(task.userId, result, executeTime)
+                
+                // 处理结果
+                if (result.success) {
+                    Log.record(TAG, "精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
+                    waitingTasks.remove(task.taskId) // 成功后移除任务
+                } else {
+                    Log.debug(TAG, "精确蹲点收取失败：用户[${task.userName}] 原因[${result.message}]")
+                    
+                    // 根据失败原因决定是否重试
+                    if (result.hasShield || result.hasBomb) {
+                        Log.debug(TAG, "用户[${task.userName}]仍有保护，移除蹲点任务")
+                        waitingTasks.remove(task.taskId)
+                    }
+                    // 其他失败情况由上层重试逻辑处理
+                }
                 
             } catch (e: Exception) {
-                Log.printStackTrace(TAG, "执行蹲点收取任务异常", e)
+                Log.printStackTrace(TAG, "执行精确蹲点任务异常", e)
                 throw e
             }
         }
     }
-    
-    /**
-     * 执行能量收取（增强版）
-     */
-private suspend fun executeEnergyCollection(task: WaitingTask) {
-    withContext(Dispatchers.Default) {
-        try {
-            // 通过回调获取收取结果
-            val result = collectEnergyFromWaiting(task)
-            // 根据结果进行不同的处理
-            // 注意：保护罩和炸弹的检查已经在原有的collectEnergy方法中处理，会产生相应的日志
-            when {
-                result.success -> {
-                    val displayName = result.userName ?: task.userName
-                    if (result.energyCount > 0) {
-                        val energyInfo = " (+${result.energyCount}g)"
-                        // 在这里累加到总能量
-                        energyCollectCallback?.addToTotalCollected(result.energyCount)
-                        Log.forest("${task.fromTag}收取成功🎯${energyInfo}[|${displayName}]")
-                    } else {
-                        // 数量为0g，不显示"收取成功"
-                        Log.forest("${task.fromTag}收取完成[|${displayName}]，但未获得能量")
-                    }
-                }
-                else -> {
-                    val displayName = result.userName ?: task.userName
-                    val reason = if (result.message.isNotEmpty()) " - ${result.message}" else ""
-                    Log.debug(TAG, "蹲点任务完成：[${task.fromTag}|${displayName}]${reason}")
-                }
-            }
-            
-            // 注意：任务移除在executeWaitingTask方法中统一处理
-            
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "收取能量异常", e)
-            throw e
-        }
-    }
-}
     
     /**
      * 收取等待的能量（通过回调调用AntForest）
@@ -530,8 +608,13 @@ private suspend fun executeEnergyCollection(task: WaitingTask) {
         managerScope.launch {
             while (isActive) {
                 try {
-                    delay(CHECK_INTERVAL_MS)
+                    // 使用动态间隔进行清理
+                    val cleanupInterval = getDynamicCheckInterval()
+                    delay(cleanupInterval)
                     cleanExpiredTasks()
+                    
+                    // 定期清理用户模式数据
+                    UserEnergyPatternManager.cleanupExpiredPatterns()
                 } catch (_: CancellationException) {
                     break
                 } catch (e: Exception) {
@@ -559,6 +642,6 @@ private suspend fun executeEnergyCollection(task: WaitingTask) {
     init {
         // 启动定期清理任务
         startPeriodicCleanup()
-        Log.record(TAG, "能量球蹲点管理器已初始化")
+        Log.record(TAG, "精确能量球蹲点管理器已初始化")
     }
 }
