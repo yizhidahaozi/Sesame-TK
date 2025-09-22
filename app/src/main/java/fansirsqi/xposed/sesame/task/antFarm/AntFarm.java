@@ -1555,6 +1555,13 @@ public class AntFarm extends ModelTask {
                 return false;
             }
             
+            // 检查小鸡是否正在吃饭，如果在吃饭则直接返回
+            // EATING: 小鸡正在进食状态，此时不能重复投喂，会返回"不要着急，还没吃完呢"错误
+            if (AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
+                Log.record(TAG, "投喂小鸡🥣[小鸡正在吃饭中，跳过投喂]");
+                return false;
+            }
+            
             if (foodStock < 180) {
                 Log.record(TAG, "喂鸡饲料不足");
             } else {
@@ -1569,7 +1576,14 @@ public class AntFarm extends ModelTask {
                     }
                     return true;
                 } else {
-                    Log.runtime(TAG, "投喂小鸡失败: " + jo);
+                    // 检查特定的错误码
+                    String resultCode = jo.optString("resultCode", "");
+                    String memo = jo.optString("memo", "");
+                    if ("311".equals(resultCode)) {
+                        Log.record(TAG, "投喂小鸡🥣[" + memo + "]");
+                    } else {
+                        Log.runtime(TAG, "投喂小鸡失败: " + jo);
+                    }
                 }
             }
         } catch (Throwable t) {
@@ -2697,16 +2711,33 @@ public class AntFarm extends ModelTask {
         ACCELERATING, INJURED, NONE
     }
 
+    /**
+     * 小鸡喂食状态枚举
+     */
     public enum AnimalFeedStatus {
-        HUNGRY, EATING, SLEEPY, NONE
+        HUNGRY,  // 饥饿状态：小鸡需要投喂，可以正常喂食
+        EATING,  // 进食状态：小鸡正在吃饭，此时不能重复投喂，会返回"不要着急，还没吃完呢"
+        SLEEPY,  // 睡觉状态：小鸡正在睡觉，不能投喂，需要等待醒来
+        NONE     // 无状态：未知或其他状态
     }
 
-    public enum AnimalInteractStatus { //小鸡关互动状态
-        HOME, GOTOSTEAL, STEALING
+    /**
+     * 小鸡互动状态枚举
+     */
+    public enum AnimalInteractStatus {
+        HOME,       // 在家：小鸡在自己的庄园里，正常状态
+        GOTOSTEAL,  // 去偷吃：小鸡离开庄园，准备去别的庄园偷吃
+        STEALING    // 偷吃中：小鸡正在别人的庄园里偷吃饲料
     }
 
+    /**
+     * 小鸡子类型枚举
+     */
     public enum SubAnimalType {
-        NORMAL, GUEST, PIRATE, WORK
+        NORMAL,  // 普通：正常的小鸡状态
+        GUEST,   // 客人：小鸡去好友家做客
+        PIRATE,  // 海盗：小鸡外出探险
+        WORK     // 工作：小鸡被雇佣去工作
     }
 
     public enum ToolType {
