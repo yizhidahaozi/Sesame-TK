@@ -38,8 +38,8 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     companion object {
         private const val TAG = "CoroutineTaskRunner"
         
-        // 默认任务超时设置（毫秒）- 当配置为-1时使用
-        private const val DEFAULT_TASK_TIMEOUT = 180_000L // 默认3分钟
+        // 默认任务超时设置（毫秒）- 当配置为-1时，其他任务使用此超时
+        private const val DEFAULT_TASK_TIMEOUT = 600_000L // 默认10分钟
         
         /**
          * 获取动态任务超时时间
@@ -70,6 +70,20 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         
         // 恢复任务的最大运行时间（毫秒）- 超过此时间后任务会被自动标记为完成
         private const val MAX_RECOVERY_RUNTIME = 10 * 60 * 1000L // 10分钟
+        
+        /**
+         * 判断任务是否为自定义任务，可以使用无限等待
+         * 当taskWaitTime配置为-1时：
+         * - 自定义任务（如蚂蚁森林）：使用无限等待
+         * - 其他任务：使用10分钟默认超时
+         */
+        private fun shouldUseInfiniteTimeout(task: ModelTask): Boolean {
+            return when (task.getName()) {
+                "森林" -> true // 蚂蚁森林任务为自定义任务，可使用无限等待
+                // 可以根据需要添加其他自定义任务
+                else -> false // 其他任务使用10分钟默认超时
+            }
+        }
     }
 
     private val taskList: List<ModelTask> = allModels.filterIsInstance<ModelTask>()
@@ -163,21 +177,30 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         val taskStartTime = System.currentTimeMillis()
         val taskTimeout = getTaskTimeout()
         
-        val timeoutText = if (taskTimeout == -1L) {
+        // 当配置为-1时：自定义任务使用无限等待，其他任务使用10分钟默认超时
+        val effectiveTimeout = if (taskTimeout == -1L && shouldUseInfiniteTimeout(task)) {
+            -1L // 自定义任务（如蚂蚁森林）使用无限等待
+        } else if (taskTimeout == -1L) {
+            DEFAULT_TASK_TIMEOUT // 其他任务使用10分钟默认超时
+        } else {
+            taskTimeout // 使用配置的具体超时时间
+        }
+        
+        val timeoutText = if (effectiveTimeout == -1L) {
             "无限等待"
         } else {
-            "${taskTimeout/1000}秒"
+            "${effectiveTimeout/1000}秒"
         }
         Log.record(TAG, "🚀 开始执行任务[$taskId]，超时设置: $timeoutText")
         try {
             // 使用智能超时机制
-            executeTaskWithGracefulTimeout(task, round, taskStartTime, taskId, taskTimeout)
+            executeTaskWithGracefulTimeout(task, round, taskStartTime, taskId, effectiveTimeout)
             val executionTime = System.currentTimeMillis() - taskStartTime
             Log.record(TAG, "✅ 任务[$taskId]执行完成，耗时: ${executionTime}ms")
         } catch (e: TimeoutCancellationException) {
             val executionTime = System.currentTimeMillis() - taskStartTime
             failureCount.incrementAndGet()
-            val timeoutMsg = if (taskTimeout == -1L) "无限等待模式异常" else "${executionTime}ms > ${taskTimeout}ms"
+            val timeoutMsg = if (effectiveTimeout == -1L) "无限等待模式异常" else "${executionTime}ms > ${effectiveTimeout}ms"
             Log.error(TAG, "⏰ 任务[$taskId]执行超时($timeoutMsg)，准备自动恢复")
             
             // 记录任务状态信息

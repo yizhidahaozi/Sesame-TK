@@ -32,7 +32,7 @@ public class BaseModel extends Model {
 
     @Getter
     public static final IntegerModelField taskWaitTime =
-            new IntegerModelField("taskWaitTime", "任务等待时间(-1:无限)", 4, -1, 12 * 60);
+            new IntegerModelField("taskWaitTime", "任务等待时间(-1:森林蹲点)", -1, -1, 12 * 60);
 
     /**
      * 定时执行的时间点列表
