@@ -21,6 +21,8 @@ data class UserEnergyPattern(
      */
     fun getSuggestedCheckInterval(timeToTarget: Long): Long {
         return when {
+            timeToTarget <= 1000L -> 200L        // 1秒内：0.2秒检查
+            timeToTarget <= 3000L -> 500L        // 3秒内：0.5秒检查
             timeToTarget <= 10000L -> 1000L      // 10秒内：1秒检查
             timeToTarget <= 30000L -> 2000L      // 30秒内：2秒检查
             timeToTarget <= 60000L -> 5000L      // 1分钟内：5秒检查

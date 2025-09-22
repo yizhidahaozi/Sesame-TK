@@ -4417,6 +4417,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val hasBomb = bombEndTime > serverTime
             val hasProtection = hasShield || hasBomb
             
+            Log.debug(TAG, "蹲点收取保护检查详情：")
+            Log.debug(TAG, "  服务器时间: $serverTime (${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(serverTime))})")
+            Log.debug(TAG, "  保护罩结束时间: $shieldEndTime (${if (shieldEndTime > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(shieldEndTime)) else "无保护罩"})")
+            Log.debug(TAG, "  炸弹卡结束时间: $bombEndTime (${if (bombEndTime > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(bombEndTime)) else "无炸弹卡"})")
+            Log.debug(TAG, "  是否有保护罩: $hasShield")
+            Log.debug(TAG, "  是否有炸弹卡: $hasBomb")
+            Log.debug(TAG, "  总体保护状态: $hasProtection")
+            
             if (hasProtection) {
                 // 调用原有的日志输出方法
                 checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
