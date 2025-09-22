@@ -199,6 +199,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     private var cycleinterval: IntegerModelField? = null
     private var energyRainChance: BooleanModelField? = null
+    private var waitingCollectDelay: IntegerModelField? = null // 蹲点收取延迟时间
 
     /**
      * 能量炸弹卡
@@ -240,6 +241,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     fun getDsontCollectMap(): MutableSet<String?> {
         return dsontCollectMap
     }
+    
     var emojiList: ArrayList<String> = ArrayList(
         listOf(
             "🍅", "🍓", "🥓", "🍂", "🍚", "🌰", "🟢", "🌴",
@@ -736,11 +738,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 10000
             ).also { cycleinterval = it })
         modelFields.addField(
+            IntegerModelField(
+                "waitingCollectDelay",
+                "蹲点收取延迟(毫秒)",
+                1000,
+                0,
+                30000
+            ).also { waitingCollectDelay = it })
+        modelFields.addField(
             BooleanModelField(
                 "showBagList",
                 "显示背包内容",
                 true
             ).also { showBagList = it })
+
         return modelFields
     }
 
@@ -4510,6 +4521,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     
     override fun addToTotalCollected(energyCount: Int) {
         totalCollected += energyCount
+    }
+    
+    override fun getWaitingCollectDelay(): Long {
+        return waitingCollectDelay?.value?.toLong() ?: 1000L
     }
     override suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult {
         return try {

@@ -38,6 +38,12 @@ interface EnergyCollectCallback {
      * @param energyCount 要添加的能量数量
      */
     fun addToTotalCollected(energyCount: Int)
+    
+    /**
+     * 获取蹲点收取延迟时间配置
+     * @return 延迟时间（毫秒）
+     */
+    fun getWaitingCollectDelay(): Long
 }
 
 /**
@@ -173,16 +179,17 @@ object EnergyWaitingManager {
     // 基础检查间隔（毫秒）
     private const val BASE_CHECK_INTERVAL_MS = 30000L // 30秒检查一次
     
-    // 精确时机计算 - 延后2秒收取，确保时机正确
+    // 精确时机计算 - 使用自定义延迟时间收取，确保时机正确
     private fun calculatePreciseCollectTime(task: WaitingTask): Long {
         val currentTime = System.currentTimeMillis()
         val protectionEndTime = task.getProtectionEndTime()
+        val customDelay = energyCollectCallback?.getWaitingCollectDelay() ?: 1000L // 获取自定义延迟配置
         
         return when {
-            // 有保护：等到保护结束后延后2秒收取
-            protectionEndTime > currentTime -> protectionEndTime + 2000L // 保护结束后2秒
-            // 无保护：能量成熟后延后2秒收取
-            else -> task.produceTime + 2000L // 成熟后2秒
+            // 有保护：等到保护结束后延迟收取
+            protectionEndTime > currentTime -> protectionEndTime + customDelay
+            // 无保护：能量成熟后延迟收取
+            else -> task.produceTime + customDelay
         }
     }
     
@@ -426,13 +433,15 @@ object EnergyWaitingManager {
                 val energyTimeRemain = (task.produceTime - actualTime) / 1000
                 val protectionEndTime = task.getProtectionEndTime()
                 
+                val customDelay = energyCollectCallback?.getWaitingCollectDelay() ?: 1000L
+                val delaySeconds = customDelay / 1000
                 val timingInfo = if (protectionEndTime > actualTime) {
                     val protectionRemain = (protectionEndTime - actualTime) / 1000
-                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后2秒收取"
+                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后${delaySeconds}秒收取"
                 } else if (energyTimeRemain > 0) {
-                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后2秒收取"
+                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后${delaySeconds}秒收取"
                 } else {
-                    "能量已成熟 - 延后2秒收取"
+                    "能量已成熟 - 延后${delaySeconds}秒收取"
                 }
                 
                 Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
@@ -442,7 +451,7 @@ object EnergyWaitingManager {
                     val additionalWait = max(
                         protectionEndTime - actualTime,
                         task.produceTime - actualTime
-                    ) + 2000L // 额外等待2秒确保时机正确
+                    ) + customDelay // 额外等待自定义延迟时间确保时机正确
                     
                     if (additionalWait > 0 && additionalWait < 60000L) { // 最多额外等待1分钟
                         Log.debug(TAG, "最终时机检查：额外等待${additionalWait/1000}秒确保时机正确")
