@@ -739,18 +739,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     Status.unload();
                     Notify.stop();
                     RpcIntervalLimit.INSTANCE.clearIntervalLimit();
-                    // 在强制销毁前，额外保存一次配置（双重保险）
-                    try {
-                        String currentUserId = UserMap.getCurrentUid();
-                        if (currentUserId != null && Config.isLoaded()) {
-                            boolean saved = Config.save(currentUserId, true); // 强制保存
-                            Log.runtime(TAG, saved ? "强制销毁前配置保存成功" : "强制销毁前配置保存失败");
-                        }
-                    } catch (Exception e) {
-                        Log.runtime(TAG, "强制销毁前保存配置时发生异常");
-                        Log.printStackTrace(TAG, e);
-                    }
-                    
                     Config.unload();
                     UserMap.unload();
                 }
