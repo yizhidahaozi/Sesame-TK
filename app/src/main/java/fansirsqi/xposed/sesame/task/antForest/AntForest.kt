@@ -1724,7 +1724,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             userName = userName ?: "未知用户",
                             bubbleId = bubbleId,
                             produceTime = produceTime,
-                            fromTag = "蹲点"
+                            fromTag = ""
                         )
                         Log.debug(
                             TAG,
