@@ -1,8 +1,8 @@
 package fansirsqi.xposed.sesame.task.antForest
 
+import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
-import fansirsqi.xposed.sesame.util.maps.UserMap
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlinx.coroutines.CancellationException
@@ -10,13 +10,11 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -407,6 +405,7 @@ object EnergyWaitingManager {
      * 执行精确蹲点收取任务
      * 核心原则：在正确的时机执行，不提前不延后
      */
+    @SuppressLint("SimpleDateFormat")
     private suspend fun executePreciseWaitingTask(task: WaitingTask) {
         taskMutex.withLock {
             try {
@@ -457,9 +456,11 @@ object EnergyWaitingManager {
                 val isProtectionEnd = protectionEndTime <= actualTime
                 
                 Log.debug(TAG, "时机检查详情：")
-                Log.debug(TAG, "  当前时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
+                Log.debug(TAG, "  系统当前时间: ${System.currentTimeMillis()} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())})")
+                Log.debug(TAG, "  实际执行时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
                 Log.debug(TAG, "  能量成熟时间: ${task.produceTime} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(task.produceTime))})")
                 Log.debug(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
+                Log.debug(TAG, "  时间差异: 系统时间与执行时间差${System.currentTimeMillis() - actualTime}ms")
                 Log.debug(TAG, "  能量是否成熟: $isEnergyMature")
                 Log.debug(TAG, "  保护是否结束: $isProtectionEnd")
                 
@@ -544,37 +545,7 @@ object EnergyWaitingManager {
             )
         }
     }
-    
-    /**
-     * 移除蹲点任务
-     */
-    fun removeWaitingTask(userId: String, bubbleId: Long) {
-        managerScope.launch {
-            taskMutex.withLock {
-                val taskId = "${userId}_${bubbleId}"
-                waitingTasks.remove(taskId)
-                Log.debug(TAG, "移除蹲点任务：[$taskId]")
-            }
-        }
-    }
-    
-    /**
-     * 移除用户的所有蹲点任务
-     */
-    fun removeUserWaitingTasks(userId: String) {
-        managerScope.launch {
-            taskMutex.withLock {
-                val toRemove = waitingTasks.keys.filter { it.startsWith("${userId}_") }
-                toRemove.forEach { taskId ->
-                    waitingTasks.remove(taskId)
-                }
-                if (toRemove.isNotEmpty()) {
-                    Log.debug(TAG, "移除用户[${UserMap.getMaskName(userId)}]的${toRemove.size}个蹲点任务")
-                }
-            }
-        }
-    }
-    
+
     /**
      * 清理过期的蹲点任务
      */
@@ -596,31 +567,7 @@ object EnergyWaitingManager {
             }
         }
     }
-    
-    /**
-     * 获取当前蹲点任务数量
-     */
-    fun getWaitingTaskCount(): Int = waitingTasks.size
-    
-    /**
-     * 获取蹲点任务状态信息
-     */
-    fun getStatusInfo(): String {
-        val currentTime = System.currentTimeMillis()
-        val activeTasks = waitingTasks.values
-        
-        if (activeTasks.isEmpty()) {
-            return "当前没有蹲点任务"
-        }
-        
-        val nextTask = activeTasks.minByOrNull { it.produceTime }
-        val nextTaskTime = nextTask?.let { 
-            TimeUtil.getCommonDate(it.produceTime) 
-        } ?: "未知"
-        
-        return "蹲点任务：${activeTasks.size}个，最近执行：$nextTaskTime"
-    }
-    
+
     /**
      * 设置能量收取回调
      */
@@ -628,16 +575,7 @@ object EnergyWaitingManager {
         energyCollectCallback = callback
         Log.record(TAG, "已设置能量收取回调")
     }
-    
-    /**
-     * 停止所有蹲点任务
-     */
-    fun stopAll() {
-        managerScope.cancel()
-        waitingTasks.clear()
-        Log.record(TAG, "已停止所有蹲点任务")
-    }
-    
+
     /**
      * 启动定期清理任务
      */
