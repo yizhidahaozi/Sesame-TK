@@ -4514,8 +4514,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     override suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult {
         return try {
             withContext(Dispatchers.Default) {
-                Log.record(TAG, "蹲点收取：开始收取用户[${UserMap.getMaskName(task.userId)}]的能量")
-                
                 // 查询好友主页
                 val friendHomeObj = queryFriendHome(task.userId, task.fromTag)
                 if (friendHomeObj != null) {
