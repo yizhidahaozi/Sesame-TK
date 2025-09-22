@@ -3,6 +3,8 @@ package fansirsqi.xposed.sesame.task.antForest
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import java.text.SimpleDateFormat
+import java.util.Date
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -179,17 +181,16 @@ object EnergyWaitingManager {
     // 基础检查间隔（毫秒）
     private const val BASE_CHECK_INTERVAL_MS = 30000L // 30秒检查一次
     
-    // 精确时机计算 - 使用自定义延迟时间收取，确保时机正确
+    // 精确时机计算 - 能量成熟或保护结束后立即收取
     private fun calculatePreciseCollectTime(task: WaitingTask): Long {
         val currentTime = System.currentTimeMillis()
         val protectionEndTime = task.getProtectionEndTime()
-        val customDelay = energyCollectCallback?.getWaitingCollectDelay() ?: 1000L // 获取自定义延迟配置
         
         return when {
-            // 有保护：等到保护结束后延迟收取
-            protectionEndTime > currentTime -> protectionEndTime + customDelay
-            // 无保护：能量成熟后延迟收取
-            else -> task.produceTime + customDelay
+            // 有保护：等到保护结束后立即收取
+            protectionEndTime > currentTime -> protectionEndTime
+            // 无保护：能量成熟后立即收取
+            else -> task.produceTime
         }
     }
     
@@ -433,30 +434,52 @@ object EnergyWaitingManager {
                 val energyTimeRemain = (task.produceTime - actualTime) / 1000
                 val protectionEndTime = task.getProtectionEndTime()
                 
-                val customDelay = energyCollectCallback?.getWaitingCollectDelay() ?: 1000L
-                val delaySeconds = customDelay / 1000
+                // 无延迟，立即收取
                 val timingInfo = if (protectionEndTime > actualTime) {
                     val protectionRemain = (protectionEndTime - actualTime) / 1000
-                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后${delaySeconds}秒收取"
+                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后立即收取"
                 } else if (energyTimeRemain > 0) {
-                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后${delaySeconds}秒收取"
+                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后立即收取"
                 } else {
-                    "能量已成熟 - 延后${delaySeconds}秒收取"
+                    "能量已成熟 - 立即收取"
                 }
                 
                 Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
                 
+                // 🚨 严格时机检查：能量未成熟时直接跳过
+                if (energyTimeRemain > 60) { // 如果还有超过1分钟才成熟，直接跳过
+                    Log.debug(TAG, "⚠️ 能量距离成熟还有${energyTimeRemain}秒，时机过早，跳过本次收取")
+                    return@withLock
+                }
+                
                 // 最终时机检查：如果还有保护或能量未成熟，等待一下
-                if (protectionEndTime > actualTime || task.produceTime > actualTime) {
+                val isEnergyMature = task.produceTime <= actualTime
+                val isProtectionEnd = protectionEndTime <= actualTime
+                
+                Log.debug(TAG, "时机检查详情：")
+                Log.debug(TAG, "  当前时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
+                Log.debug(TAG, "  能量成熟时间: ${task.produceTime} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(task.produceTime))})")
+                Log.debug(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
+                Log.debug(TAG, "  能量是否成熟: $isEnergyMature")
+                Log.debug(TAG, "  保护是否结束: $isProtectionEnd")
+                
+                if (!isEnergyMature || !isProtectionEnd) {
                     val additionalWait = max(
                         protectionEndTime - actualTime,
                         task.produceTime - actualTime
-                    ) + customDelay // 额外等待自定义延迟时间确保时机正确
+                    ) // 等待到正确时机，无额外延迟
                     
-                    if (additionalWait > 0 && additionalWait < 60000L) { // 最多额外等待1分钟
-                        Log.debug(TAG, "最终时机检查：额外等待${additionalWait/1000}秒确保时机正确")
+                    if (additionalWait > 0 && additionalWait < 1800000L) { // 最多额外等待30分钟
+                        Log.debug(TAG, "最终时机检查：等待${additionalWait/1000}秒到正确时机")
+                        Log.debug(TAG, "  等待原因: ${if (!isEnergyMature) "能量未成熟" else ""}${if (!isProtectionEnd) "保护未结束" else ""}")
                         delay(additionalWait)
+                    } else if (additionalWait > 1800000L) {
+                        Log.debug(TAG, "⚠️ 等待时间过长(${additionalWait/60000}分钟)，可能存在时间计算错误，跳过收取")
+                        return@withLock
                     }
+                } else {
+                    // 能量已成熟且无保护，立即收取
+                    Log.debug(TAG, "时机正确：能量已成熟且无保护，立即执行收取")
                 }
                 
                 // 执行收取
@@ -469,8 +492,14 @@ object EnergyWaitingManager {
                 
                 // 处理结果
                 if (result.success) {
-                    Log.forest(TAG, "精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
-                    waitingTasks.remove(task.taskId) // 成功后移除任务
+                    if (result.energyCount > 0) {
+                        Log.forest("精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
+                        waitingTasks.remove(task.taskId) // 成功后移除任务
+                    } else {
+                        Log.debug(TAG, "⚠️ 精确蹲点收取异常：用户[${task.userName}] 返回success=true但energyCount=0，可能时机不对或接口异常")
+                        Log.debug(TAG, "收取结果详情: ${result.message}")
+                        // 不移除任务，等待下次重试
+                    }
                 } else {
                     Log.debug(TAG, "精确蹲点收取失败：用户[${task.userName}] 原因[${result.message}]")
                     
