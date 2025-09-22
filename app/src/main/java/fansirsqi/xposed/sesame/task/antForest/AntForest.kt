@@ -6,6 +6,7 @@ import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.RuntimeInfo
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.entity.AlipayUser
+import fansirsqi.xposed.sesame.task.antForest.AntForestRpcCall
 import fansirsqi.xposed.sesame.entity.CollectEnergyEntity
 import fansirsqi.xposed.sesame.entity.KVMap
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listEcoLifeOptions
@@ -199,7 +200,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     private var cycleinterval: IntegerModelField? = null
     private var energyRainChance: BooleanModelField? = null
-    private var waitingCollectDelay: IntegerModelField? = null // 蹲点收取延迟时间
 
     /**
      * 能量炸弹卡
@@ -737,14 +737,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 0,
                 10000
             ).also { cycleinterval = it })
-        modelFields.addField(
-            IntegerModelField(
-                "waitingCollectDelay",
-                "蹲点收取延迟(毫秒)",
-                1000,
-                0,
-                30000
-            ).also { waitingCollectDelay = it })
         modelFields.addField(
             BooleanModelField(
                 "showBagList",
@@ -1532,10 +1524,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             friendHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询好友主页失败:", friendHomeObj)) {
-                Log.error(
-                    TAG,
-                    "查询好友主页失败: " + friendHomeObj.optString("resultDesc", "未知错误")
-                )
                 return null
             }
             val end = System.currentTimeMillis()
@@ -1627,13 +1615,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return userHomeObj
             }
             // 4. 获取所有可收集的能量球
-            val availableBubbles: MutableList<Long> = ArrayList()         
-	            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
+            val availableBubbles: MutableList<Long> = ArrayList()
+            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
             if (availableBubbles.isEmpty()) {
                 emptyForestCache.put(userId, System.currentTimeMillis())
                 return userHomeObj
             }
-         
             // 检查是否有能量罩保护（影响当前收取）
             var hasProtection = false
             if (!isSelf) {
@@ -1720,11 +1707,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     availableBubbles.add(bubbleId)
                 }
                 CollectStatus.WAITING -> {
-                // 等待成熟的能量球，检查数量
-                	if (bubbleCount <= 0) {
-                    	Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
-                    	continue
-                	}
+                    if (bubbleCount <= 0) {
+                        Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
+                        continue
+                    }
                     // 等待成熟的能量球，添加到蹲点队列
                     val produceTime = bubble.optLong("produceTime", 0L)
                     if (produceTime > 0 && produceTime > serverTime) {
@@ -1888,13 +1874,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             tc.countDebug("处理" + rankingName + "靠前的好友")
             // 分批并行处理后续的（协程版本）
-            if (totalDatas.length() <= 15) {
+            if (totalDatas.length() <= 20) {
                 Log.record(TAG, rankingName + "没有更多的好友需要处理，跳过")
                 return@withContext
             }
             val idList: MutableList<String?> = ArrayList()
-            val batchSize = 15
-            val remainingSize = totalDatas.length() - 15
+            val batchSize = 20
+            val remainingSize = totalDatas.length() - 20
             val batches = (remainingSize + batchSize - 1) / batchSize
             Log.record(
                 TAG,
@@ -2022,7 +2008,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     continue
                 }
                 // 查询好友主页并收取能量
-                val friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK_FRIEND")
+                val friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK")
                 if (friendHomeObj != null) {
                     foundCount++
                     var friendName = UserMap.getMaskName(friendId)
@@ -4443,24 +4429,55 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             }
             
-            // 调用原有的collectEnergy方法
-            val result = collectEnergy(userId, userHomeObj, fromTag)
-            if (result != null) {
-                // 尝试获取收取的能量数量
-                val energyCount = extractCollectedEnergyCount(result)
-                // 注意：能量累加现在在EnergyWaitingManager中通过回调处理
-                return CollectResult(
-                    success = true,
-                    userName = userName,
-                    energyCount = energyCount,
-                    totalCollected = totalCollected,  // 传递累加后的总能量
-                    message = "收取成功"
-                )
-            } else {
+            // 先查询用户能量状态
+            val queryResult = collectEnergy(userId, userHomeObj, fromTag)
+            if (queryResult == null) {
                 return CollectResult(
                     success = false,
                     userName = userName,
-                    message = "能量收取返回null"
+                    message = "无法查询用户能量信息"
+                )
+            }
+            
+            Log.debug(TAG, "蹲点收取查询结果: $queryResult")
+            
+            // 提取可收取的能量球ID
+            val availableBubbles: MutableList<Long> = ArrayList()
+            val queryServerTime = queryResult.optLong("now", System.currentTimeMillis())
+            extractBubbleInfo(queryResult, queryServerTime, availableBubbles, userId)
+            
+            if (availableBubbles.isEmpty()) {
+                return CollectResult(
+                    success = false,
+                    userName = userName,
+                    message = "用户无可收取的能量球"
+                )
+            }
+            
+            Log.debug(TAG, "蹲点收取找到${availableBubbles.size}个可收取能量球: $availableBubbles")
+            
+            // 记录收取前的总能量
+            val beforeTotal = totalCollected
+            
+            // 重用现有的collectVivaEnergy方法
+            collectVivaEnergy(userId, queryResult, availableBubbles, fromTag)
+            
+            // 计算收取的能量数量
+            val collectedEnergy = totalCollected - beforeTotal
+            
+            return if (collectedEnergy > 0) {
+                CollectResult(
+                    success = true,
+                    userName = userName,
+                    energyCount = collectedEnergy,
+                    totalCollected = totalCollected,
+                    message = "收取成功，共收取${availableBubbles.size}个能量球，${collectedEnergy}g能量"
+                )
+            } else {
+                CollectResult(
+                    success = false,
+                    userName = userName,
+                    message = "未收取到任何能量"
                 )
             }
         } catch (e: Exception) {
@@ -4473,51 +4490,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
     }
     
-    /**
-     * 从收取结果中提取收取的能量数量
-     * 按照原有collectEnergy方法的逻辑：只有collected > 0才算成功收取
-     */
-    private fun extractCollectedEnergyCount(result: JSONObject): Int {
-        return try {
-            // 按照原有collectEnergy方法的逻辑提取能量
-            if (result.has("bubbles")) {
-                val jaBubbles = result.getJSONArray("bubbles")
-                var collected = 0
-                
-                // 遍历所有bubble，累加collectedEnergy
-                for (i in 0..<jaBubbles.length()) {
-                    val bubble = jaBubbles.getJSONObject(i)
-                    collected += bubble.getInt("collectedEnergy")
-                }
-                
-                // 只有collected > 0才算收取成功，返回能量数量
-                if (collected > 0) {
-                    Log.debug(TAG, "从bubbles中提取到能量数量: ${collected}g")
-                    return collected
-                } else {
-                    Log.debug(TAG, "收取能量为0，视为未成功收取")
-                    return 0
-                }
-            } else {
-                // 尝试其他可能的字段名作为备选
-                val energyCount = when {
-                    result.has("collectEnergy") -> result.getInt("collectEnergy")
-                    result.has("totalCollectEnergy") -> result.getInt("totalCollectEnergy")
-                    result.has("energy") -> result.getInt("energy")
-                    else -> {
-                        Log.debug(TAG, "未找到能量字段，返回0")
-                        0
-                    }
-                }
-                
-                // 同样只有大于0才返回
-                return if (energyCount > 0) energyCount else 0
-            }
-        } catch (e: Exception) {
-            Log.debug(TAG, "提取能量数量失败: ${e.message}")
-            0
-        }
-    }
 
     /**
      * 实现EnergyCollectCallback接口
@@ -4529,7 +4501,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
     
     override fun getWaitingCollectDelay(): Long {
-        return waitingCollectDelay?.value?.toLong() ?: 1000L
+        return 0L // 立即收取，无延迟
     }
     override suspend fun collectUserEnergyForWaiting(task: EnergyWaitingManager.WaitingTask): CollectResult {
         return try {
