@@ -2,8 +2,6 @@ package fansirsqi.xposed.sesame.task.antForest
 
 import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * 用户能量收取模式数据类
@@ -16,27 +14,6 @@ data class UserEnergyPattern(
     val lastCollectTime: Long = 0L,       // 上次收取时间
     val isActiveUser: Boolean = true      // 是否活跃用户
 ) {
-    /**
-     * 获取建议的检查间隔（不影响收取时机，只影响检查频率）
-     */
-    fun getSuggestedCheckInterval(timeToTarget: Long): Long {
-        return when {
-            timeToTarget <= 1000L -> 200L        // 1秒内：0.2秒检查
-            timeToTarget <= 3000L -> 500L        // 3秒内：0.5秒检查
-            timeToTarget <= 10000L -> 1000L      // 10秒内：1秒检查
-            timeToTarget <= 30000L -> 2000L      // 30秒内：2秒检查
-            timeToTarget <= 60000L -> 5000L      // 1分钟内：5秒检查
-            timeToTarget <= 300000L -> 15000L    // 5分钟内：15秒检查
-            else -> 60000L                       // 其他：1分钟检查
-        }
-    }
-    
-    /**
-     * 判断是否需要更频繁的检查（基于用户活跃度）
-     */
-    fun needsFrequentCheck(): Boolean {
-        return isActiveUser && collectSuccessRate > 0.8
-    }
 }
 
 /**
@@ -93,20 +70,6 @@ object UserEnergyPatternManager {
         Log.debug(TAG, "更新用户[${userId}]模式：成功率[${String.format("%.2f", newSuccessRate)}] 响应时间[${newAvgResponseTime}ms] 活跃[${isActive}]")
     }
     
-    /**
-     * 获取建议的动态间隔（用于调整检查频率）
-     */
-    fun getSuggestedInterval(userId: String, timeToTarget: Long): Long {
-        val pattern = getUserPattern(userId)
-        val baseInterval = pattern.getSuggestedCheckInterval(timeToTarget)
-        
-        // 活跃用户可以更频繁检查
-        return if (pattern.needsFrequentCheck()) {
-            max(1000L, (baseInterval * 0.8).toLong())
-        } else {
-            baseInterval
-        }
-    }
     
     /**
      * 清理过期的用户模式数据
