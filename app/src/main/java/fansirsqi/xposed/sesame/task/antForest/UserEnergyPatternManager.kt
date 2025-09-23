@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.antForest
 
+import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
@@ -36,6 +37,7 @@ object UserEnergyPatternManager {
     /**
      * 更新用户模式（基于收取结果）
      */
+    @SuppressLint("DefaultLocale")
     fun updateUserPattern(userId: String, result: CollectResult, responseTime: Long) {
         val currentPattern = getUserPattern(userId)
         val currentTime = System.currentTimeMillis()
@@ -90,15 +92,5 @@ object UserEnergyPatternManager {
             Log.debug(TAG, "清理过期用户模式数据：${expiredUsers.size}个用户")
         }
     }
-    
-    /**
-     * 获取所有用户统计信息
-     */
-    fun getStatistics(): String {
-        val totalUsers = userPatterns.size
-        val activeUsers = userPatterns.values.count { it.isActiveUser }
-        val avgSuccessRate = userPatterns.values.map { it.collectSuccessRate }.average()
-        
-        return "用户统计：总数[$totalUsers] 活跃[$activeUsers] 平均成功率[${String.format("%.2f", avgSuccessRate)}]"
-    }
+
 }
