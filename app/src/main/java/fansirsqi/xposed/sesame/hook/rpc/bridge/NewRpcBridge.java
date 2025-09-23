@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,8 +42,8 @@ public class NewRpcBridge implements RpcBridge {
     ));
 
     // 需要屏蔽错误日志的RPC方法列表
-    ArrayList<String> silentErrorMethods = new ArrayList<>(Arrays.asList(
-            "com.alipay.adexchange.ad.facade.xlightPlugin"
+    ArrayList<String> silentErrorMethods = new ArrayList<>(List.of(
+            "com.alipay.adexchange.ad.facade.xlightPlugin"  //木兰集市 第一次
     ));
 
     /**
@@ -66,26 +67,6 @@ public class NewRpcBridge implements RpcBridge {
         String methodName = rpcEntity != null ? rpcEntity.getRequestMethod() : "unknown";
         if (shouldShowErrorLog(methodName)) {
             Log.error(TAG, "RPC返回null | 方法: " + methodName + " | 原因: " + reason + " | 重试: " + count);
-        }
-    }
-
-    /**
-     * 尝试重新初始化RPC桥接（仅重新初始化技术组件，不影响配置）
-     *
-     * @return 重新初始化是否成功
-     */
-    private boolean tryReInitialize() {
-        try {
-            Log.debug(TAG, "检测到RPC方法为null，尝试重新初始化RPC技术组件...");
-            // 注意：此方法只重新初始化技术组件，不会影响配置列表
-            // errorMark, errorStringMark, silentErrorMethods 等配置保持不变
-            load();
-            Log.debug(TAG, "RPC技术组件重新初始化成功，配置保持不变");
-            return true;
-        } catch (Exception e) {
-            Log.debug(TAG, "RPC技术组件重新初始化失败:");
-            Log.printStackTrace(e);
-            return false;
         }
     }
 
