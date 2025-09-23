@@ -346,12 +346,26 @@ public class AntSports extends ModelTask {
                             String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
                             try {
                                 JSONObject resultData = new JSONObject(result);
-                                Log.record(TAG, "做任务得能量🎈[领取成功：" + taskName +
-                                    "，获得：" + resultData.getString("changeAmount") + "能量🎈]");
-                                completedTasks++;
+                                if (resultData.optBoolean("success", false)) {
+                                    String changeAmount = resultData.optString("changeAmount", "0");
+                                    Log.record(TAG, "做任务得能量🎈[领取成功：" + taskName +
+                                        "，获得：" + changeAmount + "能量🎈]");
+                                    completedTasks++;
+                                } else {
+                                    String errorMsg = resultData.optString("errorMsg", "未知错误");
+                                    String errorCode = resultData.optString("errorCode", "");
+                                    Log.record(TAG, "做任务得能量🎈[领取失败：" + taskName + 
+                                        "，错误：" + errorCode + " - " + errorMsg + "]");
+                                    // 如果是不可重试的错误，标记为已完成避免重复尝试
+                                    if (!resultData.optBoolean("retryable", true) || 
+                                        "CAMP_TRIGGER_ERROR".equals(errorCode)) {
+                                        completedTasks++;
+                                        Log.record(TAG, "做任务得能量🎈[任务已标记完成，避免重复尝试：" + taskName + "]");
+                                    }
+                                }
                                 continue;
                             } catch (Exception e) {
-                                Log.record(TAG, "做任务得能量🎈[领取异常：" + e.getMessage() + "]");
+                                Log.record(TAG, "做任务得能量🎈[响应解析异常：" + taskName + "，错误：" + e.getMessage() + "]");
                             }
                         }                        
                         
