@@ -96,10 +96,10 @@ public class AntSports extends ModelTask {
         modelFields.addField(openTreasureBox = new BooleanModelField("openTreasureBox", "开启宝箱", false));
         modelFields.addField(sportsTasks = new BooleanModelField("sportsTasks", "开启运动任务", false));
         modelFields.addField(sportsTaskBlacklist = new StringModelField("sportsTaskBlacklist", "运动任务黑名单 | 任务名称(用,分隔)", "开通包裹查询服务,添加支付宝小组件,领取价值1.7万元配置,支付宝积分可兑券"));
-        modelFields.addField(receiveCoinAsset = new BooleanModelField("receiveCoinAsset", "收运动币", false));
-        modelFields.addField(donateCharityCoin = new BooleanModelField("donateCharityCoin", "捐运动币 | 开启", false));
-        modelFields.addField(donateCharityCoinType = new ChoiceModelField("donateCharityCoinType", "捐运动币 | 方式", DonateCharityCoinType.ONE, DonateCharityCoinType.nickNames));
-        modelFields.addField(donateCharityCoinAmount = new IntegerModelField("donateCharityCoinAmount", "捐运动币 | 数量(每次)", 100));
+        modelFields.addField(receiveCoinAsset = new BooleanModelField("receiveCoinAsset", "收能量🎈", false));
+        modelFields.addField(donateCharityCoin = new BooleanModelField("donateCharityCoin", "捐能量🎈 | 开启", false));
+        modelFields.addField(donateCharityCoinType = new ChoiceModelField("donateCharityCoinType", "捐能量🎈 | 方式", DonateCharityCoinType.ONE, DonateCharityCoinType.nickNames));
+        modelFields.addField(donateCharityCoinAmount = new IntegerModelField("donateCharityCoinAmount", "捐能量🎈 | 数量(每次)", 100));
         
         // 抢好友相关配置
         modelFields.addField(battleForFriends = new BooleanModelField("battleForFriends", "抢好友 | 开启", false));
@@ -115,7 +115,7 @@ public class AntSports extends ModelTask {
          modelFields.addField(latestExchangeTime = new IntegerModelField("latestExchangeTime", "最晚捐步时间(24小时制)", 22));
          modelFields.addField(syncStepCount = new IntegerModelField("syncStepCount", "自定义同步步数", 22000));
          // 本地变量，用于添加字段到模型
-        BooleanModelField coinExchangeDoubleCard = new BooleanModelField("coinExchangeDoubleCard", "运动币兑换限时能量双击卡", false);
+        BooleanModelField coinExchangeDoubleCard = new BooleanModelField("coinExchangeDoubleCard", "能量🎈兑换限时能量双击卡", false);
         modelFields.addField(coinExchangeDoubleCard);
         return modelFields;
     }
@@ -256,7 +256,7 @@ public class AntSports extends ModelTask {
 
             if (donateCharityCoin.getValue() && Status.canDonateCharityCoin()) {
                 queryProjectList(loader);
-                tc.countDebug("捐运动币");
+                tc.countDebug("捐能量🎈");
             }
                 
             if (minExchangeCount.getValue() > 0 && Status.canExchangeToday(UserMap.getCurrentUid())) {
@@ -290,7 +290,7 @@ public class AntSports extends ModelTask {
             }
             if (receiveCoinAsset.getValue()) {
                 receiveCoinAsset();
-                tc.countDebug("收运动币");
+                tc.countDebug("收能量🎈");
             }
             tc.stop();
         } catch (Throwable t) {
@@ -320,7 +320,7 @@ public class AntSports extends ModelTask {
             }
             jo = jo.getJSONObject("data");
             if (jo.optBoolean("exgSuccess")) {
-                Log.other(TAG, "运动好礼🎐兑换[" + itemTitle + "]花费" + valueCoinCount + "运动币");
+                Log.other(TAG, "运动好礼🎐兑换[" + itemTitle + "]花费" + valueCoinCount + "能量🎈");
             }
         } catch (Throwable t) {
             Log.error(TAG, "trainMember err:");
@@ -391,7 +391,7 @@ public class AntSports extends ModelTask {
                                 }
                             }
                             if (isBlacklisted) {
-                                Log.record(TAG, "做任务得运动币👯[任务已屏蔽：" + taskName + "（在黑名单中）]");
+                                Log.record(TAG, "做任务得能量🎈[任务已屏蔽：" + taskName + "（在黑名单中）]");
                                 completedTasks++; // 将黑名单任务视为已完成
                                 continue;
                             }
@@ -399,7 +399,7 @@ public class AntSports extends ModelTask {
                         
                         // 跳过已完成的任务（检查状态和按钮文本）
                         if (buttonText.equals("任务已完成")) {
-                            Log.record(TAG, "做任务得运动币👯[任务已完成：" + taskName + "，状态：" + taskStatus + "，按钮：" + buttonText + "]");
+                            Log.record(TAG, "做任务得能量🎈[任务已完成：" + taskName + "，状态：" + taskStatus + "，按钮：" + buttonText + "]");
                             completedTasks++;
                             continue;
                         }
@@ -410,24 +410,24 @@ public class AntSports extends ModelTask {
 
                             try {
                                 JSONObject resultData = new JSONObject(result);
-                                Log.record(TAG, "做任务得运动币👯[领取成功：" + taskName +
-                                    "，获得：" + resultData.getString("changeAmount") + "运动币]");
+                                Log.record(TAG, "做任务得能量🎈[领取成功：" + taskName +
+                                    "，获得：" + resultData.getString("changeAmount") + "能量🎈]");
                                 completedTasks++;
                                 continue;
                             } catch (Exception e) {
-                                Log.record(TAG, "做任务得运动币👯[领取异常：" + e.getMessage() + "]");
+                                Log.record(TAG, "做任务得能量🎈[领取异常：" + e.getMessage() + "]");
                             }
                         }                        
                         
                         // 跳过不需要完成的任务状态
                         if (!taskStatus.equals("WAIT_RECEIVE") && !taskStatus.equals("WAIT_COMPLETE")) {
-                            Log.record(TAG, "做任务得运动币👯[跳过任务：" + taskName + "，状态：" + taskStatus + "]");
+                            Log.record(TAG, "做任务得能量🎈[跳过任务：" + taskName + "，状态：" + taskStatus + "]");
                             continue;
                         }
                         
                         // 检查是否需要执行任务
                         if (limitConfigNum <= 0) {
-                            Log.record(TAG, "做任务得运动币👯[任务无需执行：" + taskName + "，已完成" + currentNum + "/" + taskDetail.getInt("limitConfigNum") + "]");
+                            Log.record(TAG, "做任务得能量🎈[任务无需执行：" + taskName + "，已完成" + currentNum + "/" + taskDetail.getInt("limitConfigNum") + "]");
                             completedTasks++;
                             continue;
                         }
@@ -435,14 +435,14 @@ public class AntSports extends ModelTask {
                         // 这是一个可执行的任务
                         availableTasks++;
                         
-                        Log.record(TAG, "做任务得运动币👯[开始执行任务：" + taskName + "，需完成" + limitConfigNum + "次]");
+                        Log.record(TAG, "做任务得能量🎈[开始执行任务：" + taskName + "，需完成" + limitConfigNum + "次]");
                         for (int i1 = 0; i1 < limitConfigNum; i1++) {
                             jo = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
                             if (jo.optBoolean("success")) {
-                                Log.record(TAG, "做任务得运动币👯[完成任务：" + taskName + "，得" + prizeAmount + "💰]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
+                                Log.record(TAG, "做任务得能量🎈[完成任务：" + taskName + "，得" + prizeAmount + "💰]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
                                 receiveCoinAsset();
                             } else {
-                                Log.record(TAG, "做任务得运动币👯[任务执行失败：" + taskName + "]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
+                                Log.record(TAG, "做任务得能量🎈[任务执行失败：" + taskName + "]#(" + (i1 + 1) + "/" + limitConfigNum + ")");
                                 break; // 失败时跳出循环
                             }
                             if (limitConfigNum > 1 && i1 < limitConfigNum - 1) {
@@ -485,7 +485,7 @@ public class AntSports extends ModelTask {
                     JSONObject subscribeConfig;
                     if (data.has("subscribeConfig")) {
                         subscribeConfig = data.getJSONObject("subscribeConfig");
-                        Log.record(TAG, "做任务得运动币👯[完成任务：签到" + subscribeConfig.getString("subscribeExpireDays") + "天，" + data.getString("toast") + "💰]");
+                        Log.record(TAG, "做任务得能量🎈能量🎈[完成任务：签到" + subscribeConfig.getString("subscribeExpireDays") + "天，" + data.getString("toast") + "💰]");
                     }
                 } else {
                     Log.record(TAG, "运动签到今日已签到");
@@ -947,7 +947,7 @@ public class AntSports extends ModelTask {
             String s = AntSportsRpcCall.donate(donateCharityCoin, projectId);
             JSONObject jo = new JSONObject(s);
             if (ResChecker.checkRes(TAG,jo)) {
-                Log.other(TAG, "捐赠活动❤️[" + title + "][" + donateCharityCoin + "运动币]");
+                Log.other(TAG, "捐赠活动❤️[" + title + "][" + donateCharityCoin + "能量🎈]");
             } else {
                 Log.runtime(TAG, jo.getString("resultDesc"));
             }
@@ -1448,7 +1448,7 @@ public class AntSports extends ModelTask {
                                             queryTrainItem();
                                         }
                                     } else if ("CLUB_AMOUNT_NOT_ENOUGH".equals(buyMemberResponse.getString("resultCode"))) {
-                                        Log.record(TAG, "[运动币不足，无法完成抢购好友！]");
+                                        Log.record(TAG, "[能量🎈不足，无法完成抢购好友！]");
                                     } else if ("CLUB_MEMBER_TRADE_PROTECT".equals(buyMemberResponse.getString("resultCode"))) {
                                         Log.record(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]");
                                     }
