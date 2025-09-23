@@ -313,8 +313,7 @@ public class AntSports extends ModelTask {
                         
                         // 获取按钮文本和assetId
                         String buttonText = taskDetail.getString("buttonText");
-                        String assetId = taskDetail.getString("assetId");
- 
+
                         
                         // 检查任务是否在黑名单中
                         String blacklistStr = sportsTaskBlacklist.getValue();
@@ -343,6 +342,7 @@ public class AntSports extends ModelTask {
 
                         // 判断并领取奖励
                         if (buttonText.equals("领取奖励")) {
+                            String assetId = taskDetail.getString("assetId");
                             String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
                             try {
                                 JSONObject resultData = new JSONObject(result);
