@@ -2454,8 +2454,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     if (collected > 0) {
                         val randomIndex = random.nextInt(emojiList.size)
                         val randomEmoji = emojiList[randomIndex]
-                        val collectType =
-                            if ("takeLook" == collectEnergyEntity.fromTag) "找能量一键收取️" else "一键收取️"
+                        val collectType = when (collectEnergyEntity.fromTag) {
+                            "takeLook" -> "找能量一键收取️"
+                            "蹲点收取" -> "蹲点一键收取️"
+                            else -> "一键收取️"
+                        }
                         val str =
                             collectType + randomEmoji + collected + "g[" + getAndCacheUserName(
                                 userId
@@ -2485,8 +2488,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     if (collected > 0) {
                         val randomIndex = random.nextInt(emojiList.size)
                         val randomEmoji = emojiList[randomIndex]
-                        val collectType =
-                            if ("takeLook" == collectEnergyEntity.fromTag) "找能量收取" else "普通收取"
+                        val collectType = when (collectEnergyEntity.fromTag) {
+                            "takeLook" -> "找能量收取"
+                            "蹲点收取" -> "蹲点收取"
+                            else -> "普通收取"
+                        }
                         val str =
                             collectType + randomEmoji + collected + "g[" + getAndCacheUserName(
                                 userId

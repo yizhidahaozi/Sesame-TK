@@ -463,7 +463,7 @@ object EnergyWaitingManager {
                 // 处理结果
                 if (result.success) {
                     if (result.energyCount > 0) {
-                        Log.forest("精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
+                        Log.record(TAG,"精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
                     } else {
                         Log.debug(TAG, "⚠️ 精确蹲点收取异常：用户[${task.userName}] 返回success=true但energyCount=0，可能时机不对或接口异常")
