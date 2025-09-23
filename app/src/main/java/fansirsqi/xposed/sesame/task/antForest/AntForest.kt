@@ -1604,7 +1604,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
             val isSelf = userId == selfId
 
-            if (cacheCollectedMap.containsKey(userId)) {
+            // 自己的能量不受缓存限制，好友的能量检查缓存避免重复处理
+            if (!isSelf && cacheCollectedMap.containsKey(userId)) {
                 return userHomeObj
             }
             val userName = getAndCacheUserName(userId, userHomeObj, fromTag)
