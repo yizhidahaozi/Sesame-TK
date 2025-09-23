@@ -40,6 +40,55 @@ public class NewRpcBridge implements RpcBridge {
             "繁忙", "拒绝", "网络不可用", "重试"
     ));
 
+    // 需要屏蔽错误日志的RPC方法列表
+    ArrayList<String> silentErrorMethods = new ArrayList<>(Arrays.asList(
+            "com.alipay.adexchange.ad.facade.xlightPlugin"
+    ));
+
+    /**
+     * 检查指定的RPC方法是否应该显示错误日志
+     *
+     * @param methodName RPC方法名称
+     * @return 如果应该显示错误日志返回true，否则返回false
+     */
+    private boolean shouldShowErrorLog(String methodName) {
+        return methodName != null && !silentErrorMethods.contains(methodName);
+    }
+
+    /**
+     * 记录RPC请求返回null的原因
+     *
+     * @param rpcEntity RPC请求实体
+     * @param reason    返回null的原因
+     * @param count     当前重试次数
+     */
+    private void logNullResponse(RpcEntity rpcEntity, String reason, int count) {
+        String methodName = rpcEntity != null ? rpcEntity.getRequestMethod() : "unknown";
+        if (shouldShowErrorLog(methodName)) {
+            Log.error(TAG, "RPC返回null | 方法: " + methodName + " | 原因: " + reason + " | 重试: " + count);
+        }
+    }
+
+    /**
+     * 尝试重新初始化RPC桥接（仅重新初始化技术组件，不影响配置）
+     *
+     * @return 重新初始化是否成功
+     */
+    private boolean tryReInitialize() {
+        try {
+            Log.debug(TAG, "检测到RPC方法为null，尝试重新初始化RPC技术组件...");
+            // 注意：此方法只重新初始化技术组件，不会影响配置列表
+            // errorMark, errorStringMark, silentErrorMethods 等配置保持不变
+            load();
+            Log.debug(TAG, "RPC技术组件重新初始化成功，配置保持不变");
+            return true;
+        } catch (Exception e) {
+            Log.debug(TAG, "RPC技术组件重新初始化失败:");
+            Log.printStackTrace(e);
+            return false;
+        }
+    }
+
     @Override
     public RpcVersion getVersion() {
         return RpcVersion.NEW;
@@ -151,7 +200,40 @@ public class NewRpcBridge implements RpcBridge {
      */
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
-        if (ApplicationHook.isOffline() || newRpcCallMethod == null) {
+        // 方法开始时，将成员变量赋值给局部变量，以避免在方法执行期间因其他线程的unload()调用而导致成员变量变为null
+        Method localNewRpcCallMethod = newRpcCallMethod;
+        Method localParseObjectMethod = parseObjectMethod;
+        Object localNewRpcInstance = newRpcInstance;
+        ClassLoader localLoader = loader;
+        Class<?>[] localBridgeCallbackClazzArray = bridgeCallbackClazzArray;
+
+        if (ApplicationHook.isOffline()) {
+            return null;
+        }
+
+        // 如果RPC组件未准备好，尝试重新初始化一次
+        if (localNewRpcCallMethod == null) {
+            Log.debug(TAG, "RPC方法为null，尝试重新初始化...");
+            try {
+                load();
+                // 重新加载初始化后的变量
+                localNewRpcCallMethod = newRpcCallMethod;
+                localParseObjectMethod = parseObjectMethod;
+                localNewRpcInstance = newRpcInstance;
+                localLoader = loader;
+                localBridgeCallbackClazzArray = bridgeCallbackClazzArray;
+                Log.debug(TAG, "RPC重新初始化成功");
+            } catch (Exception e) {
+                Log.error(TAG, "RPC重新初始化失败:");
+                Log.printStackTrace(e);
+                logNullResponse(rpcEntity, "RPC组件初始化失败", 0);
+                return null;
+            }
+        }
+
+        if (localNewRpcCallMethod == null || localParseObjectMethod == null
+                || localNewRpcInstance == null || localLoader == null || localBridgeCallbackClazzArray == null) {
+            logNullResponse(rpcEntity, "RPC组件不完整", 0);
             return null;
         }
         try {
@@ -160,10 +242,11 @@ public class NewRpcBridge implements RpcBridge {
                 count++;
                 try {
                     RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(rpcEntity.getRequestMethod()));
-                    newRpcCallMethod.invoke(
-                            newRpcInstance, rpcEntity.getRequestMethod(), false, false, "json", parseObjectMethod.invoke(null,
-                                    rpcEntity.getRpcFullRequestData()), "", null, true, false, 0, false, "", null, null, null, Proxy.newProxyInstance(loader,
-                                    bridgeCallbackClazzArray, (proxy, innerMethod, args) -> {
+                    Class<?>[] finalLocalBridgeCallbackClazzArray = localBridgeCallbackClazzArray;
+                    localNewRpcCallMethod.invoke(
+                            localNewRpcInstance, rpcEntity.getRequestMethod(), false, false, "json", localParseObjectMethod.invoke(null,
+                                    rpcEntity.getRpcFullRequestData()), "", null, true, false, 0, false, "", null, null, null, Proxy.newProxyInstance(localLoader,
+                                    localBridgeCallbackClazzArray, (proxy, innerMethod, args) -> {
                                         if ("equals".equals(innerMethod.getName())) {
                                             return proxy == args[0];
                                         }
@@ -171,7 +254,7 @@ public class NewRpcBridge implements RpcBridge {
                                             return System.identityHashCode(proxy);
                                         }
                                         if ("toString".equals(innerMethod.getName())) {
-                                            return "Proxy for " + bridgeCallbackClazzArray[0].getName();
+                                            return "Proxy for " + finalLocalBridgeCallbackClazzArray[0].getName();
                                         }
                                         if (args != null && args.length == 1 && "sendJSONResponse".equals(innerMethod.getName())) {
                                             try {
@@ -181,8 +264,10 @@ public class NewRpcBridge implements RpcBridge {
                                                         && !(Boolean) XposedHelpers.callMethod(obj, "containsKey", "isSuccess")) {
                                                     rpcEntity.setError();
 
-                                                    Log.error(TAG, "new rpc response1 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() + "\n " +
-                                                            "args: " + rpcEntity.getRequestData() + " |\n data: " + rpcEntity.getResponseString());
+                                                    if (shouldShowErrorLog(rpcEntity.getRequestMethod())) {
+                                                        Log.error(TAG, "new rpc response1 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() + "\n " +
+                                                                "args: " + rpcEntity.getRequestData() + " |\n data: " + rpcEntity.getResponseString());
+                                                    }
                                                 }
                                             } catch (Exception e) {
                                                 rpcEntity.setError();
@@ -195,6 +280,7 @@ public class NewRpcBridge implements RpcBridge {
                                     })
                     );
                     if (!rpcEntity.getHasResult()) {
+                        logNullResponse(rpcEntity, "无响应结果", count);
                         return null;
                     }
                     if (!rpcEntity.getHasError()) {
@@ -224,6 +310,7 @@ public class NewRpcBridge implements RpcBridge {
                                     ApplicationHook.reLoginByBroadcast();
                                 }
                             }
+                            logNullResponse(rpcEntity, "网络错误: " + errorCode + "/" + errorMessage, count);
                             return null;
                         }
                         return rpcEntity;
@@ -246,9 +333,10 @@ public class NewRpcBridge implements RpcBridge {
                     }
                 }
             } while (count < tryCount);
+            logNullResponse(rpcEntity, "重试次数耗尽", tryCount);
             return null;
         } finally {
-            Log.system(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n"+"\n"+"堆栈:"+new Exception().getStackTrace()[1].toString());
+            Log.system(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n" + "\n" + "堆栈:" + new Exception().getStackTrace()[1].toString());
             Log.printStack(TAG);
 
         }

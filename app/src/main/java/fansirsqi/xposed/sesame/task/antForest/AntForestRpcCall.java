@@ -129,7 +129,7 @@ public class AntForestRpcCall {
             arg1.put("wateringBubbleConfig", "0");
             arg.put("canRobFlags", "T,F,F,F,F");
             arg.put("configVersionMap", arg1);
-            arg.put("source", "chInfo_ch_appid-60000002");
+            arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("userId", userId);
             arg.put("fromAct", fromAct);
             arg.put("version", VERSION);
