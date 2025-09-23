@@ -23,6 +23,13 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final BooleanModelField stayAwake = new BooleanModelField("stayAwake", "保持唤醒", true);
+
+     /**
+     * //手动触发是否自动安排下次执行
+     */
+    @Getter
+    public static final BooleanModelField manualTriggerAutoSchedule = new BooleanModelField("manualTriggerAutoSchedule", "手动触发支付宝运行", false);
+
     /**
      * 执行间隔时间（分钟）
      */
@@ -165,6 +172,7 @@ public class BaseModel extends Model {
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(stayAwake);//是否保持唤醒状态
+        modelFields.addField(manualTriggerAutoSchedule);//手动触发是否自动安排下次执行
         modelFields.addField(checkInterval);//执行间隔时间
         modelFields.addField(taskWaitTime);//任务等待时间
         modelFields.addField(modelSleepTime);//模块休眠时间范围

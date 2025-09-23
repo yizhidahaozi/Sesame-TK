@@ -112,6 +112,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     static volatile Calendar dayCalendar;
     @Getter
     static volatile boolean offline = false;
+    private static volatile boolean alarmTriggeredFlag = false;
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
 
     public static AtomicInteger getReLoginCount() {
@@ -392,6 +393,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 service = appService;
                                 mainTask = BaseTask.newInstance("MAIN_TASK", () -> {
                                     try {
+                                        boolean isAlarmTriggered = alarmTriggeredFlag;
+                                        if (isAlarmTriggered) {
+                                            alarmTriggeredFlag = false; // Consume the flag
+                                        }
+
                                         if (!init) {
                                             Log.record(TAG, "️🐣跳过执行-未初始化");
                                             return;
@@ -400,46 +406,37 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
                                             return;
                                         }
-                                        String threadName = Thread.currentThread().getName();
-                                        boolean isAlarmTriggered = threadName.startsWith("AlarmTriggered_");
+
                                         if (isAlarmTriggered) {
-                                            try {
-                                                String alarmId = threadName.split("_")[1];
-                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发, ID: " + alarmId + ")");
-                                            } catch (Exception e) {
-                                                Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
-                                            }
+                                            Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
                                         } else {
-                                            Log.record(TAG, "▶️ 开始新一轮任务 (手动支付宝APP触发)");
-                                            // 避免在主任务中创建新线程，可能导致并发问题
-                                            // 改为同步调用initHandler检查
-                                            if (!init) {
-                                                Log.record(TAG, "检测到未初始化状态，准备初始化");
+                                            if (lastExecTime == 0) {
+                                                Log.record(TAG, "▶️ 首次手动触发，开始运行");
+                                            } else {
+                                                if (BaseModel.getManualTriggerAutoSchedule().getValue()) {
+                                                    Log.record(TAG, "手动APP触发，已开启");
+                                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                                    adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL);
+                                                }
+                                                Log.record(TAG, "手动APP触发，已关闭");
+
+                                                return;
                                             }
                                         }
+
                                         long currentTime = System.currentTimeMillis();
                                         // 获取最小执行间隔（2秒）
                                         final long MIN_EXEC_INTERVAL = 2000;
                                         // 计算距离上次执行的时间间隔
                                         long timeSinceLastExec = currentTime - lastExecTime;
-                                        // 检查执行条件
-                                        boolean isIntervalTooShort = timeSinceLastExec < MIN_EXEC_INTERVAL;
-                                        boolean shouldSkipExecution = isIntervalTooShort && !isAlarmTriggered;
-                                        // 记录执行间隔信息（无论是否跳过）
-                                        Log.record(TAG, "执行间隔: " + timeSinceLastExec + "ms，最小间隔: " + MIN_EXEC_INTERVAL +
-                                                "ms，闹钟触发: " + (isAlarmTriggered ? "是" : "否"));
 
-                                        if (shouldSkipExecution) {
-                                            Log.record(TAG, "⚠️ 执行间隔较短，跳过执行，安排下次执行");
-                                            // 使用统一的闹钟调度器（带重试机制）
+                                        if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
+                                            Log.record(TAG, "⚠️ 闹钟触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
                                             alarmManager.scheduleDelayedExecutionWithRetry(
-                                                BaseModel.getCheckInterval().getValue(), "跳过执行后的重新调度");
+                                                    BaseModel.getCheckInterval().getValue(), "跳过执行后的重新调度");
                                             return;
                                         }
-                                        // 闹钟触发的执行总是允许的
-                                        if (isAlarmTriggered) {
-                                            Log.record(TAG, "闹钟触发执行，忽略间隔时间检查");
-                                        }
+
                                         String currentUid = UserMap.getCurrentUid();
                                         String targetUid = HookUtil.INSTANCE.getUserId(appLloadPackageParam.classLoader);
                                         if (targetUid == null || !targetUid.equals(currentUid)) {
@@ -978,6 +975,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             break;
                         case "com.eg.android.AlipayGphone.sesame.execute":
                             Log.printStack(TAG);
+                            if (intent.getBooleanExtra("alarm_triggered", false)) {
+                                alarmTriggeredFlag = true;
+                            }
                             new Thread(() -> initHandler(false)).start();
                             break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
