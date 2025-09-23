@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
+import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -25,13 +26,11 @@ import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.ResChecker;
-import fansirsqi.xposed.sesame.data.Config;
-import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.TimeCounter;
+import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 public class AntSports extends ModelTask {
     private static final String TAG = AntSports.class.getSimpleName();
@@ -158,8 +157,6 @@ public class AntSports extends ModelTask {
     public void run() {
         TimeCounter tc = new TimeCounter(TAG);
         Log.record(TAG, "执行开始-" + getName());
-        Log.debug(TAG,"开启运动任务:"+sportsTasks.value);
-        Log.debug(TAG,"训练好友:"+trainFriend.value);
         try {
             if (!Status.hasFlagToday("sport::syncStep") && TimeUtil.isNowAfterOrCompareTimeStr("0600")) {
                 addChildTask(new ChildModelTask("syncStep", () -> {
@@ -390,16 +387,12 @@ public class AntSports extends ModelTask {
                         completedTasks++;
                     }
                 }
-                
                 // 检查是否所有可执行任务都已完成
                 Log.record(TAG, "运动任务完成情况：" + completedTasks + "/" + totalTasks + "，可执行任务：" + availableTasks);
-                
                 // 如果所有可执行的任务都已完成（没有可执行的任务了），自动关闭运动任务功能
                 if (totalTasks > 0 && completedTasks >= totalTasks && availableTasks == 0) {
                     sportsTasks.setValue(false);
                     Log.debug(TAG, "所有运动任务已完成，临时关闭运动任务功能，重启开启");
-                    // 保存配置以确保设置持久化
-
                 }
             }
         } catch (Exception e) {

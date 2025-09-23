@@ -88,7 +88,6 @@ public class AntMember extends ModelTask {
   public void run() {
     try {
       Log.record(TAG,"执行开始-" + getName());
-      Log.debug(TAG,"麻粒信用任务:"+sesameTask.value);
       if (memberSign.getValue()) {
         doMemberSign();
       }
