@@ -154,72 +154,12 @@ public class AntSports extends ModelTask {
         }
     }
 
-    /**
-     * 检查并重置训练好友状态（每日自动开启）
-     */
-    private void checkAndResetTrainFriendStatus() {
-        // 使用Status标记来记录每日重置状态
-        String resetFlag = "sport::trainFriendDailyReset";
-        // 如果今天还没有重置过，则进行重置
-        if (!Status.hasFlagToday(resetFlag)) {
-            // 重置0金币计数
-            zeroTrainCoinCount = 0;
-            // 如果训练好友功能被关闭了，自动开启
-            if (!trainFriend.getValue()) {
-                trainFriend.setValue(true);
-                Log.record(TAG, "新的一天，自动开启训练好友功能");
-                // 保存配置以确保设置持久化
-                try {
-                    boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-                    Log.record(TAG, "训练好友自动开启后配置保存结果: " + (saveResult ? "成功" : "失败"));
-                } catch (Exception e) {
-                    Log.record(TAG, "训练好友自动开启后配置保存异常");
-                    Log.printStackTrace(TAG, e);
-                }
-            }
-            
-            // 设置今日已重置标记
-            Status.setFlagToday(resetFlag);
-        }
-    }
-    
-    /**
-     * 检查并重置运动任务状态（每日自动开启）
-     */
-    private void checkAndResetSportsTasksStatus() {
-        // 使用Status标记来记录每日重置状态
-        String resetFlag = "sport::sportsTasksDailyReset";
-        // 如果今天还没有重置过，则进行重置
-        if (!Status.hasFlagToday(resetFlag)) {
-            // 如果运动任务功能被关闭了，自动开启
-            if (!sportsTasks.getValue()) {
-                sportsTasks.setValue(true);
-                Log.record(TAG, "新的一天，自动开启运动任务功能");
-                // 保存配置以确保设置持久化
-                try {
-                    boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-                    Log.record(TAG, "运动任务自动开启后配置保存结果: " + (saveResult ? "成功" : "失败"));
-                } catch (Exception e) {
-                    Log.record(TAG, "运动任务自动开启后配置保存异常");
-                    Log.printStackTrace(TAG, e);
-                }
-            }
-            
-            // 设置今日已重置标记
-            Status.setFlagToday(resetFlag);
-        }
-    }
-    
     @Override
     public void run() {
         TimeCounter tc = new TimeCounter(TAG);
         Log.record(TAG, "执行开始-" + getName());
-        
-        // 检查是否需要重置训练好友状态（每日自动开启）
-        checkAndResetTrainFriendStatus();
-        
-        // 检查是否需要重置运动任务状态（每日自动开启）
-        checkAndResetSportsTasksStatus();
+        Log.debug(TAG,"开启运动任务:"+sportsTasks.value);
+        Log.debug(TAG,"训练好友:"+trainFriend.value);
         try {
             if (!Status.hasFlagToday("sport::syncStep") && TimeUtil.isNowAfterOrCompareTimeStr("0600")) {
                 addChildTask(new ChildModelTask("syncStep", () -> {
@@ -407,7 +347,6 @@ public class AntSports extends ModelTask {
                         // 判断并领取奖励
                         if (buttonText.equals("领取奖励")) {
                             String result = AntSportsRpcCall.pickBubbleTaskEnergy(assetId);
-
                             try {
                                 JSONObject resultData = new JSONObject(result);
                                 Log.record(TAG, "做任务得能量🎈[领取成功：" + taskName +
@@ -431,10 +370,8 @@ public class AntSports extends ModelTask {
                             completedTasks++;
                             continue;
                         }
-                        
                         // 这是一个可执行的任务
                         availableTasks++;
-                        
                         Log.record(TAG, "做任务得能量🎈[开始执行任务：" + taskName + "，需完成" + limitConfigNum + "次]");
                         for (int i1 = 0; i1 < limitConfigNum; i1++) {
                             jo = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
@@ -460,15 +397,9 @@ public class AntSports extends ModelTask {
                 // 如果所有可执行的任务都已完成（没有可执行的任务了），自动关闭运动任务功能
                 if (totalTasks > 0 && completedTasks >= totalTasks && availableTasks == 0) {
                     sportsTasks.setValue(false);
-                    Log.record(TAG, "所有运动任务已完成，自动关闭运动任务功能，明日将自动重新开启");
+                    Log.debug(TAG, "所有运动任务已完成，临时关闭运动任务功能，重启开启");
                     // 保存配置以确保设置持久化
-                    try {
-                        boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-                        Log.record(TAG, "运动任务自动关闭后配置保存结果: " + (saveResult ? "成功" : "失败"));
-                    } catch (Exception e) {
-                        Log.record(TAG, "运动任务自动关闭后配置保存异常");
-                        Log.printStackTrace(TAG, e);
-                    }
+
                 }
             }
         } catch (Exception e) {
@@ -1290,15 +1221,7 @@ public class AntSports extends ModelTask {
                         // 如果0金币次数达到设置的上限，自动关闭训练好友功能
                         if (zeroTrainCoinCount >= maxCount) {
                             trainFriend.setValue(false);
-                            Log.record(TAG, "训练好友获得0金币已超过" + maxCount + "次，自动关闭训练好友功能");
-                            // 保存配置以确保设置持久化
-                            try {
-                                boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-                                Log.record(TAG, "训练好友自动关闭后配置保存结果: " + (saveResult ? "成功" : "失败"));
-                            } catch (Exception e) {
-                                Log.record(TAG, "训练好友自动关闭后配置保存异常");
-                                Log.printStackTrace(TAG, e);
-                            }
+                            Log.record(TAG, "训练好友获得0金币已超过" + maxCount + "次，临时关闭训练好友功能");
                             return; // 立即退出处理
                         } else {
                             // 显示当前计数情况

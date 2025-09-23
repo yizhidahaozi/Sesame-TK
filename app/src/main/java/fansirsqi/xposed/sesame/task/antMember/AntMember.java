@@ -88,6 +88,7 @@ public class AntMember extends ModelTask {
   public void run() {
     try {
       Log.record(TAG,"执行开始-" + getName());
+      Log.debug(TAG,"麻粒信用任务:"+sesameTask.value);
       if (memberSign.getValue()) {
         doMemberSign();
       }
@@ -323,42 +324,12 @@ public class AntMember extends ModelTask {
       return false;
     }
   }
-  /**
-   * 芝麻信用任务 - 检查并重置每日状态
-   */
-  private void checkAndResetSesameTaskStatus() {
-    String resetFlag = "member::sesameTaskDailyReset";
-    if (!Status.hasFlagToday(resetFlag)) {
-      // 新的一天，重新开启芝麻信用任务功能
-      if (!sesameTask.getValue()) {
-        sesameTask.setValue(true);
-        Log.record(TAG, "芝麻信用💳[新的一天，自动开启芝麻信用任务功能]");
-        try {
-          boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-          Log.record(TAG, "芝麻信用💳[任务功能自动开启后配置保存结果: " + (saveResult ? "成功" : "失败") + "]");
-        } catch (Exception e) {
-          Log.record(TAG, "芝麻信用💳[任务功能自动开启后配置保存异常]");
-          Log.printStackTrace(TAG, e);
-        }
-      }
-      Status.setFlagToday(resetFlag);
-    }
-  }
 
   /**
    * 芝麻信用任务 - 重构版本
    */
   private void doAllAvailableSesameTask() {
     try {
-      // 检查每日重置状态
-      checkAndResetSesameTaskStatus();
-      
-      // 如果开关已关闭，跳过执行
-      if (!sesameTask.getValue()) {
-        Log.record(TAG, "芝麻信用💳[任务功能已关闭，跳过执行]");
-        return;
-      }
-
       String s = AntMemberRpcCall.queryAvailableSesameTask();
       GlobalThreadPools.sleepCompat(500);
       JSONObject jo = new JSONObject(s);
@@ -417,14 +388,7 @@ public class AntMember extends ModelTask {
       // 如果所有任务都已完成或跳过（没有剩余可完成任务），关闭开关
       if (totalTasks > 0 && (completedTasks + skippedTasks) >= totalTasks) {
         sesameTask.setValue(false);
-        Log.record(TAG, "芝麻信用💳[已全部完成任务，明日自动开启]");
-        try {
-          boolean saveResult = Config.save(UserMap.getCurrentUid(), false);
-          Log.record(TAG, "芝麻信用💳[任务功能关闭后配置保存结果: " + (saveResult ? "成功" : "失败") + "]");
-        } catch (Exception e) {
-          Log.record(TAG, "芝麻信用💳[任务功能关闭后配置保存异常]");
-          Log.printStackTrace(TAG, e);
-        }
+        Log.record(TAG, "芝麻信用💳[已全部完成任务，临时关闭]");
       }
     } catch (Throwable t) {
       Log.printStackTrace(TAG + ".doAllAvailableSesameTask", t);
