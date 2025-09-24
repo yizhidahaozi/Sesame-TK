@@ -78,10 +78,10 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     // 统一的闹钟调度器
     @SuppressLint("StaticFieldLeak")
     private static AlarmScheduler alarmScheduler;
-    
+
     // AlarmScheduler管理器
     private static final AlarmSchedulerManager alarmManager = new AlarmSchedulerManager();
-    
+
     @Getter
     private static ClassLoader classLoader = null;
     private static Object microApplicationContextObject = null;
@@ -125,18 +125,18 @@ public class ApplicationHook implements IXposedHookLoadPackage {
      *  获取主任务实例 - 供AlarmScheduler使用
      */
     static BaseTask mainTask;
-    
+
     public static Handler getMainHandler() {
         return mainHandler;
     }
-    
+
     public static BaseTask getMainTask() {
         return mainTask;
     }
     static volatile RpcBridge rpcBridge;
     private static final Object rpcBridgeLock = new Object();
     private static RpcVersion rpcVersion;
-    
+
     public static RpcVersion getRpcVersion() {
         return rpcVersion;
     }
@@ -341,10 +341,12 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 Log.runtime(TAG, "onResume currentUid: " + currentUid);
                                 if (!targetUid.equals(currentUid)) {
                                     if (currentUid != null) {
-                                        initHandler(true);
+                                        initHandler(true);  // 重新初始化
+                                        lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
+                                        TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                        adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL); // 立即执行任务
                                         Log.record(TAG, "用户已切换");
                                         Toast.show("用户已切换");
-                                        execHandler();   // ⬅️ 增加
                                         return;
                                     }
                                     //                                    UserMap.initUser(targetUid);
@@ -528,7 +530,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
             }
-            
+
             // 清理旧的唤醒闹钟
             unsetWakenAtTimeAlarm();
 
@@ -958,7 +960,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     } else {
                         delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
                     }
-                    
+
                     // 使用统一的闹钟调度器
                     alarmManager.scheduleDelayedExecution(delayMillis);
 
