@@ -444,7 +444,7 @@ class MainActivity : BaseActivity() {
                     if (logFile.exists()) {
                         try {
                             if (Files.clearFile(logFile)) {
-                                clearedCount++
+                               clearedCount++
                                 Log.system("MainActivity", "已清空日志文件: $logName.log")
                             }
                         } catch (e: Exception) {
