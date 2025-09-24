@@ -126,7 +126,7 @@ public class Vitality {
      */
     public static Boolean handleVitalityExchange(String skuId) {
         // 检查是否已经达到今日兑换上限
-        if (fansirsqi.xposed.sesame.data.Status.hasFlagToday("forest::VitalityExchangeLimit::" + skuId)) {
+        if (Status.hasFlagToday("forest::VitalityExchangeLimit::" + skuId)) {
             Log.record(TAG, "活力兑换🍃[" + skuId + "]今日已达上限，跳过兑换");
             return false;
         }
@@ -157,7 +157,7 @@ public class Vitality {
             String spuId = sku.getString("spuId");
             if (VitalityExchange(spuId, skuId, skuName)) {
                 if (skuName.contains("限时")) {
-                    fansirsqi.xposed.sesame.data.Status.setFlagToday("forest::VitalityExchangeLimit::" + skuId);
+                    Status.setFlagToday("forest::VitalityExchangeLimit::" + skuId);
                 }
                 return true;
             }
@@ -172,8 +172,8 @@ public class Vitality {
     public static Boolean VitalityExchange(String spuId, String skuId, String skuName) {
         try {
             if (VitalityExchange(spuId, skuId)) {
-                fansirsqi.xposed.sesame.data.Status.vitalityExchangeToday(skuId);
-                int exchangedCount = fansirsqi.xposed.sesame.data.Status.getVitalityCount(skuId);
+                Status.vitalityExchangeToday(skuId);
+                int exchangedCount = Status.getVitalityCount(skuId);
                 Log.forest("活力兑换🍃[" + skuName + "]#第" + exchangedCount + "次");
                 return true;
             }
@@ -191,7 +191,7 @@ public class Vitality {
                 String resultCode = jo.optString("resultCode", "");
                 if ("QUOTA_USER_NOT_ENOUGH".equals(resultCode)) {
                     Log.forest("活力兑换🍃[兑换次数已达上限]#" + jo.optString("resultDesc", ""));
-                    fansirsqi.xposed.sesame.data.Status.setFlagToday("forest::VitalityExchangeLimit::" + skuId);
+                    Status.setFlagToday("forest::VitalityExchangeLimit::" + skuId);
                     return false;
                 }
             }

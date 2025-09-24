@@ -12,7 +12,7 @@ public class GreenLife {
             if (ResChecker.checkRes(TAG,jo)) {
                 JSONObject data = jo.getJSONObject("data");
                 if (data.optBoolean("canSendEnergy", false)) {
-                    fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(300);
+                    CoroutineUtils.sleepCompat(300);
                     jo = new JSONObject(AntForestRpcCall.sendEnergyByAction(sourceType));
                     if (ResChecker.checkRes(TAG,jo)) {
                         data = jo.getJSONObject("data");
@@ -24,7 +24,7 @@ public class GreenLife {
                 }
             } else {
                 Log.runtime(TAG, jo.getJSONObject("data").getString("resultCode"));
-                fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(300);
+                CoroutineUtils.sleepCompat(300);
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "sendEnergyByAction err:");

@@ -6,7 +6,6 @@ import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.RuntimeInfo
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.entity.AlipayUser
-import fansirsqi.xposed.sesame.task.antForest.AntForestRpcCall
 import fansirsqi.xposed.sesame.entity.CollectEnergyEntity
 import fansirsqi.xposed.sesame.entity.KVMap
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listEcoLifeOptions
@@ -158,7 +157,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
    }
 
 
-    private val doubleCardConstant: BooleanModelField? = null // 双击卡永动机
+    private var doubleCardConstant: BooleanModelField? = null // 双击卡永动机
     private var stealthCard: ChoiceModelField? = null // 隐身卡
     private var stealthCardConstant: BooleanModelField? = null // 隐身卡永动机
     private var shieldCard: ChoiceModelField? = null // 保护罩
@@ -233,15 +232,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         ConcurrentHashMap<String?, AtomicInteger?>()
 
     private var dsontCollectMap: MutableSet<String?> = HashSet()
-    
-    /**
-     * 获取不收集的Map
-     * @return 不收集的Map集合
-     */
-    fun getDsontCollectMap(): MutableSet<String?> {
-        return dsontCollectMap
-    }
-    
+
     var emojiList: ArrayList<String> = ArrayList(
         listOf(
             "🍅", "🍓", "🥓", "🍂", "🍚", "🌰", "🟢", "🌴",
@@ -371,11 +362,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ).also { doubleCardTime = it })
         // 双击卡永动机
         modelFields.addField(
-            BooleanModelField(
-                "DoubleCardConstant",
-                "限时双击永动机 | 开关",
-                false
-            )
+            BooleanModelField("DoubleCardConstant","限时双击永动机 | 开关",false
+            ).also { doubleCardConstant = it }
         )
 
         modelFields.addField(
@@ -1085,7 +1073,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     else if (count == 0) Log.record(TAG, "执行结束-蚂蚁森林")
                     else Log.record(TAG, "执行完成-蚂蚁森林")
                 }
-            } catch (ie: InterruptedException) {
+            } catch (_: InterruptedException) {
                 Log.record(TAG, "执行中断-蚂蚁森林")
             }
             cacheCollectedMap.clear()
@@ -2784,6 +2772,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         return Vitality.VitalityExchange(spuId, skuId, "隐身卡")
     }
 
+    /**
+     * 兑换双击卡
+     * 优先兑换31天双击卡，失败后尝试限时双击卡
+     */
+    private fun exchangeDoubleCard(): Boolean {
+        // 尝试兑换31天双击卡
+        if (Vitality.handleVitalityExchange("SK20240805004754")) {
+            return true
+        }
+        // 失败后尝试兑换限时双击卡
+        return Vitality.handleVitalityExchange("CR20230516000363")
+    }
+
 
     /**
      * 执行当天森林签到任务
@@ -3869,7 +3870,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.record(TAG, "双击卡使用条件检查: 今日次数已达上限")
                 return
             }
-
             // 前置检查2: 校验背包数据是否有效
             if (!bagObject.optBoolean("success")) {
                 Log.record(TAG, "背包数据异常，无法使用双击卡$bagObject")
@@ -3879,6 +3879,32 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val forestPropVOList = bagObject.optJSONArray("forestPropVOList")
             if (forestPropVOList == null) {
                 return
+            }
+
+            // 永动机逻辑：如果背包内没有双击卡且开启了永动机，尝试兑换
+            var hasProp = false
+            for (i in 0..<forestPropVOList.length()) {
+                val prop = forestPropVOList.optJSONObject(i)
+                if (prop != null && "doubleClick" == prop.optString("propGroup")) {
+                    hasProp = true
+                    break
+                }
+            }
+            
+            if (!hasProp && doubleCardConstant!!.value) {
+                Log.runtime(TAG, "背包中没有双击卡，尝试兑换...")
+                if (exchangeDoubleCard()) {
+                    // 重新获取背包数据
+                    val newBagObject = queryPropList()
+                    if (newBagObject != null) {
+                        val newForestPropVOList = newBagObject.optJSONArray("forestPropVOList")
+                        if (newForestPropVOList != null) {
+                            // 递归调用，使用新的背包数据
+                            useDoubleCard(newBagObject)
+                            return
+                        }
+                    }
+                }
             }
 
             // 步骤1: 根据用户UI设置，筛选出需要使用的双击卡
@@ -3903,6 +3929,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.record(TAG, "根据设置，背包中没有需要使用的双击卡")
                 return
             }
+            
             // 步骤2: 按过期时间升序排序，优先使用即将过期的卡，避免浪费
             Collections.sort(
                 doubleClickProps,
@@ -3913,6 +3940,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 })
 
             Log.record(TAG, "扫描到" + doubleClickProps.size + "种双击卡，将按过期顺序尝试使用...")
+            
             // 步骤3: 遍历筛选并排序后的列表，逐个尝试使用
             var success = false
             for (propObj in doubleClickProps) {
@@ -4285,8 +4313,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 // 针对限时双击卡的时间检查
                 if ("双击卡" == config.propName) {
                     val propType = propObj.optString("propType")
-                    if ("ENERGY_DOUBLE_CLICK" == propType && hasDoubleCardTime()) {
-                        Log.record(TAG, "双击卡[$propType]需要在指定时间段内使用")
+                    if ("ENERGY_DOUBLE_CLICK" == propType && !hasDoubleCardTime()) {
+                        Log.record(TAG, "跳过双击卡[$propType]，当前不在指定使用时间段内")
                         return
                     }
                 }
@@ -4407,6 +4435,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     /**
      * 专门用于蹲点的能量收取方法
      */
+    @SuppressLint("SimpleDateFormat")
     private fun collectEnergyForWaiting(
         userId: String,
         userHomeObj: JSONObject,
@@ -4425,9 +4454,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val hasProtection = hasShield || hasBomb
             
             Log.debug(TAG, "蹲点收取保护检查详情：")
-            Log.debug(TAG, "  服务器时间: $serverTime (${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(serverTime))})")
-            Log.debug(TAG, "  保护罩结束时间: $shieldEndTime (${if (shieldEndTime > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(shieldEndTime)) else "无保护罩"})")
-            Log.debug(TAG, "  炸弹卡结束时间: $bombEndTime (${if (bombEndTime > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(bombEndTime)) else "无炸弹卡"})")
+            Log.debug(TAG, "  服务器时间: $serverTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
+                Date(serverTime)
+            )})")
+            Log.debug(TAG, "  保护罩结束时间: $shieldEndTime (${if (shieldEndTime > 0) SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
+                Date(shieldEndTime)
+            ) else "无保护罩"})")
+            Log.debug(TAG, "  炸弹卡结束时间: $bombEndTime (${if (bombEndTime > 0) SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
+                Date(bombEndTime)
+            ) else "无炸弹卡"})")
             Log.debug(TAG, "  是否有保护罩: $hasShield")
             Log.debug(TAG, "  是否有炸弹卡: $hasBomb")
             Log.debug(TAG, "  总体保护状态: $hasProtection")

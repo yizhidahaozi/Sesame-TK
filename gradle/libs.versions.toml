@@ -4,8 +4,16 @@ activity-compose = "1.10.1"
 android-plugin = "8.9.3"
 constraintlayout = "2.1.4"
 
+hiddenapibypass = "6.1"
 kotlin-plugin = "2.2.0-Beta2"
 kotlin-stdlib = "2.1.20"
+kotlinxCoroutinesCore = "1.10.2"
+kotlinxSerializationJson = "1.9.0"
+lifecycleLivedataKtx = "2.9.4"
+mmkv = "2.2.3"
+nanohttpd = "2.3.1"
+shizukuVersion = "13.1.5"
+hiddenapi = "4.4.0"
 slf4j = "2.1.0-alpha1"
 logback-android = "3.0.0"
 appcompat = "1.7.0"
@@ -29,9 +37,26 @@ desugar = "2.1.5"
 [libraries]
 
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
+androidx-lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "lifecycleLivedataKtx" }
+androidx-material3 = { module = "androidx.compose.material3:material3" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleLivedataKtx" }
+androidx-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata" }
+androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", version.ref = "hiddenapibypass" }
 jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin-stdlib" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesCore" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+mmkv = { module = "com.tencent:mmkv", version.ref = "mmkv" }
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
+rikka-shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizukuVersion" }
+rikka-shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizukuVersion" }
+rikka-refine = { module = "dev.rikka.tools.refine:runtime", version.ref = "hiddenapi" }
+rikka-hidden-stub = { module = "dev.rikka.hidden:stub", version.ref = "hiddenapi" }
+
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-android = { module = "com.github.tony19:logback-android", version.ref = "logback-android" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
@@ -71,4 +96,5 @@ android-application = { id = "com.android.application", version.ref = "android-p
 android-library = { id = "com.android.library", version.ref = "android-plugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin-plugin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version = "2.0.0" }
+rikka-tools-refine = { id = "dev.rikka.tools.refine", version.ref = "hiddenapi" }
 

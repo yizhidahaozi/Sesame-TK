@@ -1,6 +1,11 @@
 package fansirsqi.xposed.sesame.data;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +30,7 @@ import lombok.Data;
  * 配置类，负责加载、保存、管理应用的配置数据。
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Config {
     private static final String TAG = Config.class.getSimpleName();
     // 单例实例
@@ -112,7 +118,7 @@ public class Config {
      */
     public static Boolean isModify(String userId) {
         String json = null;
-        java.io.File configV2File;
+        File configV2File;
         if (StringUtil.isEmpty(userId)) {
             configV2File = Files.getDefaultConfigV2File();
         } else {
@@ -213,26 +219,45 @@ public class Config {
             if (configV2FileExists) {
                 String json = Files.readFromFile(configV2File);
                 Log.runtime(TAG, "读取配置文件成功: " + configV2File.getPath());
-                JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(json);
-                Log.runtime(TAG, "格式化配置成功");
+                try {
+                    JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(json);
+                } catch (UnrecognizedPropertyException e) {
+                    Log.error(TAG, "配置文件中存在无法识别的字段: '" + e.getPropertyName() + "'，将尝试移除并重新加载。");
+                    try {
+                        // 移除无法识别的字段并重新解析
+                        ObjectMapper mapper = JsonUtil.copyMapper();
+                        JsonNode rootNode = mapper.readTree(json);
+                        ((ObjectNode) rootNode).remove(e.getPropertyName());
+                        String cleanedJson = mapper.writeValueAsString(rootNode);
+                        mapper.readerForUpdating(INSTANCE).readValue(cleanedJson);
+                        Log.error(TAG, "成功移除问题字段并加载配置。");
+                        // 保存修复后的配置
+                        Files.write2File(toSaveStr(), configV2File);
+                        Log.error(TAG, "已保存修复后的配置文件。");
+                    } catch (Exception innerEx) {
+                        Log.printStackTrace(TAG, "移除问题字段后，加载配置仍然失败。", innerEx);
+                        throw innerEx; // 抛出内部异常，触发重置逻辑
+                    }
+                }
+                Log.record(TAG, "格式化配置成功:"+configV2File);
                 String formatted = toSaveStr();
                 if (formatted != null && !formatted.equals(json)) {
-                    Log.runtime(TAG, "格式化配置: " + userName);
+                    Log.record(TAG, "格式化配置: " + userName);
                     Files.write2File(formatted, configV2File);
                 }
             } else if (defaultConfigV2FileExists) {
                 String json = Files.readFromFile(Files.getDefaultConfigV2File());
                 JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(json);
-                Log.runtime(TAG, "复制新配置: " + userName);
+                Log.record(TAG, "复制新配置: " + userName);
                 Files.write2File(json, configV2File);
             } else {
                 unload();
-                Log.runtime(TAG, "初始新配置: " + userName);
+                Log.record(TAG, "初始新配置: " + userName);
                 Files.write2File(toSaveStr(), configV2File);
             }
         } catch (Throwable t) {
-            Log.printStackTrace(TAG, t);
-            Log.runtime(TAG, "重置配置: " + userName);
+            Log.error(TAG, "重置配置失败"+ t);
+            Log.error(TAG, "重置配置: " + userName);
             try {
                 unload();
                 if (configV2File != null) {

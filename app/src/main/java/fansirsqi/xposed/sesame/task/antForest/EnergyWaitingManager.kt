@@ -412,7 +412,7 @@ object EnergyWaitingManager {
                     "能量已成熟 - 立即收取"
                 }
                 
-                Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
+              //  Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
                 
                 // 🚨 严格时机检查：能量未成熟时直接跳过
                 if (energyTimeRemain > 60) { // 如果还有超过1分钟才成熟，直接跳过
