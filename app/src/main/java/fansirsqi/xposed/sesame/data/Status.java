@@ -19,10 +19,12 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import lombok.Data;
+import lombok.Getter;
 
 @Data
 public class Status {
     private static final String TAG = Status.class.getSimpleName();
+    @Getter
     private static final Status INSTANCE = new Status();
     // ===========================forest
     private Map<String, Integer> waterFriendLogList = new HashMap<>();
@@ -617,8 +619,5 @@ public class Status {
     public static boolean canParadiseCoinExchangeBenefitToday(String spuId) {
         return !hasFlagToday("farm::paradiseCoinExchangeLimit::" + spuId);
     }
-    
-    public static Status getINSTANCE() {
-        return INSTANCE;
-    }
+
 }
