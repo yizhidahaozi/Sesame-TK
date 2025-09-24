@@ -4454,7 +4454,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             }
             
-            Log.debug(TAG, "蹲点收取查询结果: $queryResult")
+           // Log.debug(TAG, "蹲点收取查询结果: $queryResult")
             
             // 提取可收取的能量球ID
             val availableBubbles: MutableList<Long> = ArrayList()
