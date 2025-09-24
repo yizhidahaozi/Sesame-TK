@@ -347,6 +347,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         initHandler(true);
                                         Log.record(TAG, "用户已切换");
                                         Toast.show("用户已切换");
+                                        execHandler();   // ⬅️ 增加
                                         return;
                                     }
                                     //                                    UserMap.initUser(targetUid);
