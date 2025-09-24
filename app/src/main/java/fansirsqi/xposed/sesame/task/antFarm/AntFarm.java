@@ -52,7 +52,6 @@ import fansirsqi.xposed.sesame.util.maps.ParadiseCoinBenefitIdMap;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.ResChecker;
-import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -257,7 +256,7 @@ public class AntFarm extends ModelTask {
         modelFields.addField(harvestProduce = new BooleanModelField("harvestProduce", "收获爱心鸡蛋", false));
         modelFields.addField(kitchen = new PriorityModelField("kitchen", "小鸡厨房", priorityType.PRIORITY_2, priorityType.nickNames));
         modelFields.addField(chickenDiary = new PriorityModelField("chickenDiary", "小鸡日记", priorityType.PRIORITY_2, priorityType.nickNames));
-        modelFields.addField(diaryTietie = new BooleanModelField("diaryTietie", "小鸡日记 | 贴贴", false));
+        modelFields.addField(diaryTietie = new BooleanModelField("diaryTietze", "小鸡日记 | 贴贴", false));
         modelFields.addField(collectChickenDiary = new ChoiceModelField("collectChickenDiary", "小鸡日记 | 点赞", collectChickenDiaryType.ONCE, collectChickenDiaryType.nickNames));
         modelFields.addField(enableChouchoule = new PriorityModelField("enableChouchoule", "开启小鸡抽抽乐", priorityType.PRIORITY_2, priorityType.nickNames));
         modelFields.addField(listOrnaments = new BooleanModelField("listOrnaments", "小鸡每日换装", false));
@@ -732,7 +731,7 @@ public class AntFarm extends ModelTask {
 
         // 2. 使用加饭卡（仅当正在吃饭且开启配置）
         if (useBigEaterTool.getValue() && AnimalFeedStatus.EATING.name().equals(ownerAnimal.animalFeedStatus)) {
-            boolean result = useFarmTool(ownerFarmId, AntFarm.ToolType.BIG_EATER_TOOL);
+            boolean result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL);
             if (result) {
                 Log.farm("使用道具🎭[加饭卡]！");
                 GlobalThreadPools.sleepCompat(1000);
@@ -1202,7 +1201,7 @@ public class AntFarm extends ModelTask {
                 if (!cacheHit) {
                     for (int i = 0; i < labels.length(); i++) {
                         String option = labels.getString(i);
-                        if (option.contains(cachedAnswer) || cachedAnswer.contains(option)) {
+                        if (option.contains(Objects.requireNonNull(cachedAnswer)) || cachedAnswer.contains(option)) {
                             answer = option;
                             cacheHit = true;
                             Log.farm("⚠️ 缓存模糊匹配成功：" + cachedAnswer + " → " + option);
@@ -2155,7 +2154,7 @@ public class AntFarm extends ModelTask {
      *
      * @param queryDayStr 日期，格式：yyyy-MM-dd
      */
-    private void diaryTietie(String queryDayStr) {
+    private void diaryTietze(String queryDayStr) {
         String diaryDateStr;
         try {
             JSONObject jo = new JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr));
@@ -2208,8 +2207,6 @@ public class AntFarm extends ModelTask {
     /**
      * 点赞小鸡日记
      *
-     * @param queryDayStr
-     * @return
      */
     private String collectChickenDiary(String queryDayStr) {
         String diaryDateStr = null;
@@ -2276,7 +2273,7 @@ public class AntFarm extends ModelTask {
     private void doChickenDiary() {
 
         if (diaryTietie.getValue()) { // 贴贴小鸡
-            diaryTietie("");
+            diaryTietze("");
         }
 
         // 小鸡日记点赞
@@ -2377,14 +2374,10 @@ public class AntFarm extends ModelTask {
                     String taskId = "HIRE|" + joo.getString("animalId");
                     long beHiredEndTime = joo.getLong("beHiredEndTime");
                     if (!hasChildTask(taskId)) {
-                        addChildTask(new ChildModelTask(taskId, "HIRE", () -> {
-                            hireAnimal();
-                        }, beHiredEndTime));
+                        addChildTask(new ChildModelTask(taskId, "HIRE", this::hireAnimal, beHiredEndTime));
                         Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行");
                     } else {
-                        addChildTask(new ChildModelTask(taskId, "HIRE", () -> {
-                            hireAnimal();
-                        }, beHiredEndTime));
+                        addChildTask(new ChildModelTask(taskId, "HIRE", this::hireAnimal, beHiredEndTime));
                     }
                 }
             }
@@ -2464,9 +2457,7 @@ public class AntFarm extends ModelTask {
                                 JSONObject joo = newAnimals.getJSONObject(ii);
                                 if (Objects.equals(joo.getString("animalId"), animalId)) {
                                     long beHiredEndTime = joo.getLong("beHiredEndTime");
-                                    addChildTask(new ChildModelTask("HIRE|" + animalId, "HIRE", () -> {
-                                        hireAnimal();
-                                    }, beHiredEndTime));
+                                    addChildTask(new ChildModelTask("HIRE|" + animalId, "HIRE", this::hireAnimal, beHiredEndTime));
                                     Log.record(TAG, "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行");
                                     break;
                                 }
@@ -3213,7 +3204,6 @@ public class AntFarm extends ModelTask {
     /**
      * 点击领取活动食物
      *
-     * @param gift
      */
     private void clickForGiftV2(JSONObject gift) {
         if (gift == null) return;

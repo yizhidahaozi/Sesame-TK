@@ -112,7 +112,7 @@ public class Config {
      */
     public static Boolean isModify(String userId) {
         String json = null;
-        java.io.File configV2File;
+        File configV2File;
         if (StringUtil.isEmpty(userId)) {
             configV2File = Files.getDefaultConfigV2File();
         } else {

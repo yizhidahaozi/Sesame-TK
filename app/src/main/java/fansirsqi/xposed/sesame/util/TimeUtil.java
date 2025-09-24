@@ -245,7 +245,7 @@ public class TimeUtil {
      * 协程兼容的延迟方法
      */
     public static void sleepCompat(long millis) {
-        fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(millis);
+        CoroutineUtils.sleepCompat(millis);
     }
 
     /**

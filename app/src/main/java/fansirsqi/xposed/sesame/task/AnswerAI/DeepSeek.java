@@ -130,7 +130,7 @@ public class DeepSeek implements AnswerAIInterface {
                 JSONObject jsonObject = new JSONObject(jsonResponse);
                 result = getValueByPath(jsonObject, JSON_PATH);
             }
-        } catch (IOException | org.json.JSONException e) {
+        } catch (IOException | JSONException e) {
             Log.printStackTrace(TAG, e);
         }
         return result;

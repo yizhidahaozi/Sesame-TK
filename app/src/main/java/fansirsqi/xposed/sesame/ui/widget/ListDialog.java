@@ -82,7 +82,7 @@ public class ListDialog {
     public static void show(Context c, CharSequence title, List<? extends MapperEntity> bl, SelectModelFieldFunc selectModelFieldFunc, Boolean hasCount, ListType listType) {
         ListDialog.selectModelFieldFunc = selectModelFieldFunc;
         ListDialog.hasCount = hasCount;
-        fansirsqi.xposed.sesame.ui.widget.ListAdapter la = ListAdapter.getClear(c, listType);
+        ListAdapter la = ListAdapter.getClear(c, listType);
         la.setBaseList(bl);
         la.setSelectedList(selectModelFieldFunc);
         showListDialog(c, title);
