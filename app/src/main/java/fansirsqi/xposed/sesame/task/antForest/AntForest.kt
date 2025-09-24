@@ -2064,7 +2064,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             "好友排行榜",
             { AntForestRpcCall.queryFriendsEnergyRanking() },
             "totalDatas",
-            "",
+            "普通好友",
             null
         )
     }
