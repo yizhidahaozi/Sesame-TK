@@ -1590,7 +1590,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return userHomeObj
             }
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
-            val isSelf = userId == selfId
+            val isSelf = userId == UserMap.getCurrentUid()
 
             // 自己的能量不受缓存限制，好友的能量检查缓存避免重复处理
             if (!isSelf && cacheCollectedMap.containsKey(userId)) {
@@ -1615,7 +1615,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
                     hasProtection = true
-                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取")
+                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取 状态判断:$isSelf $userId == $selfId")
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
                     hasProtection = true
