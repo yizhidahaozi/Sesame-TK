@@ -1590,7 +1590,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return userHomeObj
             }
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
-            val isSelf = userId == UserMap.getCurrentUid()
+            val isSelf = userId == UserMap.currentUid
 
             // 自己的能量不受缓存限制，好友的能量检查缓存避免重复处理
             if (!isSelf && cacheCollectedMap.containsKey(userId)) {
