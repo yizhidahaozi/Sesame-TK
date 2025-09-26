@@ -2,6 +2,8 @@ name: 📦构建027魔改版本
 run-name: 📦 ${{ github.actor }} @ 构建027魔改版本
 
 on:
+  pull_request:
+    branches: ["n"]
   workflow_dispatch:
 
 jobs:
@@ -9,43 +11,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 设置时区为亚洲/上海
+      - name: Set Timezone to Asia/Shanghai
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
+          echo "Current time: $(date)"
 
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: n  # ⬅️指定分支名称
 
-      - name: 设置 Git 短 SHA
-        id: set_sha
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-
-      - name: 设置 JDK
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
           cache: gradle
 
-      - name: 设置 Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
           gradle-version: wrapper
 
-      - name: 授予 gradlew 执行权限
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: 使用 Gradle 构建
+      - name: Build with Gradle
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
 
-      - name: 定位 APK 文件并设置输出
+      - name: Locate APKs and Set Outputs
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
@@ -53,13 +49,13 @@ jobs:
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
-      - name: 复制 APK 文件到暂存目录用于签名
+      - name: Copy APKs to staging for signing
         run: |
           mkdir -p app/build/outputs/apk/all
           cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
           cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
 
-      - name: 签名 APK 文件
+      - name: Sign APKs
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
@@ -70,7 +66,7 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: 提取已签名 APK 路径
+      - name: Extract Signed APK Paths
         id: extract_apks
         run: |
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
@@ -82,144 +78,57 @@ jobs:
             fi
           done
 
-      - name: 上传 APK - 兼容版
+      - name: Upload APK - Compatible
         uses: actions/upload-artifact@v4
         with:
           name: apk-compatible
           path: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: 上传 APK - 标准版
+      - name: Upload APK - Normal
         uses: actions/upload-artifact@v4
         with:
           name: apk-normal
           path: ${{ steps.extract_apks.outputs.signed_normal }}
 
-      - name: 提取文件信息
+      - name: Extract file names
         id: extract_info
         run: |
           normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
           compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          
-          # 提取版本号
+          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
           version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(v[^-]+).*-signed\.apk/\2/')
           echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
           echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
-          
-          # 获取提交信息（兼容手动触发）
-          if [ -n "${{ github.event.head_commit.message }}" ]; then
-            COMMIT_MSG="${{ github.event.head_commit.message }}"
-            COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
-            COMMIT_URL="${{ github.event.head_commit.url }}"
-          else
-            COMMIT_MSG=$(git log -1 --pretty=%B)
-            COMMIT_AUTHOR=$(git log -1 --pretty=%an)
-            COMMIT_URL="https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)"
-          fi
-          
-          # 使用正确的多行输出格式
-          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "commit_author=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
-          echo "commit_url=$COMMIT_URL" >> $GITHUB_OUTPUT
 
-      - name: 生成 APK 校验和
+      - name: Generate APKS Checksum
         run: |
-          sha256sum "${{ steps.extract_apks.outputs.signed_normal }}" > "CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}-${{ env.SHORT_SHA }}-signed.apk.sha256"
-          sha256sum "${{ steps.extract_apks.outputs.signed_compatible }}" > "CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}-${{ env.SHORT_SHA }}-signed.apk.sha256"
+          sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      - name: 根据版本创建标签（仅当未存在时）
-        env:
-          VERSION_TAG: "魔改版-${{ steps.extract_info.outputs.version }}"
+      - name: Create Tag from Version
+        if: startsWith(github.ref, 'refs/heads/n') && github.event_name == 'push'
         run: |
-          echo "尝试创建标签: $VERSION_TAG"
-          # 检查远程是否已有该 tag，避免冲突
-          if git ls-remote --tags origin "$VERSION_TAG" | grep -q "$VERSION_TAG"; then
-            echo "Tag $VERSION_TAG 已存在，跳过创建。"
-          else
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git tag "$VERSION_TAG"
-            git push origin "$VERSION_TAG"
-            echo "✅ 标签 $VERSION_TAG 创建成功！"
-          fi
+          VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
+          echo "Creating tag: $VERSION_TAG"
+          git tag "$VERSION_TAG"
+          git push origin "$VERSION_TAG"
 
-      - name: 发布到 Telegram 频道
+      - name: Post to channel
+        if: github.ref == 'refs/heads/n'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
+          COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
+          COMMIT_MESSAGE: |+
+            🚀 027魔改版本构建完成！
+            ```
+            ${{ github.event.head_commit.message }}
+            ```by `${{ github.event.head_commit.author.name }}`
+            See commit detail [here](${{ github.event.head_commit.url }})
         run: |
-          # 读取步骤输出变量
-          NORMAL_FILE="${{ steps.extract_apks.outputs.signed_normal }}"
-          COMPATIBLE_FILE="${{ steps.extract_apks.outputs.signed_compatible }}"
-          VERSION="${{ steps.extract_info.outputs.version }}"
-          COMMIT_MSG="${{ steps.extract_info.outputs.commit_msg }}"
-          COMMIT_AUTHOR="${{ steps.extract_info.outputs.commit_author }}"
-          COMMIT_URL="${{ steps.extract_info.outputs.commit_url }}"
-          
-          # 准备提交消息（单行格式，避免换行问题）
-          COMMIT_MESSAGE="🚀 魔改版本构建完成！\n**版本**: $VERSION\n**提交信息**:\n\`\`\`\n$COMMIT_MSG\n\`\`\`\n**作者**: \`$COMMIT_AUTHOR\`\n**查看提交**: [点击这里]($COMMIT_URL)\n**构建时间**: $(date +'%Y-%m-%d %H:%M:%S') (UTC+8)"
-          
-          # 转义消息内容
-          ESCAPED_MSG=$(python3 -c "
-          import json, urllib.parse
-          msg = '''$COMMIT_MESSAGE'''
-          # 替换换行符为实际换行
-          msg = msg.replace('\\\\n', '\n')
-          print(urllib.parse.quote(json.dumps(msg)))
-          ")
-          
-          echo "正在发送到 Telegram..."
-          echo "Normal文件: $NORMAL_FILE"
-          echo "Compatible文件: $COMPATIBLE_FILE"
-          
-          # 发送到 Telegram（使用更简单的格式）
-          curl -f -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
-            -F "chat_id=${CHANNEL_ID}" \
-            -F "media=[{\"type\":\"document\", \"media\":\"attach://normal.apk\", \"parse_mode\":\"MarkdownV2\", \"caption\":$(echo \$ESCAPED_MSG)}, {\"type\":\"document\", \"media\":\"attach://compatible.apk\"}]" \
+          ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
+          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Telegram 发送成功！"
-          else
-            echo "❌ Telegram 发送失败"
-            # 尝试备用方法：分别发送两个文件
-            echo "尝试备用发送方法..."
-            curl -f -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-              -F "chat_id=${CHANNEL_ID}" \
-              -F "document=@${NORMAL_FILE}" \
-              -F "caption=🚀 魔改版 Normal - ${VERSION}" \
-              -F "parse_mode=MarkdownV2"
-              
-            curl -f -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-              -F "chat_id=${CHANNEL_ID}" \
-              -F "document=@${COMPATIBLE_FILE}" \
-              -F "caption=🔄 魔改版 Compatible - ${VERSION}" \
-              -F "parse_mode=MarkdownV2"
-          fi
-          
- ##     - name: 上传资源到源代码发布
-   ##     uses: softprops/action-gh-release@v2
-     ##   with:
-       ##   name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
-         ## files: |
-           ## ${{ steps.extract_apks.outputs.signed_compatible }}
-##            ${{ steps.extract_apks.outputs.signed_normal }}
-##            CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-##            CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-##          tag_name: ${{ steps.extract_info.outputs.version}}
-##          draft: false
-##          append_body: true
-##          generate_release_notes: true
-##          body: |
-##            ## ✨魔改版更新内容
-##
-##            ${{ steps.commit_details.outputs.COMMIT_MESSAGE_BODY }}
-##            > ## 下载说明
-##              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-##              * Compatible 为兼容版本,适用于`Android 7.0`及以下的系统,最低支持`Android 5.1`
-##
-##            > ~~墙内不再更新~~ 倒卖必死全家
-##
