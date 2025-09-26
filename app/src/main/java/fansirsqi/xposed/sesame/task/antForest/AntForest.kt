@@ -1615,7 +1615,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
                     hasProtection = true
-                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取 状态判断:$isSelf $userId == $selfId")
+                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取 状态判断:${isSelf} ${userId} == ${UserMap.currentUid}")
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
                     hasProtection = true

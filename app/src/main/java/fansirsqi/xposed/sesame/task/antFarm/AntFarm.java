@@ -2448,6 +2448,11 @@ public class AntFarm extends ModelTask {
                 for (int i = 0, len = animals.length(); i < len; i++) {
                     JSONObject animal = animals.getJSONObject(i);
                     if (Objects.equals(animal.getJSONObject("masterUserInfoVO").getString("userId"), userId)) {
+                        JSONObject animalStatusVo = animal.getJSONObject("animalStatusVO");
+                        if (!AnimalInteractStatus.HOME.name().equals(animalStatusVo.getString("animalInteractStatus"))) {
+                            Log.record(UserMap.getMaskName(userId) + "的小鸡不在家");
+                            return false;
+                        }
                         String animalId = animal.getString("animalId");
                         jo = new JSONObject(AntFarmRpcCall.hireAnimal(farmId, animalId));
                         if (ResChecker.checkRes(TAG, jo)) {

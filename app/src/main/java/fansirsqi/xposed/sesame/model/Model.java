@@ -109,11 +109,7 @@ public abstract class Model {
                 String modelCode = modelConfig.getCode();
                 modelConfigMap.put(modelCode, modelConfig);
                 ModelGroup group = modelConfig.getGroup();
-                Map<String, ModelConfig> modelConfigMap = groupModelConfigMap.get(group);
-                if (modelConfigMap == null) {
-                    modelConfigMap = new LinkedHashMap<>();
-                    groupModelConfigMap.put(group, modelConfigMap);
-                }
+                Map<String, ModelConfig> modelConfigMap = groupModelConfigMap.computeIfAbsent(group, k -> new LinkedHashMap<>());
                 modelConfigMap.put(modelCode, modelConfig);
             } catch (IllegalAccessException | InstantiationException | NoSuchMethodException |
                      InvocationTargetException e) {
