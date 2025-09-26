@@ -1482,20 +1482,12 @@ public class AntFarm extends ModelTask {
                                     break;
                                 }
                             }
-
                             JSONObject receiveTaskAwardjo = new JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId));
                             if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount);
                                 Log.farm("庄园奖励[" + taskTitle + "]#" + awardCount + "g");
                                 doubleCheck = true;
                                 if (unreceiveTaskAward > 0) unreceiveTaskAward--;
-                            } else {
-                                // 检查是否是饲料槽已满的错误
-                                if ("331".equals(receiveTaskAwardjo.optString("resultCode", ""))) {
-                                    isFeedFull = true;
-                                    Log.record(TAG, "检测到饲料槽已满，停止领取任务奖励: " + receiveTaskAwardjo.optString("memo", ""));
-                                    break;
-                                }
                             }
                         }
                         GlobalThreadPools.sleepCompat(1000);
