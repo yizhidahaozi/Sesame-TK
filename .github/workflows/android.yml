@@ -103,16 +103,23 @@ jobs:
           sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
           sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      - name: 根据版本创建标签
-        if: startsWith(github.ref, 'refs/heads/main') && github.event_name == 'push'
+      - name: 根据版本创建标签（仅当未存在时）
+        env:
+          VERSION_TAG: "v${{ steps.extract_info.outputs.version }}"
         run: |
-          VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
-          echo "创建标签: $VERSION_TAG"
-          git tag "$VERSION_TAG"
-          git push origin "$VERSION_TAG"
+          echo "尝试创建标签: $VERSION_TAG"
+          # 检查远程是否已有该 tag，避免冲突
+          if git ls-remote --tags origin "$VERSION_TAG" | grep -q "$VERSION_TAG"; then
+            echo "Tag $VERSION_TAG 已存在，跳过创建。"
+          else
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "$VERSION_TAG"
+            git push origin "$VERSION_TAG"
+            echo "✅ 标签 $VERSION_TAG 创建成功！"
+          fi
 
       - name: 发布到频道
-        if: github.ref == 'refs/heads/main'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -129,6 +136,7 @@ jobs:
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
+
 
       - name: 上传资源到源代码发布
         uses: softprops/action-gh-release@v2

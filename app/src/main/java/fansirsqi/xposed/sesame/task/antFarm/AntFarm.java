@@ -72,8 +72,8 @@ public class AntFarm extends ModelTask {
     /**
      * 小鸡饲料g
      */
-    private int foodStock;
-    private int foodStockLimit;
+    public static int foodStock;
+    public static  int foodStockLimit;
     private String rewardProductNum;
     private RewardFriend[] rewardList;
     /**
@@ -1467,10 +1467,6 @@ public class AntFarm extends ModelTask {
 
                     for (int i = 0; i < farmTaskList.length(); i++) {
                         // 如果饲料槽已满，跳过后续任务的领取
-                        if (isFeedFull) {
-                            break;
-                        }
-
                         JSONObject task = farmTaskList.getJSONObject(i);
                         String taskStatus = task.getString("taskStatus");
                         String taskTitle = task.optString("title", "未知任务");
@@ -1482,26 +1478,16 @@ public class AntFarm extends ModelTask {
                                 if (awardCount + foodStock > foodStockLimit) {
                                     unreceiveTaskAward++;
                                     Log.record(TAG, taskTitle + "领取" + awardCount + "g饲料后将超过[" + foodStockLimit + "g]上限!终止领取");
+                                    isFeedFull = true;
                                     break;
                                 }
                             }
-
                             JSONObject receiveTaskAwardjo = new JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId));
-
                             if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount);
                                 Log.farm("庄园奖励[" + taskTitle + "]#" + awardCount + "g");
                                 doubleCheck = true;
                                 if (unreceiveTaskAward > 0) unreceiveTaskAward--;
-                            } else {
-                                // 检查是否是饲料槽已满的错误
-                                String resultCode = receiveTaskAwardjo.optString("resultCode", "");
-                                String memo = receiveTaskAwardjo.optString("memo", "");
-                                if ("331".equals(resultCode)) {
-                                    isFeedFull = true;
-                                    Log.record(TAG, "检测到饲料槽已满，停止领取任务奖励: " + memo);
-                                    break;
-                                }
                             }
                         }
                         GlobalThreadPools.sleepCompat(1000);
@@ -2736,11 +2722,40 @@ public class AntFarm extends ModelTask {
         WORK     // 工作：小鸡被雇佣去工作
     }
 
+    /**
+     * 道具类型枚举
+     * STEALTOOL：蹭饭卡
+     * ACCELERATETOOL：加速卡
+     * SHARETOOL：救济卡
+     * FENCETOOL：篱笆卡
+     * NEWEGGTOOL：新蛋卡
+     * DOLLTOOL：公仔补签卡
+     * ORDINARY_ORNAMENT_TOOL：普通装扮补签卡
+     * ADVANCE_ORNAMENT_TOOL：高级装扮补签卡
+     * BIG_EATER_TOOL：加饭卡
+     * RARE_ORNAMENT_TOOL：稀有装扮补签卡
+     */
     public enum ToolType {
-        STEALTOOL, ACCELERATETOOL, SHARETOOL, FENCETOOL, NEWEGGTOOL, DOLLTOOL, ORDINARY_ORNAMENT_TOOL, ADVANCE_ORNAMENT_TOOL, BIG_EATER_TOOL,RARE_ORNAMENT_TOOL;
+        STEALTOOL,              // 蹭饭卡
+        ACCELERATETOOL,         // 加速卡
+        SHARETOOL,              // 救济卡
+        FENCETOOL,              // 篱笆卡
+        NEWEGGTOOL,             // 新蛋卡
+        DOLLTOOL,               // 公仔补签卡
+        ORDINARY_ORNAMENT_TOOL, // 普通装扮补签卡
+        ADVANCE_ORNAMENT_TOOL,  // 高级装扮补签卡
+        BIG_EATER_TOOL,         // 加饭卡
+        RARE_ORNAMENT_TOOL;     // 稀有装扮补签卡
 
-        public static final CharSequence[] nickNames = {"蹭饭卡", "加速卡", "救济卡", "篱笆卡", "新蛋卡", "公仔补签卡", "普通装扮补签卡", "高级装扮补签卡", "加饭卡", "稀有装扮补签卡"};
+        // 道具类型对应的中文名称
+        public static final CharSequence[] nickNames = {
+            "蹭饭卡", "加速卡", "救济卡", "篱笆卡", "新蛋卡", "公仔补签卡", "普通装扮补签卡", "高级装扮补签卡", "加饭卡", "稀有装扮补签卡"
+        };
 
+        /**
+         * 获取道具类型的中文名称
+         * @return 对应的中文名称
+         */
         public CharSequence nickName() {
             return nickNames[ordinal()];
         }

@@ -341,7 +341,7 @@ public class AntMember extends ModelTask {
         return;
       }
 
-      Log.record(TAG, "芝麻信用💳[查询任务响应]#" + s);
+     // Log.record(TAG, "芝麻信用💳[查询任务响应]#" + s);
 
       JSONObject taskObj = jo.getJSONObject("data");
       int totalTasks = 0;
