@@ -26,6 +26,8 @@ public class ChouChouLe {
         String innerAction;
         int rightsTimes;
         int rightsTimesLimit;
+        String awardType;
+        int awardCount;
 
         int getRemainingTimes() {
             return Math.max(0, rightsTimesLimit - rightsTimes);
@@ -78,6 +80,10 @@ public class ChouChouLe {
                 List<TaskInfo> tasks = parseTasks(farmTaskList);
                 for (TaskInfo task : tasks) {
                     if (TaskStatus.FINISHED.name().equals(task.taskStatus)) {
+                        if (task.awardType.equals("ALLPURPOSE") && task.awardCount + AntFarm.foodStock > AntFarm.foodStockLimit) {
+                            Log.record(TAG, "抽抽乐任务[" + task.title + "]的奖励领取后会使饲料超出上限，暂不领取");
+                            continue;
+                        }
                         if (receiveTaskAward(drawType, task.taskId)) {//领取奖励
                             GlobalThreadPools.sleepCompat(5 * 1000L);
                             doubleCheck = true;
@@ -113,6 +119,8 @@ public class ChouChouLe {
             info.innerAction = item.optString("innerAction");
             info.rightsTimes = item.optInt("rightsTimes", 0);
             info.rightsTimesLimit = item.optInt("rightsTimesLimit", 0);
+            info.awardType = item.optString("awardType");
+            info.awardCount = item.optInt("awardCount", 0);
             list.add(info);
         }
         return list;
@@ -125,7 +133,7 @@ public class ChouChouLe {
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm((drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐") + "🧾️[任务: " + task.title + "]");
                 if(task.title.equals("消耗饲料换机会")) {
-                    GlobalThreadPools.sleepCompat(1 * 1000L);
+                    GlobalThreadPools.sleepCompat(1000L);
                 } else {
                     GlobalThreadPools.sleepCompat(5 * 1000L);
                 }
