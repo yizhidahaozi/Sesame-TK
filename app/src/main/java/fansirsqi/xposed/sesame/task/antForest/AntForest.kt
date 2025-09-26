@@ -955,7 +955,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // -------------------------------
             // 先尝试使用找能量功能快速定位有能量的好友（异步）
             Log.runtime(TAG, "🚀 同步执行找能量功能")
-            this.collectEnergyByTakeLook()
+             collectEnergyByTakeLook()
             tc.countDebug("找能量收取（同步）")
 
             // 然后执行传统的好友排行榜收取（异步）
@@ -1961,10 +1961,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val takeLookResponse: String?
                 try {
                     takeLookResponse = AntForestRpcCall.takeLook(skipUsers)
-                } catch (e: NullPointerException) {
-                    Log.error(TAG, "找异常，等待5秒后重试")
-                    Log.printStackTrace(TAG, "collectEnergyByTakeLook takeLook", e)
-                    GlobalThreadPools.sleepCompat(5000L)
+                } catch (_: NullPointerException) {
+                   this.collectEnergyByTakeLook()
                     continue
                 }
                 if (takeLookResponse.isEmpty()) {
