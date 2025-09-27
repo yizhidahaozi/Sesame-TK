@@ -1,47 +1,49 @@
-name: 📦 构建 0.2.7 魔改版本
-run-name: 📦 ${{ github.actor }} @ 构建 0.2.7 魔改版本
+name: 📦构建027魔改版本
+run-name: 📦 ${{ github.actor }} @ 构建027魔改版本
 
 on:
-  workflow_dispatch:
   push:
     branches: ["n"]
   pull_request:
     branches: ["n"]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 设置时区
+      - name: Set Timezone to Asia/Shanghai
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
+          echo "Current time: $(date)"
 
-      - name: Checkout 仓库
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}  # 支持 PR/Push
 
-      - name: 设置 JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "zulu"
           cache: gradle
 
-      - name: 设置 Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
+          cache-read-only: false
           gradle-version: wrapper
 
-      - name: 授权 gradlew
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: 🛠️ 编译 APK
+      - name: Build with Gradle
         run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
 
-      - name: 📦 查找 APK
+      - name: Locate APKs and Set Outputs
         id: locate_apks
         run: |
           normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
@@ -49,7 +51,13 @@ jobs:
           echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
           echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
 
-      - name: 🔐 签名 APK
+      - name: Copy APKs to staging for signing
+        run: |
+          mkdir -p app/build/outputs/apk/all
+          cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
+          cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
+
+      - name: Sign APKs
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
@@ -60,7 +68,7 @@ jobs:
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
           buildToolsVersion: 36.0.0
 
-      - name: 📁 提取签名 APK 路径
+      - name: Extract Signed APK Paths
         id: extract_apks
         run: |
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
@@ -72,84 +80,58 @@ jobs:
             fi
           done
 
-      - name: 📥 上传构建产物
+      - name: Upload APK - Compatible
         uses: actions/upload-artifact@v4
         with:
-          name: apk-signed
-          path: |
-            ${{ steps.extract_apks.outputs.signed_normal }}
-            ${{ steps.extract_apks.outputs.signed_compatible }}
+          name: apk-compatible
+          path: ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: 📜 提取版本号
+      - name: Upload APK - Normal
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-normal
+          path: ${{ steps.extract_apks.outputs.signed_normal }}
+
+      - name: Extract file names
         id: extract_info
         run: |
-          filename=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
-          version=$(echo "$filename" | sed -E 's/.*-Normal-(.*)-signed\.apk/\1/')
+          normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
+          compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
+          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
+          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(v[^-]+).*-signed\.apk/\2/')
+          echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
+          echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: 📊 获取提交日志
-        id: commit_details
+      - name: Generate APKS Checksum
         run: |
-          # 获取提交日志并去除特殊符号（括号、尖括号、换行符等）及空行
-          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g' | sed '/^$/d' | sed 's/[[:space:]]*$//g')
-          
-          # 输出处理后的消息
-          echo "COMMITS=$MSG" >> $GITHUB_OUTPUT
+          sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
 
-      # 📨 发送 Telegram 消息
-      - name: 📢 发送构建消息到 Telegram
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TG_CHAT_ID }}
-          token: ${{ secrets.TG_BOT_TOKEN }}
-          message: |
-            📦 *Sesame 0.2.7 魔改版本已构建完成！*
+      - name: Create Tag from Version
+        if: startsWith(github.ref, 'refs/heads/n') && github.event_name == 'push'
+        run: |
+          VERSION_TAG="v${{ steps.extract_info.outputs.version }}"
+          echo "Creating tag: $VERSION_TAG"
+          git tag "$VERSION_TAG"
+          git push origin "$VERSION_TAG"
 
-            🔖 版本号: `${{ steps.extract_info.outputs.version }}`
-            🛠 分支: `${{ github.ref_name }}`
-            👤 构建者: `${{ github.actor }}`
-
-            📜 更新内容:
-            ${{ steps.commit_details.outputs.COMMITS }}
-
-            📥 下载说明:
-            - 📱 *Normal*: 适用于 Android 8.0 及以上
-            - 📲 *Compatible*: 适用于 Android 5.1 ~ 7.0
-
-          format: markdown
-
-      - name: 📤 发送 APK - Normal
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TG_CHAT_ID }}
-          token: ${{ secrets.TG_BOT_TOKEN }}
-          document: ${{ steps.extract_apks.outputs.signed_normal }}
-
-      - name: 📤 发送 APK - Compatible
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TG_CHAT_ID }}
-          token: ${{ secrets.TG_BOT_TOKEN }}
-          document: ${{ steps.extract_apks.outputs.signed_compatible }}
-
-      # 📦 发布到 GitHub Release
-      - name: 📦 发布 Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.extract_info.outputs.version }}
-          name: "📦 Sesame 0.2.7 魔改版 - v${{ steps.extract_info.outputs.version }}"
-          draft: false
-          prerelease: false
-          generate_release_notes: false
-          files: |
-            ${{ steps.extract_apks.outputs.signed_normal }}
-            ${{ steps.extract_apks.outputs.signed_compatible }}
-          body: |
-            ## ✨ 更新内容
-            ${{ steps.commit_details.outputs.COMMITS }}
-
-            ## 📥 下载说明
-            - 📱 **Normal**：适用于 Android 8.0+
-            - 📲 **Compatible**：适用于 Android 5.1 ~ 7.0
-
-            🚨 *墙内不再更新，倒卖必死全家*
+      - name: Post to channel
+        if: github.ref == 'refs/heads/n'
+        env:
+          CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
+          COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
+          COMMIT_MESSAGE: |+
+            🚀 027魔改版本构建完成！
+            ```
+            ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
+            ```by `${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}`
+            配置文件： `https://t.me/fansirsqi_xposed_sesame/41125`
+            See commit detail [here](${{ github.event.head_commit.url }})
+        run: |
+          ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
+          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
+            -F "normal.apk=@${NORMAL_FILE}" \
+            -F "compatible.apk=@${COMPATIBLE_FILE}"
