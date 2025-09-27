@@ -91,7 +91,7 @@ jobs:
         id: commit_details
         run: |
           # 获取提交日志，并去除特殊符号（如括号、尖括号、换行符等）
-          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g')
+          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g' | sed '/^$/d')
           
           # 输出处理后的消息
           echo "COMMITS=$MSG" >> $GITHUB_OUTPUT
