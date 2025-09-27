@@ -2,11 +2,11 @@ name: 📦 构建 0.2.7 魔改版本
 run-name: 📦 ${{ github.actor }} @ 构建 0.2.7 魔改版本
 
 on:
+  workflow_dispatch:
   push:
     branches: ["n"]
   pull_request:
     branches: ["n"]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -53,7 +53,7 @@ jobs:
         id: sign_apks
         uses: ilharp/sign-android-release@v2
         with:
-          releaseDir: app/build/outputs/apk
+          releaseDir: app/build/outputs/apk/all
           signingKey: ${{ secrets.ANDROID_SIGNING_KEY }}
           keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -72,7 +72,7 @@ jobs:
             fi
           done
 
-      - name: 📤 上传构建产物 (Artifact)
+      - name: 📥 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: apk-signed
@@ -80,7 +80,7 @@ jobs:
             ${{ steps.extract_apks.outputs.signed_normal }}
             ${{ steps.extract_apks.outputs.signed_compatible }}
 
-      - name: 📜 获取版本号
+      - name: 📜 提取版本号
         id: extract_info
         run: |
           filename=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
@@ -90,13 +90,13 @@ jobs:
       - name: 📊 获取提交日志
         id: commit_details
         run: |
-          # 获取提交日志，并去除特殊符号（如括号、尖括号、换行符等）
-          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g' | sed '/^$/d')
+          # 获取提交日志并去除特殊符号（括号、尖括号、换行符等）及空行
+          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g' | sed '/^$/d' | sed 's/[[:space:]]*$//g')
           
           # 输出处理后的消息
           echo "COMMITS=$MSG" >> $GITHUB_OUTPUT
 
-      # 📨 发送 Telegram 消息（更美观）
+      # 📨 发送 Telegram 消息
       - name: 📢 发送构建消息到 Telegram
         uses: appleboy/telegram-action@master
         with:
@@ -104,7 +104,7 @@ jobs:
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             📦 *Sesame 0.2.7 魔改版本已构建完成！*
-            
+
             🔖 版本号: `${{ steps.extract_info.outputs.version }}`
             🛠 分支: `${{ github.ref_name }}`
             👤 构建者: `${{ github.actor }}`
