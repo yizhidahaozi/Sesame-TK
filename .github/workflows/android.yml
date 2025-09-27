@@ -128,7 +128,7 @@ jobs:
             ```
             ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
             ```by `${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}`
-            配置文件： `https://t.me/fansirsqi_xposed_sesame/41125`
+            配置文件： `https://t.me/Sesame_TK_Channel/306`
             See commit detail [here](${{ github.event.head_commit.url }})
         run: |
           ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
