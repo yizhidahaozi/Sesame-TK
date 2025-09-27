@@ -70,7 +70,7 @@ class MainActivity : BaseActivity() {
             finish() // 如果权限未获取，终止当前 Activity
             return
         }
-        clearLogsOnStart()
+        //clearLogsOnStart()
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)

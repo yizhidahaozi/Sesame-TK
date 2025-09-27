@@ -139,6 +139,7 @@ public class ForestChouChouLe {
 
                 JSONObject drawAsset = jo.getJSONObject("drawAsset");
                 int blance = drawAsset.optInt("blance", 0);
+
                 while (blance > 0) {
                     jo = new JSONObject(AntForestRpcCall.drawopengreen(activityId, sceneCode, source, UserMap.getCurrentUid()));
                     if (ResChecker.checkRes(TAG, jo)) {
