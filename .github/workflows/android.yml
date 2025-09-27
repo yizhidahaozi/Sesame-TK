@@ -90,10 +90,10 @@ jobs:
       - name: 📊 获取提交日志
         id: commit_details
         run: |
-          # 获取提交日志，去掉特殊符号
-          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[()<>]//g')
+          # 获取提交日志，并去除特殊符号（如括号、尖括号、换行符等）
+          MSG=$(git log -5 --pretty=format:"- %s by %an" --no-merges | sed 's/[^a-zA-Z0-9 \-_/\.]//g')
           
-          # 输出结果
+          # 输出处理后的消息
           echo "COMMITS=$MSG" >> $GITHUB_OUTPUT
 
       # 📨 发送 Telegram 消息（更美观）
