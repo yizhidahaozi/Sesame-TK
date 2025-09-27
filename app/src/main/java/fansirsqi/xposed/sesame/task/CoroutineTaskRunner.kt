@@ -109,13 +109,11 @@ class CoroutineTaskRunner(allModels: List<Model>) {
      * 启动任务执行流程（协程版本）
      * 
      * @param isFirst 是否为首次执行（用于重置统计计数器）
-     * @param mode 执行模式（仅支持顺序执行）
-     * @param rounds 执行轮数，默认2轮
+     * @param rounds 执行轮数，默认从BaseModel配置读取
      */
     fun run(
         isFirst: Boolean = true,
-        mode: ModelTask.TaskExecutionMode = ModelTask.TaskExecutionMode.SEQUENTIAL,
-        rounds: Int = 2
+        rounds: Int = BaseModel.taskExecutionRounds.value
     ) {
         runnerScope.launch {
             if (isFirst) {
@@ -125,7 +123,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             val startTime = System.currentTimeMillis()
             
             try {
-                executeTasksWithMode(mode, rounds)
+                executeTasksWithMode(rounds)
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "任务执行异常", e)
             } finally {
@@ -141,7 +139,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
      * 执行任务（仅支持顺序执行）
      */
     private suspend fun executeTasksWithMode(
-        mode: ModelTask.TaskExecutionMode,
         rounds: Int
     ) {
         // 无论传入什么模式，都使用顺序执行
@@ -152,11 +149,14 @@ class CoroutineTaskRunner(allModels: List<Model>) {
      * 顺序执行所有任务
      */
     private suspend fun executeSequentialTasks(rounds: Int) {
+        val configuredRounds = BaseModel.taskExecutionRounds.value
+        Log.record(TAG, "⚙️ 任务执行配置：传入${rounds}轮，BaseModel配置${configuredRounds}轮（用户可在基础设置中调整）")
+        
         for (round in 1..rounds) {
             val roundStartTime = System.currentTimeMillis()
             val enabledTasksInRound = taskList.filter { it.isEnable }
             
-            Log.record(TAG, "🔄 开始顺序执行第${round}轮任务，共${enabledTasksInRound.size}个启用任务")
+            Log.record(TAG, "🔄 开始顺序执行第${round}/${rounds}轮任务，共${enabledTasksInRound.size}个启用任务")
             
             for ((index, task) in enabledTasksInRound.withIndex()) {
                 Log.record(TAG, "📍 第${round}轮任务进度: ${index + 1}/${enabledTasksInRound.size} - ${task.getName()}")
@@ -164,7 +164,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             }
             
             val roundTime = System.currentTimeMillis() - roundStartTime
-            Log.record(TAG, "✅ 第${round}轮任务完成，耗时: ${roundTime}ms")
+            Log.record(TAG, "✅ 第${round}/${rounds}轮任务完成，耗时: ${roundTime}ms")
         }
     }
 
@@ -355,12 +355,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         try {
             task.addRunCents()
             
-            val taskPriority = task.priority
-            if (round < taskPriority) {
-                skippedCount.incrementAndGet()
-                Log.record(TAG, "⏭️ 模块[${taskName}]优先级:${taskPriority} 第${round}轮跳过")
-                return
-            }
+
             
             Log.record(TAG, "🎯 启动模块[${taskName}]第${round}轮执行...")
             
@@ -421,14 +416,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             val isEnabled = task.isEnable
             val isRunning = task.isRunning
             val taskName = task.getName()
-            val priority = task.priority
-            
+
             Log.runtime(TAG, "📊 任务[$taskId]状态信息:")
             Log.runtime(TAG, "  - 任务名称: $taskName")
             Log.runtime(TAG, "  - 是否启用: $isEnabled")
             Log.runtime(TAG, "  - 是否运行中: $isRunning")
-            Log.runtime(TAG, "  - 任务优先级: $priority")
-            
+
             // 尝试获取更多状态信息
             try {
                 val runCents = task.runCents

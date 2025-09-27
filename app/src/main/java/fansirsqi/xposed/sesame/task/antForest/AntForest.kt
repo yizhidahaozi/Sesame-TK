@@ -25,7 +25,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField.ListJoinCommaToStringModelField
-import fansirsqi.xposed.sesame.model.modelFieldExt.PriorityModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
@@ -39,8 +38,6 @@ import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasShield
 import fansirsqi.xposed.sesame.task.antForest.Privilege.studentSignInRedEnvelope
 import fansirsqi.xposed.sesame.task.antForest.Privilege.youthPrivilege
 import fansirsqi.xposed.sesame.ui.ObjReference
-import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Semaphore
 import fansirsqi.xposed.sesame.util.Average
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.ListUtil
@@ -53,6 +50,14 @@ import fansirsqi.xposed.sesame.util.TimeCounter
 import fansirsqi.xposed.sesame.util.TimeFormatter
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -129,7 +134,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private val concurrencyLimiter = Semaphore(20)
 
 
-    private var collectEnergy: PriorityModelField? = null
+    private var collectEnergy: BooleanModelField? = null
     private var pkEnergy: BooleanModelField? = null // PK能量
     private var energyRain: BooleanModelField? = null
     private var advanceTime: IntegerModelField? = null
@@ -140,7 +145,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var batchRobEnergy: BooleanModelField? = null
     private var balanceNetworkDelay: BooleanModelField? = null
     private var closeWhackMole: BooleanModelField? = null
-    private var collectProp: PriorityModelField? = null
+    private var collectProp: BooleanModelField? = null
     private var queryInterval: StringModelField? = null
     private var collectInterval: StringModelField? = null
     private var doubleCollectInterval: StringModelField? = null
@@ -176,23 +181,23 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var returnWater33: IntegerModelField? = null
     private var returnWater18: IntegerModelField? = null
     private var returnWater10: IntegerModelField? = null
-    private var receiveForestTaskAward: PriorityModelField? = null
+    private var receiveForestTaskAward: BooleanModelField? = null
     private var waterFriendList: SelectAndCountModelField? = null
     private var waterFriendCount: IntegerModelField? = null
     private var notifyFriend: BooleanModelField? = null
-    private var vitalityExchange: PriorityModelField? = null
-    private var userPatrol: PriorityModelField? = null
+    private var vitalityExchange: BooleanModelField? = null
+    private var userPatrol: BooleanModelField? = null
     private var collectGiftBox: BooleanModelField? = null
-    private var medicalHealth: PriorityModelField? = null //医疗健康开关
-    private var ForestMarket: PriorityModelField? = null
-    private var combineAnimalPiece: PriorityModelField? = null
-    private var consumeAnimalProp: PriorityModelField? = null
+    private var medicalHealth: BooleanModelField? = null //医疗健康开关
+    private var ForestMarket: BooleanModelField? = null
+    private var combineAnimalPiece: BooleanModelField? = null
+    private var consumeAnimalProp: BooleanModelField? = null
     private var whoYouWantToGiveTo: SelectModelField? = null
     private var dailyCheckIn: BooleanModelField? = null //青春特权签到
     private var bubbleBoostCard: ChoiceModelField? = null //加速卡
     private var youthPrivilege: BooleanModelField? = null //青春特权 森林道具
-    private var ecoLife: PriorityModelField? = null
-    private var giveProp: PriorityModelField? = null
+    private var ecoLife: BooleanModelField? = null
+    private var giveProp: BooleanModelField? = null
 
     private var robExpandCard: ChoiceModelField? = null //1.1倍能量卡
     private val robExpandCardTime: ListModelField? = null //1.1倍能量卡时间
@@ -221,7 +226,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private val skipUsersCache: MutableMap<String?, String?> = ConcurrentHashMap<String?, String?>()
 
-    private var forestChouChouLe: PriorityModelField? = null //森林抽抽乐
+    private var forestChouChouLe: BooleanModelField? = null //森林抽抽乐
 
     /**
      * 加速器定时
@@ -283,11 +288,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "collectEnergy",
                 "收集能量 | 开关",
-                priorityType.CLOSE,
-                priorityType.nickNames
+                false
             ).also { collectEnergy = it })
         modelFields.addField(
             BooleanModelField(
@@ -507,11 +511,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 false
             ).also { notifyFriend = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "giveProp",
                 "赠送道具",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { giveProp = it })
         modelFields.addField(
             SelectModelField(
@@ -522,11 +525,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "所有可赠送的道具将全部赠"
             ).also { whoYouWantToGiveTo = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "collectProp",
                 "收集道具",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { collectProp = it })
         modelFields.addField(
             ChoiceModelField(
@@ -554,11 +556,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             })
         /** lzw add end */
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "vitalityExchange",
                 "活力值 | 兑换开关",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { vitalityExchange = it })
         modelFields.addField(
             SelectAndCountModelField(
@@ -569,40 +570,35 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "兑换次数"
             ).also { vitalityExchangeList = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "userPatrol",
                 "保护地巡护",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { userPatrol = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "combineAnimalPiece",
                 "合成动物碎片",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { combineAnimalPiece = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "consumeAnimalProp",
                 "派遣动物伙伴",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { consumeAnimalProp = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "receiveForestTaskAward",
                 "森林任务",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { receiveForestTaskAward = it })
 
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "forestChouChouLe",
                 "森林寻宝任务",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { forestChouChouLe = it })
 
         modelFields.addField(
@@ -613,11 +609,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ).also { collectGiftBox = it })
 
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "medicalHealth",
                 "健康医疗任务 | 开关",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { medicalHealth = it })
         modelFields.addField(
             SelectModelField(
@@ -629,11 +624,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ).also { medicalHealthOption = it })
 
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "ForestMarket",
                 "森林集市",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { ForestMarket = it })
         modelFields.addField(
             BooleanModelField(
@@ -648,11 +642,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 false
             ).also { dailyCheckIn = it })
         modelFields.addField(
-            PriorityModelField(
+            BooleanModelField(
                 "ecoLife",
                 "绿色行动 | 开关",
-                priorityType.PRIORITY_2,
-                priorityType.nickNames
+                false
             ).also { ecoLife = it })
         modelFields.addField(
             BooleanModelField(
@@ -774,9 +767,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         return true
     }
 
-    override fun getPriority(): Int {
-        return 1
-    }
 
     /**
      * 只收能量时间的循环任务
@@ -971,15 +961,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     wateringBubbles(selfHomeObj)
                     tc.countDebug("收取浇水金球")
                 }
-                if (runCents >= collectProp!!.value) {
+                if (collectProp!!.value) {
                     givenProps(selfHomeObj)
                     tc.countDebug("收取道具")
                 }
-                if (runCents >= userPatrol!!.value) {
+                if (userPatrol!!.value) {
                     queryUserPatrol()
                     tc.countDebug("动物巡护任务")
                 }
-                if (canConsumeAnimalProp && runCents >= consumeAnimalProp!!.value) {
+                if (canConsumeAnimalProp && consumeAnimalProp!!.value) {
                     queryAndConsumeAnimal()
                     tc.countDebug("森林巡护")
                 } else {
@@ -989,16 +979,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 handleUserProps(selfHomeObj)
                 tc.countDebug("收取动物派遣能量")
 
-                if (runCents >= combineAnimalPiece!!.value) {
+                if (combineAnimalPiece!!.value) {
                     queryAnimalAndPiece()
                     tc.countDebug("合成动物碎片")
                 }
 
-                if (runCents >= receiveForestTaskAward!!.value) {
+                if (receiveForestTaskAward!!.value) {
                     receiveTaskAward()
                     tc.countDebug("森林任务")
                 }
-                if (runCents >= ecoLife!!.value) {
+                if (ecoLife!!.value) {
                     EcoLife.ecoLife()
                     tc.countDebug("绿色行动")
                 }
@@ -1006,12 +996,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 waterFriends()
                 tc.countDebug("给好友浇水")
 
-                if (runCents >= giveProp!!.value) {
+                if (giveProp!!.value) {
                     giveProp()
                     tc.countDebug("赠送道具")
                 }
 
-                if (runCents >= vitalityExchange!!.value) {
+                if (vitalityExchange!!.value) {
                     handleVitalityExchange()
                     tc.countDebug("活力值兑换")
                 }
@@ -1025,13 +1015,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     tc.countDebug("能量雨")
                 }
 
-                if (runCents >= ForestMarket!!.value) {
+                if (ForestMarket!!.value) {
                     GreenLife.ForestMarket("GREEN_LIFE")
                     GreenLife.ForestMarket("ANTFOREST")
                     tc.countDebug("森林集市")
                 }
 
-                if (runCents >= medicalHealth!!.value) {
+                if (medicalHealth!!.value) {
                     if (medicalHealthOption!!.value.contains("FEEDS")) {
                         Healthcare.queryForestEnergy("FEEDS")
                         tc.countDebug("绿色医疗")
@@ -1051,7 +1041,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     studentSignInRedEnvelope()
                 }
 
-                if (runCents >= forestChouChouLe!!.value) {
+                if (forestChouChouLe!!.value) {
                     val chouChouLe = ForestChouChouLe()
                     chouChouLe.chouChouLe()
                     tc.countDebug("抽抽乐")
@@ -1599,7 +1589,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val userName = getAndCacheUserName(userId, userHomeObj, fromTag)
 
             // 3. 判断是否允许收取能量
-            if ((collectEnergy!!.value <= 0) || dsontCollectMap.contains(userId)) {
+            if (!collectEnergy!!.value || dsontCollectMap.contains(userId)) {
                 Log.debug(TAG, "[$userName] 不允许收取能量，跳过")
                 return userHomeObj
             }
@@ -2180,7 +2170,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
         //  Log.record(TAG, "  processEnergy 开始处理用户: [" + userName + "], 类型: " + (isPk ? "PK" : "普通"));
         if (isPk) {
-            val needCollectEnergy = (collectEnergy!!.value > 0) && pkEnergy!!.value
+            val needCollectEnergy = collectEnergy!!.value && pkEnergy!!.value
             if (!needCollectEnergy) {
                 Log.record(TAG, "    PK好友: [$userName$userId], 不满足收取条件，跳过")
                 return
@@ -2189,7 +2179,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
             val needCollectEnergy =
-                (collectEnergy!!.value > 0) && !dsontCollectMap.contains(userId)
+                collectEnergy!!.value && !dsontCollectMap.contains(userId)
             val needHelpProtect =
                 helpFriendCollectType!!.value != HelpFriendCollectType.Companion.NONE && obj.optBoolean(
                     "canProtectBubble"

@@ -344,7 +344,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         initHandler(true);  // 重新初始化
                                         lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
                                         TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                        adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL); // 立即执行任务
+                                        adapter.run(); // 立即执行任务
                                         Log.record(TAG, "用户已切换");
                                         Toast.show("用户已切换");
                                         return;
@@ -416,7 +416,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                                 if (BaseModel.getManualTriggerAutoSchedule().getValue()) {
                                                     Log.record(TAG, "手动APP触发，已开启");
                                                     TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                                    adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL);
+                                                    adapter.run();
                                                 }
                                                 Log.record(TAG, "手动APP触发，已关闭");
 
@@ -447,7 +447,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         lastExecTime = currentTime; // 更新最后执行时间
                                         // 方式1：直接使用数组转换
                                         TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                        adapter.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL);
+                                        adapter.run();
                                         scheduleNextExecution(lastExecTime);
                                     } catch (Exception e) {
                                         Log.record(TAG, "❌执行异常");
@@ -666,7 +666,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                     return false;
                 }
 
-                if ((0 == baseModel.getEnableField().getValue())) {
+                if (!baseModel.getEnableField().getValue()) {
                     Log.record(TAG, "❌ 芝麻粒已禁用");
                     Toast.show("❌ 芝麻粒已禁用");
                     Notify.setStatusTextDisabled();

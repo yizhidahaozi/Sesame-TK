@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task;
 import java.util.Arrays;
 import java.util.List;
 
+import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
 
 /**
@@ -33,21 +34,21 @@ public class TaskRunnerAdapter {
      * 执行任务 - 简化版本
      */
     public void run() {
-        coroutineTaskRunner.run(true, ModelTask.TaskExecutionMode.SEQUENTIAL, 2);
+        run(true, ModelTask.TaskExecutionMode.SEQUENTIAL);
     }
 
     /**
      * 执行任务 - 完整参数版本
      */
     public void run(boolean isFirst, ModelTask.TaskExecutionMode mode) {
-        coroutineTaskRunner.run(isFirst, mode, 2);
+        run(isFirst, mode, BaseModel.getTaskExecutionRounds().getValue());
     }
 
     /**
-     * 执行任务 - 包含轮数参数
+     * 执行任务 - 包含轮数参数（主方法）
      */
     public void run(boolean isFirst, ModelTask.TaskExecutionMode mode, int rounds) {
-        coroutineTaskRunner.run(isFirst, mode, rounds);
+        coroutineTaskRunner.run(isFirst, rounds);
     }
 
     /**
@@ -61,7 +62,7 @@ public class TaskRunnerAdapter {
      * 静态方法：快速执行所有任务
      */
     public static void runAllTasks() {
-        new TaskRunnerAdapter().run();
+        runAllTasks(ModelTask.TaskExecutionMode.SEQUENTIAL);
     }
 
     /**

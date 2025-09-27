@@ -80,10 +80,6 @@ public class AntSports extends ModelTask {
         return "AntSports.png";
     }
 
-    @Override
-    public int getPriority() {
-        return 1;
-    }
 
     @Override
     public ModelFields getFields() {

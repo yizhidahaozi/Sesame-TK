@@ -82,7 +82,7 @@ public class AnswerAI extends Model {
     @Override
     public void boot(ClassLoader classLoader) {
         try {
-            enable = (getEnableField().getValue() > 0);
+            enable = getEnableField().getValue();
             int selectedType = aiType.getValue();
             Log.runtime(String.format("初始化AI服务：已选择[%s]", AIType.nickNames[selectedType]));
             initializeAIService(selectedType);

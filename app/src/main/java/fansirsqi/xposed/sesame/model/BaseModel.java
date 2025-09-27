@@ -42,6 +42,13 @@ public class BaseModel extends Model {
             new IntegerModelField("taskWaitTime", "任务等待时间(-1:森林蹲点)", -1, -1, 12 * 60);
 
     /**
+     * 任务执行轮数配置
+     */
+    @Getter
+    public static final IntegerModelField taskExecutionRounds =
+            new IntegerModelField("taskExecutionRounds", "任务执行轮数", 2, 1, 99);
+
+    /**
      * 定时执行的时间点列表
      */
     @Getter
@@ -175,6 +182,7 @@ public class BaseModel extends Model {
         modelFields.addField(manualTriggerAutoSchedule);//手动触发是否自动安排下次执行
         modelFields.addField(checkInterval);//执行间隔时间
         modelFields.addField(taskWaitTime);//任务等待时间
+        modelFields.addField(taskExecutionRounds);//轮数
         modelFields.addField(modelSleepTime);//模块休眠时间范围
         modelFields.addField(execAtTimeList);//定时执行的时间点列表
         modelFields.addField(wakenAtTimeList);//定时唤醒的时间点列表

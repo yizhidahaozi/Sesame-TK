@@ -109,7 +109,7 @@ public class AntOrchard extends ModelTask {
             Log.runtime(jo.toString());
           }
         } else {
-          getEnableField().setValue(0);
+          getEnableField().setValue(false);
           Log.other("请先开启芭芭农场！");
         }
       } else {
