@@ -16,6 +16,7 @@ import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.model.BaseModel;
+import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.RandomUtil;
@@ -237,10 +238,36 @@ public class NewRpcBridge implements RpcBridge {
                                         if ("toString".equals(innerMethod.getName())) {
                                             return "Proxy for " + finalLocalBridgeCallbackClazzArray[0].getName();
                                         }
-                                        if (args != null && args.length == 1 && "sendJSONResponse".equals(innerMethod.getName())) {
+                                        if (args != null && "sendJSONResponse".equals(innerMethod.getName()) 
+                                                && (args.length == 1 || args.length == 2)) {
                                             try {
                                                 Object obj = args[0];
-                                                rpcEntity.setResponseObject(obj, (String) XposedHelpers.callMethod(obj, "toJSONString"));
+                                                // 如果是双参数版本，第二个参数是 keepCallback
+                                                boolean keepCallback = args.length == 2 && (Boolean) args[1];
+                                                
+                                                // 记录调用信息
+                                                if (args.length == 2) {
+                                                    Log.runtime(TAG, "双参数回调 | 方法: " + rpcEntity.getRequestMethod() 
+                                                        + " | keepCallback: " + keepCallback);
+                                                    if (keepCallback) {
+                                                        Log.runtime(TAG, "⚠️ 检测到多次回调请求，方法: " + rpcEntity.getRequestMethod());
+                                                    }
+                                                }
+                                                // 获取 JSON 字符串，失败时重试一次
+                                                String jsonString = null;
+                                                try {
+                                                    jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
+                                                } catch (Exception e) {
+                                                    Log.error(TAG, "toJSONString 第一次调用失败，尝试重试: " + e.getMessage());
+                                                    try {
+                                                        GlobalThreadPools.sleepCompat(100L); // 短暂延迟后重试
+                                                        jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
+                                                    } catch (Exception retryException) {
+                                                        Log.error(TAG, "toJSONString 重试后仍然失败: " + retryException.getMessage());
+                                                    }
+                                                }
+
+                                                rpcEntity.setResponseObject(obj, jsonString);
                                                 if (!(Boolean) XposedHelpers.callMethod(obj, "containsKey", "success")
                                                         && !(Boolean) XposedHelpers.callMethod(obj, "containsKey", "isSuccess")) {
                                                     rpcEntity.setError();

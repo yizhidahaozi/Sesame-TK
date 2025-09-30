@@ -1,7 +1,6 @@
 package fansirsqi.xposed.sesame.data
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.JsonUtil
@@ -44,36 +43,13 @@ object DataCache {
 
     @Suppress("UNCHECKED_CAST")
     fun <T> getData(key: String, defaultValue: T? = null): T? {
+        // 如果未初始化，尝试重新加载
+        if (!init) {
+            load()
+        }
         val d = dataMap[key] as? T ?: defaultValue
         Log.runtime(TAG, "getData $d for key '$key'")
         return d
-    }
-
-    /**
-     * 通用的反序列化方法，根据指定的 TypeReference 反序列化缓存数据
-     * @param key 缓存数据的 key
-     * @param typeReference 反序列化类型
-     */
-    fun <T> getDataWithType(key: String, typeReference: TypeReference<T>, defaultValue: T? = null): T? {
-        val value = dataMap[key]
-        return try {
-            if (value == null) {
-                defaultValue
-            } else {
-                objectMapper.convertValue(value, typeReference)
-            }
-        } catch (e: Exception) {
-            Log.error(TAG, "反序列化缓存失败：${e.message}")
-            defaultValue
-        }
-    }
-
-    fun removeData(key: String): Boolean {
-        if (dataMap.containsKey(key)) {
-            dataMap.remove(key)
-            return save()
-        }
-        return false
     }
 
 
@@ -86,13 +62,17 @@ object DataCache {
             val json = JsonUtil.formatJson(this) ?: throw IllegalStateException("JSON 序列化失败")
             // 2. 写入临时文件
             tempFile.writeText(json)
-            // 3. 原子性替换
-            if (tempFile.exists()) {
-                targetFile.delete()
-                tempFile.renameTo(targetFile)
-                true
+            // 3. 原子性替换（在 Unix 系统上 renameTo 是原子操作）
+            if (tempFile.exists() && tempFile.length() > 0) {
+                // 直接重命名会自动覆盖目标文件（原子操作）
+                if (tempFile.renameTo(targetFile)) {
+                    true
+                } else {
+                    Log.error(TAG, "重命名临时文件失败")
+                    false
+                }
             } else {
-                Log.error(TAG, "临时文件写入失败")
+                Log.error(TAG, "临时文件写入失败或为空")
                 false
             }
         } catch (e: Exception) {
@@ -175,7 +155,17 @@ object DataCache {
         var success = false
         try {
             if (targetFile.exists()) {
-                val json = Files.readFromFile(targetFile)
+                var json = Files.readFromFile(targetFile)
+                // 防御性检查：文件可能正在被写入或读取时为空，重试一次
+                if (json.isNullOrBlank()) {
+                    Log.runtime(TAG, "缓存文件读取为空，等待100ms后重试")
+                    Thread.sleep(100)  // 短暂等待，让写入操作完成
+                    json = Files.readFromFile(targetFile)
+                    if (json.isNullOrBlank()) {
+                        Log.runtime(TAG, "重试后仍为空，跳过解析等待下次加载")
+                        return false
+                    }
+                }
                 objectMapper.readerForUpdating(this).readValue<Any>(json)
                 cleanUpDataMap()
                 val formatted = JsonUtil.formatJson(this)
@@ -186,7 +176,17 @@ object DataCache {
                 if (oldFile.exists()) oldFile.delete()
             } else if (oldFile.exists()) {
                 if (Files.copy(oldFile, targetFile)) {
-                    val json = Files.readFromFile(targetFile)
+                    var json = Files.readFromFile(targetFile)
+                    // 防御性检查：重试一次
+                    if (json.isNullOrBlank()) {
+                        Log.runtime(TAG, "旧缓存文件读取为空，等待100ms后重试")
+                        Thread.sleep(100)
+                        json = Files.readFromFile(targetFile)
+                        if (json.isNullOrBlank()) {
+                            Log.runtime(TAG, "重试后仍为空，跳过解析等待下次加载")
+                            return false
+                        }
+                    }
                     objectMapper.readerForUpdating(this).readValue<Any>(json)
                     cleanUpDataMap()
                     val formatted = JsonUtil.formatJson(this)

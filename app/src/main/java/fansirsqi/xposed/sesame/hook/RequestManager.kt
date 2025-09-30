@@ -13,8 +13,17 @@ import fansirsqi.xposed.sesame.util.NetworkUtils
  * @apiNote
  */
 object RequestManager {
-    private fun checkResult(result: String, method: String?): String {
-        check(!(result.trim { it <= ' ' }.isEmpty())) { "Empty response from RPC method: $method" }
+    private fun checkResult(result: String?, method: String?): String {
+        // 处理 null 返回值，避免 NullPointerException
+        if (result == null) {
+            Log.runtime("RequestManager", "RPC 返回 null: $method")
+            return ""
+        }
+        // 检查是否为空字符串
+        if (result.trim { it <= ' ' }.isEmpty()) {
+            Log.runtime("RequestManager", "RPC 返回空字符串: $method")
+            return ""
+        }
         return result
     }
 

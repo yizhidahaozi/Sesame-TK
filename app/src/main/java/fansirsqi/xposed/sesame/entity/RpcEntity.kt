@@ -35,7 +35,8 @@ class RpcEntity @JvmOverloads constructor(
     fun setResponseObject(result: Any?, resultStr: String?) {
         this.hasResult = true // 标记请求有结果
         this.responseObject = result
-        this.responseString = resultStr
+        // 确保 responseString 不为 null，避免上层 NPE
+        this.responseString = resultStr ?: ""
     }
 
     /**
@@ -43,6 +44,10 @@ class RpcEntity @JvmOverloads constructor(
      */
     fun setError() {
         this.hasError = true // 标记请求发生错误
+        // 确保 responseString 不为 null，避免上层 NPE
+        if (this.responseString == null) {
+            this.responseString = ""
+        }
     }
 
     @get:Throws(JSONException::class)

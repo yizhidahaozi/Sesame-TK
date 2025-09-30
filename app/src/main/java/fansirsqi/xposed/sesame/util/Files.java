@@ -168,7 +168,11 @@ public class Files {
             // 返回一个默认文件或null
             return null;
         }
-        File targetFile = new File(CONFIG_DIR + File.separator + userId, fullTargetFileName);
+        // 先确保用户目录存在
+        File userDir = new File(CONFIG_DIR, userId);
+        ensureDir(userDir);
+        
+        File targetFile = new File(userDir, fullTargetFileName);
         // 如果文件不存在且不是目录，尝试创建
         if (!targetFile.exists()) {
             try {
@@ -201,6 +205,9 @@ public class Files {
     }
 
     public static synchronized File getTargetFileofDir(File dir, String fullTargetFileName) {
+        // 先确保目录存在
+        ensureDir(dir);
+        
         // 创建目标文件对象
         File targetFile = new File(dir, fullTargetFileName);
 
