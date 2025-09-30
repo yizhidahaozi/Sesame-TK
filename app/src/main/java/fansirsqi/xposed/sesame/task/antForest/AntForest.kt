@@ -2260,7 +2260,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val needCollectGiftBox =
                 collectGiftBox!!.value && obj.optBoolean("canCollectGiftBox")
             if (!needCollectEnergy && !needHelpProtect && !needCollectGiftBox) {
-                Log.record(TAG, "    普通好友: [$userName$userId], 所有条件不满足，跳过")
+             //   Log.record(TAG, "    普通好友: [$userName$userId], 所有条件不满足，跳过")
                 return
             }
             var userHomeObj: JSONObject? = null
