@@ -45,6 +45,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify.updateLastExecText
 import fansirsqi.xposed.sesame.util.Notify.updateStatusText
 import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.TimeCounter
 import fansirsqi.xposed.sesame.util.TimeFormatter
@@ -899,6 +900,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters()
+            // 清理过期的临时黑名单
+            TemporaryBlockManager.cleanExpiredTemporaryBlockList()
             // 午夜强制任务
             if (this.isMidnight) {
                 Log.record(TAG, "🌙 检测到午夜任务，开始强制执行收取任务")
@@ -1158,7 +1161,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         var hasMore: Boolean
         var currentObj = initialObj
         do {
-            val jsonArray = if (currentObj != null) currentObj.optJSONArray(arrayKey) else null
+            val jsonArray = currentObj?.optJSONArray(arrayKey)
             if (jsonArray != null && jsonArray.length() > 0) {
                 handler.handle(jsonArray)
                 // 判断是否还有更多数据（比如返回满20个）
@@ -1617,7 +1620,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val userName = getAndCacheUserName(userId, userHomeObj, fromTag)
 
             // 3. 判断是否允许收取能量
-            if (!collectEnergy!!.value || dsontCollectMap.contains(userId)) {
+            if (!collectEnergy!!.value || dsontCollectMap.contains(userId) || TemporaryBlockManager.isInTemporaryBlockList(userId)) {
                 Log.debug(TAG, "[$userName] 不允许收取能量，跳过")
                 return userHomeObj
             }
@@ -1888,10 +1891,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val idList: MutableList<String?> = ArrayList()
             val batchSize = 20
             val remainingSize = totalDatas.length() - 20
-            val batches = (remainingSize + batchSize - 1) / batchSize
+            var skippedByBlockList = 0  // 统计被临时黑名单过滤的数量
+            val estimatedBatches = (remainingSize + batchSize - 1) / batchSize
+            
             Log.record(
                 TAG,
-                "开始分批串行处理" + rankingName + "后续" + remainingSize + "位好友，共" + batches + "批，每批最多" + batchSize + "人（批次间串行，批次内60并发）。"
+                "开始分批串行处理${rankingName}后续${remainingSize}位好友（预计${estimatedBatches}批，每批最多${batchSize}人，批次间串行，批次内60并发）"
             )
             
             // 串行处理批次，避免总并发数过高
@@ -1901,17 +1906,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val friend = totalDatas.getJSONObject(pos)
                 val userId = friend.getString("userId")
                 if (userId == selfId) continue
+                // 跳过临时黑名单中的用户
+                if (TemporaryBlockManager.isInTemporaryBlockList(userId)) {
+                    skippedByBlockList++
+                    continue
+                }
                 idList.add(userId)
                 
                 if (idList.size == batchSize) {
                     val batch: MutableList<String?> = ArrayList(idList)
                     val currentBatchNum = ++batchCount
-                    
                     // 串行执行：等待当前批次完成再处理下一批次
-                    Log.record(TAG, "[批次$currentBatchNum/$batches] 开始处理...")
+                    Log.record(TAG, "[批次$currentBatchNum/$estimatedBatches] 开始处理...")
                     processFriendsEnergyCoroutine(batch, flag, "批次$currentBatchNum")
-                    Log.record(TAG, "[批次$currentBatchNum/$batches] 处理完成")
-                    
+                    Log.record(TAG, "[批次$currentBatchNum/$estimatedBatches] 处理完成")
                     idList.clear()
                 }
             }
@@ -1919,10 +1927,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 处理剩余的用户
             if (idList.isNotEmpty()) {
                 val currentBatchNum = ++batchCount
-                Log.record(TAG, "[批次$currentBatchNum/$batches] 开始处理...")
+                Log.record(TAG, "[批次$currentBatchNum/$estimatedBatches] 开始处理...")
                 processFriendsEnergyCoroutine(idList, flag, "批次$currentBatchNum")
-                Log.record(TAG, "[批次$currentBatchNum/$batches] 处理完成")
+                Log.record(TAG, "[批次$currentBatchNum/$estimatedBatches] 处理完成")
             }
+            
+            // 输出统计信息
+            val actualRemaining = remainingSize - skippedByBlockList
+            val actualBatches = (actualRemaining + batchSize - 1) / batchSize
+            val skipInfo = if (skippedByBlockList > 0) "（已跳过临时黑名单 $skippedByBlockList 人）" else ""
+            Log.record(
+                TAG,
+                "已完成分批串行处理${rankingName}后续${actualRemaining}位好友，共${actualBatches}批$skipInfo"
+            )
             tc.countDebug("分批处理" + rankingName + "其他好友")
             Log.record(TAG, "收取" + rankingName + "能量完成！")
         } catch (e: Exception) {
@@ -2251,6 +2268,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.debug(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
+            // 先检查是否已在临时黑名单中，如果是则直接跳过（不输出日志）
+            if (TemporaryBlockManager.isInTemporaryBlockList(userId)) {
+                return
+            }
             val needCollectEnergy =
                 collectEnergy!!.value && !dsontCollectMap.contains(userId)
             val needHelpProtect =
@@ -2260,7 +2281,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val needCollectGiftBox =
                 collectGiftBox!!.value && obj.optBoolean("canCollectGiftBox")
             if (!needCollectEnergy && !needHelpProtect && !needCollectGiftBox) {
-                Log.record(TAG, "    普通好友: [$userName$userId], 所有条件不满足，跳过")
+                // 只在首次添加到临时黑名单时输出日志
+                if (TemporaryBlockManager.addToTemporaryBlockList(userId)) {
+                    Log.record(TAG, "    普通好友: [$userName$userId], 所有条件不满足，已添加到临时黑名单（明天恢复）")
+                }
                 return
             }
             var userHomeObj: JSONObject? = null
