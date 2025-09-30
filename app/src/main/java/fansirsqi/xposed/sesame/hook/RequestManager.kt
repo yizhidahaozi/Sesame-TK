@@ -50,7 +50,7 @@ object RequestManager {
     @JvmStatic
     fun requestString(rpcEntity: RpcEntity): String {
         val rpcBridge = getRpcBridge() ?: return ""
-        val result = rpcBridge.requestString(rpcEntity, 3, -1)
+        val result = rpcBridge.requestString(rpcEntity, 3, 1200)
         return checkResult(result, rpcEntity.methodName)
     }
 
