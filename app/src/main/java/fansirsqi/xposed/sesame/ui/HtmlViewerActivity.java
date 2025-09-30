@@ -6,6 +6,7 @@ import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,6 +18,7 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.core.view.OnApplyWindowInsetsListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -144,6 +146,7 @@ public class HtmlViewerActivity extends BaseActivity {
         return sb.toString();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private static String readAllTextSafe(String path) {
         try {
             java.nio.charset.Charset cs = java.nio.charset.StandardCharsets.UTF_8;
@@ -188,6 +191,7 @@ public class HtmlViewerActivity extends BaseActivity {
                     settings.setDomStorageEnabled(true); // 可选
                     mWebView.loadUrl("file:///android_asset/log_viewer.html");
                     mWebView.setWebChromeClient(new WebChromeClient() {
+                        @RequiresApi(api = Build.VERSION_CODES.O)
                         @Override
                         public void onProgressChanged(WebView view, int progress) {
                             progressBar.setProgress(progress);

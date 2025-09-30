@@ -2,9 +2,7 @@ package fansirsqi.xposed.sesame.task.antOrchard;
 import android.util.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -31,9 +29,6 @@ public class AntOrchard extends ModelTask {
   private IntegerModelField executeInterval;
   private BooleanModelField receiveOrchardTaskAward;
   private IntegerModelField orchardSpreadManureCount;
-  private BooleanModelField batchHireAnimal;
-  private SelectModelField dontHireList;
-  private SelectModelField dontWeedingList;
   // 助力好友列表
   private SelectModelField assistFriendList;
   @Override
@@ -55,9 +50,6 @@ public class AntOrchard extends ModelTask {
     modelFields.addField(receiveOrchardTaskAward = new BooleanModelField("receiveOrchardTaskAward", "收取农场任务奖励", false));
     modelFields.addField(orchardSpreadManureCount = new IntegerModelField("orchardSpreadManureCount", "农场每日施肥次数", 0));
     modelFields.addField(assistFriendList = new SelectModelField("assistFriendList", "助力好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-    //modelFields.addField(batchHireAnimal = new BooleanModelField("batchHireAnimal", "一键捉鸡除草", false));
-    //modelFields.addField(dontHireList = new SelectModelField("dontHireList", "除草 | 不雇佣好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-    //modelFields.addField(dontWeedingList = new SelectModelField("dontWeedingList", "除草 | 不除草好友列表", new LinkedHashSet<>(), AlipayUser::getList));
     return modelFields;
   }
   @Override
@@ -88,9 +80,6 @@ public class AntOrchard extends ModelTask {
             userId = joo.getString("userId");
             if (jo.has("lotteryPlusInfo")) drawLotteryPlus(jo.getJSONObject("lotteryPlusInfo"));
             extraInfoGet();
-            if (batchHireAnimal.getValue()) {
-              if (!joo.optBoolean("hireCountOnceLimit", true) && !joo.optBoolean("hireCountOneDayLimit", true)) batchHireAnimalRecommend();
-            }
             if (receiveOrchardTaskAward.getValue()) {
               doOrchardDailyTask(userId);
               triggerTbTask();
@@ -398,55 +387,6 @@ public class AntOrchard extends ModelTask {
       }
     } catch (Throwable t) {
       Log.runtime(TAG, "triggerTbTask err:");
-      Log.printStackTrace(TAG, t);
-    }
-  }
-  /**
-   * 创建动物信息JSON字符串。
-   *
-   * @param animalUserId   动物用户ID
-   * @param earnManureCount 赚取肥料数量
-   * @param groupId        组ID
-   * @param orchardUserId  果园用户ID
-   * @return 动物信息JSON字符串
-   */
-  private String createAnimalInfoJson(String animalUserId, int earnManureCount, String groupId, String orchardUserId) {
-    return "{\"animalUserId\":\"" + animalUserId + "\",\"earnManureCount\":" + earnManureCount + ",\"groupId\":\"" + groupId + "\",\"orchardUserId\":\"" + orchardUserId + "\"}";
-  }
-  /** 一键捉鸡除草 */
-  private void batchHireAnimalRecommend() {
-    try {
-      JSONObject jo = new JSONObject(AntOrchardRpcCall.batchHireAnimalRecommend(UserMap.getCurrentUid()));
-      if ("100".equals(jo.getString("resultCode"))) {
-        JSONArray recommendGroupList = jo.optJSONArray("recommendGroupList");
-        if (recommendGroupList != null && recommendGroupList.length() > 0) {
-          List<String> GroupList = new ArrayList<>();
-          for (int i = 0; i < recommendGroupList.length(); i++) {
-            jo = recommendGroupList.getJSONObject(i);
-            String animalUserId = jo.getString("animalUserId");
-            if (dontHireList.getValue().contains(animalUserId))
-              continue;
-            int earnManureCount = jo.getInt("earnManureCount");
-            String groupId = jo.getString("groupId");
-            String orchardUserId = jo.getString("orchardUserId");
-            if (dontWeedingList.getValue().contains(orchardUserId)) {
-              continue;
-            }
-            GroupList.add(createAnimalInfoJson(animalUserId, earnManureCount, groupId, orchardUserId));
-          }
-          if (!GroupList.isEmpty()) {
-            jo = new JSONObject(AntOrchardRpcCall.batchHireAnimal(GroupList));
-            if ("100".equals(jo.getString("resultCode"))) {
-              Log.farm("一键捉鸡🐣[除草]");
-            }
-          }
-        }
-      } else {
-        Log.record(jo.getString("resultDesc"));
-        Log.runtime(jo.toString());
-      }
-    } catch (Throwable t) {
-      Log.runtime(TAG, "batchHireAnimalRecommend err:");
       Log.printStackTrace(TAG, t);
     }
   }

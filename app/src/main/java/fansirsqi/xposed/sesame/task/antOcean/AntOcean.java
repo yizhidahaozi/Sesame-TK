@@ -6,7 +6,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,7 +16,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.entity.AlipayBeach;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.hook.Toast;
@@ -232,7 +230,7 @@ public class AntOcean extends ModelTask {
                         // 检查 applyAction 是否为 AVAILABLE
                         String actionStr = item.getString("applyAction");
                         ApplyAction action = ApplyAction.fromString(actionStr);
-                        if (action.equals(ApplyAction.AVAILABLE)) {
+                        if (Objects.requireNonNull(action).equals(ApplyAction.AVAILABLE)) {
                             String templateCode = item.getString("templateCode");//业务id
                             String cultivationName = item.getString("cultivationName");
                             int energy = item.getInt("energy");
