@@ -243,24 +243,23 @@ public class NewRpcBridge implements RpcBridge {
                                                 Object obj = args[0];
                                                 // 获取 JSON 字符串，失败时重试一次
                                                 String jsonString = null;
-                                                boolean toJSONStringFailed = false;
                                                 try {
                                                     jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
                                                 } catch (Exception e) {
+                                                    // 第一次失败，尝试重试
                                                     try {
-                                                        GlobalThreadPools.sleepCompat(100L); // 短暂延迟后重试
+                                                        GlobalThreadPools.sleepCompat(100L);
                                                         jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
                                                     } catch (Exception retryException) {
+                                                        // 重试后仍失败，记录日志并标记错误，触发外层RPC重试
                                                         Log.runtime(TAG, "toJSONString 重试后仍然失败，将触发整个 RPC 请求重试: " + retryException.getMessage());
-                                                        toJSONStringFailed = true;
+                                                        rpcEntity.setResponseObject(obj, null);
+                                                        rpcEntity.setError();
+                                                        return null;
                                                     }
                                                 }
 
                                                 rpcEntity.setResponseObject(obj, jsonString);
-                                                // 如果 toJSONString 失败，标记为错误，触发外层重试
-                                                if (toJSONStringFailed) {
-                                                    rpcEntity.setError();
-                                                }
                                                 if (!(Boolean) XposedHelpers.callMethod(obj, "containsKey", "success")
                                                         && !(Boolean) XposedHelpers.callMethod(obj, "containsKey", "isSuccess")) {
                                                     rpcEntity.setError();
