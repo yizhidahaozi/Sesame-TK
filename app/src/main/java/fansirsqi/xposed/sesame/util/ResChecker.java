@@ -36,8 +36,12 @@ public class ResChecker {
             String resultDesc = jo.optString("resultDesc", "");
             String memo = jo.optString("memo", "");
             if (resultDesc.contains("当前参与人数过多") || resultDesc.contains("请稍后再试") ||
-                memo.contains("我的小鸡在睡觉中") || memo.contains("小鸡在睡觉") ||
-                memo.contains("无法操作")) {
+                    resultDesc.contains("手速太快") || resultDesc.contains("频繁") ||
+                    resultDesc.contains("操作过于频繁") ||
+                    memo.contains("我的小鸡在睡觉中") ||
+                    memo.contains("小鸡在睡觉") ||
+                    memo.contains("无法操作") ||
+                    memo.contains("手速太快")) {
                 return false; // 返回false，但不打印错误日志
             }
             // 获取调用栈信息以确定错误来源

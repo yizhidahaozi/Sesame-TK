@@ -74,14 +74,45 @@ public class AntForestRpcCall {
         }
     }
 
-
-
+    /**
+     * 批量获取好友能量信息（标准版）
+     * 
+     * 用途：批量查询多个好友的蚂蚁森林信息，包括：
+     * - 好友昵称（displayName）
+     * - 是否可收取能量（canCollectEnergy）
+     * - 能量球信息（bubbles）
+     * - 保护罩状态等
+     * <p>
+     * 性能优势：一次网络请求获取多个好友信息，比逐个查询快得多
+     * 
+     * @param userIdList 用户ID列表（JSONArray），例如：["2088xxx", "2088yyy", ...]
+     *                   通常每批20个好友ID
+     * @return JSON字符串，包含 friendRanking 数组，每个元素是一个好友的详细信息
+     * <p>
+     * 返回数据结构示例：
+     * {
+     *   "friendRanking": [
+     *     {
+     *       "userId": "2088xxx",
+     *       "displayName": "张三",
+     *       "canCollectEnergy": true,
+     *       "bubbles": [...],
+     *       ...
+     *     }
+     *   ]
+     * }
+     * 
+     * 调用示例（Kotlin）：
+     * val userIds = JSONArray(listOf("2088xxx", "2088yyy"))
+     * val response = AntForestRpcCall.fillUserRobFlag(userIds)
+     */
     public static String fillUserRobFlag(JSONArray userIdList) {
         try {
             JSONObject arg = new JSONObject();
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("userIdList", userIdList);
             String param = "[" + arg + "]";
+            // relationLocal 指定返回的数据路径，这里只要 friendRanking 数组
             JSONObject joRelationLocal = new JSONObject();
             joRelationLocal.put("pathList", new JSONArray().put("friendRanking"));
             String relationLocal = "[" + joRelationLocal + "]";
@@ -91,6 +122,28 @@ public class AntForestRpcCall {
         }
     }
 
+    /**
+     * 批量获取好友能量信息（增强版 - PK排行榜专用）
+     * 
+     * 与标准版的区别：
+     * - 增加了 needFillUserInfo 参数
+     * - 用于PK排行榜场景，需要更完整的用户信息
+     * - 不指定 relationLocal，返回完整数据
+     * 
+     * @param userIdList        用户ID列表（JSONArray）
+     * @param needFillUserInfo  是否需要填充详细用户信息
+     *                          true: 返回完整的用户资料（PK排行榜使用）
+     *                          false: 只返回基本信息
+     * @return JSON字符串，包含好友的完整信息
+     * 
+     * 使用场景：
+     * - 普通好友排行榜：fillUserRobFlag(userIds)
+     * - PK好友排行榜：fillUserRobFlag(userIds, true)
+     * 
+     * 调用示例（Kotlin）：
+     * // PK排行榜场景
+     * val response = AntForestRpcCall.fillUserRobFlag(userIds, true)
+     */
     public static String fillUserRobFlag(JSONArray userIdList, boolean needFillUserInfo) {
         try {
             JSONObject arg = new JSONObject();
@@ -98,6 +151,7 @@ public class AntForestRpcCall {
             arg.put("userIdList", userIdList);
             arg.put("needFillUserInfo", needFillUserInfo);
             String param = "[" + arg + "]";
+            // 不指定 relationLocal，返回完整数据
             return RequestManager.requestString("alipay.antforest.forest.h5.fillUserRobFlag", param);
         } catch (Exception e) {
             return "";

@@ -2,9 +2,156 @@
 
 package fansirsqi.xposed.sesame.task.antForest
 
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 object ForestUtil {
+
+    private const val TAG = "ForestUtil"
+    
+    /**
+     * 用户频率限制信息
+     * @param failCount 失败次数（1-3）
+     * @param cooldownUntil 冷却结束时间（毫秒时间戳）
+     */
+    private data class FrequencyLimitInfo(
+        var failCount: Int = 0,
+        var cooldownUntil: Long = 0L
+    )
+    
+    /**
+     * 存储每个用户的频率限制信息
+     * Key: userId, Value: FrequencyLimitInfo
+     */
+    private val userFrequencyMap = ConcurrentHashMap<String, FrequencyLimitInfo>()
+    
+    /**
+     * 检查用户是否在"手速太快"冷却期中
+     * @param userId 用户ID
+     * @return true表示在冷却期，应该跳过；false表示可以处理
+     */
+    @JvmStatic
+    fun isUserInFrequencyCooldown(userId: String?): Boolean {
+        if (userId == null) return false
+        
+        val info = userFrequencyMap[userId] ?: return false
+        val currentTime = System.currentTimeMillis()
+        if (currentTime < info.cooldownUntil) {
+            val remainingMinutes = (info.cooldownUntil - currentTime) / 60000
+            val remainingSeconds = ((info.cooldownUntil - currentTime) % 60000) / 1000
+            Log.debug(TAG, "[${UserMap.getMaskName(userId)}] 手速太快冷却中，还需等待 ${remainingMinutes}分${remainingSeconds}秒")
+            return true
+        }
+        // 冷却期结束，清除记录
+        if (info.cooldownUntil > 0) {
+            userFrequencyMap.remove(userId)
+            Log.record(TAG, "[${UserMap.getMaskName(userId)}] 冷却期结束，恢复正常处理")
+        }
+        return false
+    }
+    
+    /**
+     * 检测是否为"手速太快"相关错误
+     * @param resultCode 返回码
+     * @param resultDesc 返回描述
+     * @return true表示是频率限制错误，false表示不是
+     */
+    @JvmStatic
+    fun isFrequencyError(resultCode: String?, resultDesc: String?): Boolean {
+        if (resultCode == null && resultDesc == null) return false
+        
+        return resultCode == "PLUGIN_FREQUENCY_INTERCEPT" ||
+               resultDesc?.contains("手速太快") == true ||
+               resultDesc?.contains("频繁") == true ||
+               resultDesc?.contains("操作过于频繁") == true
+    }
+    
+    /**
+     * 检测 JSONObject 是否为"手速太快"相关错误
+     * @param jo JSON对象
+     * @return true表示是频率限制错误，false表示不是
+     */
+    @JvmStatic
+    fun isFrequencyError(jo: JSONObject?): Boolean {
+        if (jo == null) return false
+        val resultCode = jo.optString("resultCode", "")
+        val resultDesc = jo.optString("resultDesc", "")
+        return isFrequencyError(resultCode, resultDesc)
+    }
+    
+    /**
+     * 记录用户"手速太快"错误，并设置相应的冷却时间
+     * @param userId 用户ID
+     * @return true表示记录成功，false表示参数无效
+     */
+    @JvmStatic
+    fun recordFrequencyError(userId: String?): Boolean {
+        if (userId == null) return false
+        val userName = UserMap.getMaskName(userId)
+        val currentTime = System.currentTimeMillis()
+        val info = userFrequencyMap.getOrPut(userId) { FrequencyLimitInfo() }
+        // 增加失败次数
+        info.failCount++
+        // 根据失败次数设置冷却时间
+        val cooldownMinutes = when (info.failCount) {
+            1 -> {
+                info.cooldownUntil = currentTime + 2 * 60 * 1000L  // 2分钟
+                2
+            }
+            2 -> {
+                info.cooldownUntil = currentTime + 10 * 60 * 1000L  // 10分钟
+                10
+            }
+            else -> {
+                info.cooldownUntil = currentTime + 30 * 60 * 1000L  // 30分钟
+                30
+            }
+        }
+        
+        Log.record(TAG, "⚠️ [$userName] 手速太快！第${info.failCount}次异常，休息${cooldownMinutes}分钟，下次暂不处理")
+        
+        return true
+    }
+    
+    /**
+     * 检测并记录"手速太快"错误（组合方法）
+     * @param userId 用户ID
+     * @param jo JSON对象
+     * @return true表示检测到频率错误并已记录，false表示不是频率错误
+     */
+    @JvmStatic
+    fun checkAndRecordFrequencyError(userId: String?, jo: JSONObject?): Boolean {
+        if (isFrequencyError(jo)) {
+            recordFrequencyError(userId)
+            return true
+        }
+        return false
+    }
+    
+    /**
+     * 清除所有用户的频率限制记录（用于任务结束时清理）
+     */
+    @JvmStatic
+    fun clearAllFrequencyLimits() {
+        val count = userFrequencyMap.size
+        if (count > 0) {
+            userFrequencyMap.clear()
+            Log.record(TAG, "已清除${count}个用户的频率限制记录")
+        }
+    }
+    
+    /**
+     * 手动清除指定用户的频率限制（用于测试或手动恢复）
+     * @param userId 用户ID
+     */
+    @JvmStatic
+    fun clearUserFrequencyLimit(userId: String?) {
+        if (userId != null && userFrequencyMap.remove(userId) != null) {
+            Log.record(TAG, "[${UserMap.getMaskName(userId)}] 频率限制已清除")
+        }
+    }
 
     @JvmStatic
     fun hasShield(userHomeObj: JSONObject, serverTime: Long): Boolean {
