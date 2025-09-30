@@ -45,7 +45,7 @@ public class NewRpcBridge implements RpcBridge {
     // 需要屏蔽错误日志的RPC方法列表
     ArrayList<String> silentErrorMethods = new ArrayList<>(List.of(
             "com.alipay.adexchange.ad.facade.xlightPlugin",  //木兰集市 第一次
-            "alipay.antforest.forest.h5.takeLook"  //木兰集市 第一次
+            "alipay.antforest.forest.h5.takeLook"  //找能量
     ));
 
     /**
