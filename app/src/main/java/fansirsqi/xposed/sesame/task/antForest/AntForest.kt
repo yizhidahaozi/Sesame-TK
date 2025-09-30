@@ -3675,7 +3675,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
         try {
             Log.record(TAG, "刷新背包...")
-            val bagObject = JSONObject(AntForestRpcCall.queryPropList(false))
+            val response = AntForestRpcCall.queryPropList(false)
+            // 检查响应是否为空，避免解析空字符串导致异常
+            if (response.isNullOrBlank()) {
+                Log.record(TAG, "刷新背包失败: 响应为空")
+                return null
+            }
+            val bagObject = JSONObject(response)
             if (bagObject.optBoolean("success")) {
                 cachedBagObject = bagObject
                 lastQueryPropListTime = now
@@ -4226,11 +4232,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun handleException(operation: String?, throwable: Throwable) {
         if (throwable is JSONException) {
+            // JSON解析错误通常是网络响应问题，只记录错误信息不打印堆栈，避免刷屏
             Log.error(TAG, operation + " JSON解析错误: " + throwable.message)
         } else {
             Log.error(TAG, operation + " 错误: " + throwable.message)
+            Log.printStackTrace(TAG, throwable)
         }
-        Log.printStackTrace(TAG, throwable)
     }
 
 
