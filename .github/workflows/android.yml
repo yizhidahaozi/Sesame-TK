@@ -130,7 +130,7 @@ jobs:
 
             ```target by `${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}`
 
-            参考配置文件： [魔改版-config_v2.json](https://t.me/Sesame_TK_Channel/306)
+            参考配置文件： [魔改版\-config\_v2\.json](https://t.me/Sesame_TK_Channel/306)
 
             See commit detail [here](${{ github.event.head_commit.url }})
         run: |
