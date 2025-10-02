@@ -32,14 +32,28 @@
         #toolbar {
           position: sticky;
           top: 0;
-          padding: 8px 12px;
           background: rgba(0,0,0,0.08);
           backdrop-filter: blur(4px);
           border-bottom: 1px solid rgba(255,255,255,0.08);
+          z-index: 10;
+        }
+        .toolbar-row {
+          padding: 8px 12px;
           display: flex;
           gap: 12px;
           align-items: center;
-          z-index: 10;
+        }
+        .toolbar-row:not(:last-child) {
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        #filterInput {
+          flex: 1;
+          padding: 4px 10px;
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 6px;
+          background: transparent;
+          color: var(--fg);
+          font-size: 12px;
         }
         #log {
           white-space: pre-wrap;      /* 自动换行，保留换行符 */
@@ -62,9 +76,18 @@
 </head>
 <body>
 <div id="toolbar">
-    <label><input type="checkbox" id="autoScroll" checked /> 自动滚动到底部</label>
-    <button onclick="clearLog()">清空显示</button>
-    <span class="muted" id="status">就绪</span>
+    <!-- 第一行：基础功能 -->
+    <div class="toolbar-row">
+        <label><input type="checkbox" id="autoScroll" checked /> 自动滚动到底部</label>
+        <button onclick="clearLog()">清空显示</button>
+        <span class="muted" id="status">就绪</span>
+    </div>
+    <!-- 第二行：筛选功能 -->
+    <div class="toolbar-row">
+        <input type="text" id="filterInput" placeholder="输入关键字筛选..." />
+        <button onclick="applyFilter()">筛选</button>
+        <button onclick="clearFilter()">清除筛选</button>
+    </div>
 </div>
 
 <div id="log"></div>
@@ -73,6 +96,10 @@
     const logEl = document.getElementById('log');
     const autoScrollEl = document.getElementById('autoScroll');
     const statusEl = document.getElementById('status');
+    const filterInputEl = document.getElementById('filterInput');
+
+    let fullLogText = ''; // 保存完整的日志内容
+    let currentFilter = ''; // 当前筛选关键字
 
     function _scrollToBottom() {
       if (!autoScrollEl.checked) return;
@@ -81,24 +108,101 @@
 
     // 供原生调用：全量替换
     function setFullText(text) {
-      logEl.textContent = text || '';
-      statusEl.textContent = '已加载 ' + (text ? text.length : 0) + ' 字节';
+      fullLogText = text || '';
+      if (currentFilter) {
+        applyFilter();
+      } else {
+        logEl.textContent = fullLogText;
+        statusEl.textContent = '已加载 ' + (fullLogText ? fullLogText.length : 0) + ' 字节';
+      }
       _scrollToBottom();
     }
 
     // 供原生调用：增量追加
     function appendLog(chunk) {
       if (!chunk) return;
-      logEl.textContent += chunk;
-      statusEl.textContent = '追加 ' + chunk.length + ' 字节';
+      fullLogText += chunk;
+      if (currentFilter) {
+        // 筛选模式下：只追加包含关键字的行
+        const newLines = chunk.split('\n');
+        const filtered = newLines.filter(line => line.includes(currentFilter));
+        if (filtered.length > 0) {
+          logEl.textContent += (logEl.textContent ? '\n' : '') + filtered.join('\n');
+          statusEl.textContent = '追加 ' + filtered.length + ' 条匹配记录';
+        }
+      } else {
+        logEl.textContent += chunk;
+        statusEl.textContent = '追加 ' + chunk.length + ' 字节';
+      }
       _scrollToBottom();
     }
 
     // 清空显示（不影响原文件，仅清 UI）
     function clearLog() {
+      fullLogText = '';
       logEl.textContent = '';
       statusEl.textContent = '已清空显示';
     }
+
+    // 应用筛选 (优化版：支持大文件)
+    function applyFilter() {
+      const keyword = filterInputEl.value.trim();
+      if (!keyword) {
+        clearFilter();
+        return;
+      }
+
+      currentFilter = keyword;
+      statusEl.textContent = '正在筛选...';
+
+      // 使用 setTimeout 避免阻塞 UI
+      setTimeout(() => {
+        const lines = fullLogText.split('\n');
+        const filtered = [];
+
+        // 分批处理，避免一次性处理大量数据导致卡顿
+        const batchSize = 1000;
+        let processed = 0;
+
+        function processBatch() {
+          const end = Math.min(processed + batchSize, lines.length);
+          for (let i = processed; i < end; i++) {
+            if (lines[i].includes(keyword)) {
+              filtered.push(lines[i]);
+            }
+          }
+          processed = end;
+
+          if (processed < lines.length) {
+            statusEl.textContent = '筛选中: ' + Math.floor(processed / lines.length * 100) + '%';
+            setTimeout(processBatch, 0);
+          } else {
+            // 完成筛选
+            logEl.textContent = filtered.join('\n');
+            statusEl.textContent = '筛选结果: ' + filtered.length + '/' + lines.length + ' 行';
+            _scrollToBottom();
+          }
+        }
+
+        processBatch();
+      }, 10);
+    }
+
+    // 清除筛选
+    function clearFilter() {
+      currentFilter = '';
+      filterInputEl.value = '';
+      logEl.textContent = fullLogText;
+      statusEl.textContent = '已清除筛选';
+      _scrollToBottom();
+    }
+
+    // 支持回车键触发筛选
+    filterInputEl.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        applyFilter();
+      }
+    });
 
     // 为防止一次性注入超大文本导致掉帧，可用以下节流版（可选）：
     // window.appendLogBatched = (function() {
