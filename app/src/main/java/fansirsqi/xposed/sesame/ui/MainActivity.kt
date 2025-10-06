@@ -17,7 +17,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
@@ -160,7 +159,14 @@ class MainActivity : BaseActivity() {
                 data += Files.getRecordLogFile().absolutePath
             }
             R.id.btn_github -> {
-                data = "https://github.com/Fansirsqi/Sesame-TK"
+                val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Fansirsqi/Sesame-TK".toUri())
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "未找到可用的浏览器", Toast.LENGTH_SHORT).show()
+                    Log.e(TAG, "无法打开浏览器: ${e.message}")
+                }
+                return
             }
             R.id.btn_settings -> {
                 showSelectionDialog(
@@ -253,7 +259,7 @@ class MainActivity : BaseActivity() {
                 startActivity(intent)
                 return true
             }
-            4 -> { // 查看错误日志文件
+            4 -> { // 查看错误日志
                 val errorData = "file://" + Files.getErrorLogFile().absolutePath
                 val errorIt = Intent(this, HtmlViewerActivity::class.java)
                 errorIt.putExtra("nextLine", false)
@@ -262,7 +268,7 @@ class MainActivity : BaseActivity() {
                 startActivity(errorIt)
                 return true
             }
-            5 -> { // 查看全部日志文件
+            5 -> { // 查看全部日志
                 val recordData = "file://" + Files.getRecordLogFile().absolutePath
                 val otherIt = Intent(this, HtmlViewerActivity::class.java)
                 otherIt.putExtra("nextLine", false)
@@ -271,7 +277,7 @@ class MainActivity : BaseActivity() {
                 startActivity(otherIt)
                 return true
             }
-            6 -> { // 查看运行时日志文件
+            6 -> { // 查看运行日志
                 val runtimeData = "file://" + Files.getRuntimeLogFile().absolutePath
                 val allIt = Intent(this, HtmlViewerActivity::class.java)
                 allIt.putExtra("nextLine", false)
@@ -280,7 +286,7 @@ class MainActivity : BaseActivity() {
                 startActivity(allIt)
                 return true
             }
-            7 -> { // 查看截图
+            7 -> { // 查看抓包
                 val captureData = "file://" + Files.getCaptureLogFile().absolutePath
                 val captureIt = Intent(this, HtmlViewerActivity::class.java)
                 captureIt.putExtra("nextLine", false)
