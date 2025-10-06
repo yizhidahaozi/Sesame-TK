@@ -18,7 +18,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
@@ -164,9 +163,9 @@ class MainActivity : BaseActivity() {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Fansirsqi/Sesame-TK"))
                 try {
                     startActivity(intent)
-                } catch (e: Exception) {
+                } catch (exception: Exception) {
                     Toast.makeText(this, "未找到可用的浏览器", Toast.LENGTH_SHORT).show()
-                    Log.error(TAG, "无法打开浏览器: ${e.message}")
+                    Log.error(TAG, "无法打开浏览器: ${exception.message}")
                 }
                 return
             }
