@@ -166,7 +166,7 @@ class MainActivity : BaseActivity() {
                     startActivity(intent)
                 } catch (e: Exception) {
                     Toast.makeText(this, "未找到可用的浏览器", Toast.LENGTH_SHORT).show()
-                    Log.e(TAG, "无法打开浏览器: ${e.message}")
+                    Log.error(TAG, "无法打开浏览器: ${e.message}")
                 }
                 return
             }
