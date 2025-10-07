@@ -71,7 +71,7 @@ public class AntCooperate extends ModelTask {
     }
 
     @Override
-    public void run() {
+    protected void runJava() {
         try {
             Log.record(TAG, "执行开始-" + getName());
             if (cooperateWater.getValue()) {

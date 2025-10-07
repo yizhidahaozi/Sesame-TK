@@ -146,7 +146,7 @@ public class AntStall extends ModelTask {
         }
     }
     @Override
-    public void run() {
+    protected void runJava() {
         try {
             TimeCounter tc = new TimeCounter(TAG);
             Log.record(TAG,"执行开始-" + getName());
@@ -260,11 +260,17 @@ public class AntStall extends ModelTask {
                     }
                     if (friend.getBoolean("canInviteOpenShop")) {
                         s = AntStallRpcCall.oneKeyInviteOpenShop(friendUserId, seatId);
+                        if (s == null || s.isEmpty()) {
+                            Log.record(TAG, "邀请[" + UserMap.getMaskName(friendUserId) + "]开店返回空，跳过");
+                            continue;
+                        }
                         jo = new JSONObject(s);
                         if (ResChecker.checkRes(TAG,jo)) {
                             Log.farm("蚂蚁新村⛪邀请[" + UserMap.getMaskName(friendUserId) + "]开店成功");
                             sentUserId.add(friendUserId);
                             return;
+                        } else {
+                            Log.record(TAG, "邀请[" + UserMap.getMaskName(friendUserId) + "]开店失败: " + jo.optString("errorMessage"));
                         }
                     }
                 }

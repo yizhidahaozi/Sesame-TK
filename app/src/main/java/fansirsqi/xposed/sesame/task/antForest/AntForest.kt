@@ -792,7 +792,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     // 循环间隔（使用协程延迟）
                     val sleepMillis = cycleinterval!!.value.toLong()
                     Log.record(TAG, "✨ 只收能量时间一轮完成，等待 $sleepMillis 毫秒后开始下一轮")
-                    delay(sleepMillis)
+                    GlobalThreadPools.sleepCompat(sleepMillis)
                 }
             }
         } finally {
@@ -867,31 +867,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         EnergyWaitingManager.setEnergyCollectCallback(this)
     }
 
-    override fun run() {
+    override suspend fun runSuspend() {
+        val runStartTime = System.currentTimeMillis()
+        Log.record(TAG, "🌲🌲🌲 森林主任务开始执行 🌲🌲🌲")
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters()
-            // 午夜强制任务
-            if (this.isMidnight) {
-                Log.record(TAG, "🌙 检测到午夜任务，开始强制执行收取任务")
-                runBlocking {
-                    // 收取自己能量
-                    Log.record(TAG, "🌳 【午夜任务】开始收取自己的能量...")
-                    val selfHomeObj = querySelfHome()
-                    if (selfHomeObj != null) {
-                        collectEnergy(UserMap.currentUid, selfHomeObj, "self")
-                        Log.record(TAG, "✅ 【午夜任务】收取自己的能量完成")
-                    } else {
-                        Log.error(TAG, "❌ 【午夜任务】获取自己主页信息失败")
-                    }
-
-                    // 先尝试使用找能量功能快速定位有能量的好友（协程）
-                    collectEnergyByTakeLook() //找能量（协程）
-                    collectFriendEnergyCoroutine() // 好友能量收取（协程）
-                    collectPKEnergyCoroutine()  // PK好友能量（协程）
-                }
-                Log.record(TAG, "🏁 午夜任务刷新完成")
-            }
+            
+            // 优化：移除午夜任务，避免重复执行和耗时
+            // 正常流程会自动处理所有收取任务，无需特殊处理
 
             errorWait = false
 
@@ -908,6 +892,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // -------------------------------
             // 自己使用道具
             // -------------------------------
+            // 先查询主页，更新道具状态（双击卡、保护罩等的剩余时间）
+            updateSelfHomePage()
+            tc.countDebug("查询道具状态")
+            
             usePropBeforeCollectEnergy(selfId)
             tc.countDebug("使用自己道具卡")
 
@@ -1048,20 +1036,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "执行蚂蚁森林任务时发生错误: ", t)
         } finally {
-            try {
-                synchronized(this@AntForest) {
-                    var count = taskCount.get()
-                    if (count > 0) {
-                        (this@AntForest as Object).wait(TimeUnit.MINUTES.toMillis(30))
-                        count = taskCount.get()
-                    }
-                    if (count > 0) Log.record(TAG, "执行超时-蚂蚁森林")
-                    else if (count == 0) Log.record(TAG, "执行结束-蚂蚁森林")
-                    else Log.record(TAG, "执行完成-蚂蚁森林")
-                }
-            } catch (_: InterruptedException) {
-                Log.record(TAG, "执行中断-蚂蚁森林")
+            // 计算总耗时
+            val totalTime = System.currentTimeMillis() - runStartTime
+            val timeInSeconds = totalTime / 1000
+            
+            // 优化：不再等待蹲点任务完成，让主任务立即结束
+            // 蹲点任务会在后台独立协程中继续运行，不影响其他模块
+            val waitingTaskCount = EnergyWaitingManager.getWaitingTaskCount()
+            
+            Log.record(TAG, "=" .repeat(50))
+            Log.record(TAG, "🌲🌲🌲 森林主任务执行完毕 🌲🌲🌲")
+            Log.record(TAG, "⏱️ 主任务耗时: ${timeInSeconds}秒 (${totalTime}ms)")
+            Log.record(TAG, "📊 收取统计: 收${totalCollected}g 帮${totalHelpCollected}g 浇${totalWatered}g")
+            if (waitingTaskCount > 0) {
+                Log.record(TAG, "⏰ 后台蹲点任务: $waitingTaskCount 个 (将在指定时间自动收取)")
+            } else {
+                Log.record(TAG, "✅ 无后台蹲点任务")
             }
+            Log.record(TAG, "=" .repeat(50))
+            
             cacheCollectedMap.clear()
             // 清空本轮的空森林缓存，以便下一轮（如下次"执行间隔"到达）重新检查所有好友
             emptyForestCache.clear()
@@ -1077,35 +1070,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     /**
      * 每日重置
      */
+    // 上次检查的日期（用于判断是否跨天）
+    private var lastCheckDate: String? = null
+    
     private fun checkAndUpdateCounters() {
-        val currentTime = System.currentTimeMillis()
-        val midnight = this.midnightTime // 计算当前日期的午夜时间戳
+        val today = TimeUtil.getDateStr() // 获取当前日期，如 "2025-10-07"
 
-        if (currentTime >= midnight) {
-            // 如果时间已经过了午夜，重置计数器
+        // 只在日期变化时重置计数器（跨天）
+        if (lastCheckDate != today) {
             resetTaskCounters()
-            Log.record(TAG, "午夜重置计数器")
+            lastCheckDate = today
+            Log.record(TAG, "✅ 检测到新的一天[$today]，重置计数器")
         }
     }
 
-    private val isMidnight: Boolean
-        // 判断当前时间是否已经过午夜
-        get() {
-            val currentTime = System.currentTimeMillis()
-            val midnightTime = this.midnightTime
-            return currentTime >= midnightTime
-        }
-
-    private val midnightTime: Long
-        // 获取午夜时间戳
-        get() {
-            val calendar = Calendar.getInstance()
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            return calendar.getTimeInMillis()
-        }
 
     // 重置任务计数器（你需要根据具体任务的计数器来调整）
     private fun resetTaskCounters() {
@@ -1811,7 +1789,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 if (i < 2) {
                     Log.record(TAG, "获取" + rankingName + "失败，" + (5 * (i + 1)) + "秒后重试")
-                    delay(5000L * (i + 1))
+                    GlobalThreadPools.sleepCompat(5000L * (i + 1))
                 }
             }
 
@@ -1851,19 +1829,29 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.record(TAG, rankingName + "没有更多的好友需要处理，跳过")
                 return@withContext
             }
+            
+            // 优化：限制处理好友数量，加快主任务完成
+            // 只处理前60个好友（前20个已处理，再处理40个即2批）
+            val maxFriendsToProcess = 60 // 可调整：60/100/150等
+            val remainingToProcess = minOf(totalDatas.length() - 20, maxFriendsToProcess - 20)
+            
+            if (remainingToProcess <= 0) {
+                Log.record(TAG, rankingName + "已处理前20位好友，跳过后续处理")
+                return@withContext
+            }
+            
             val idList: MutableList<String?> = ArrayList()
             val batchSize = 20
-            val remainingSize = totalDatas.length() - 20
-            val batches = (remainingSize + batchSize - 1) / batchSize
+            val batches = (remainingToProcess + batchSize - 1) / batchSize
             Log.record(
                 TAG,
-                "开始分批串行处理" + rankingName + "后续" + remainingSize + "位好友，共" + batches + "批，每批最多" + batchSize + "人（批次间串行，批次内60并发）。"
+                "⚡ 快速模式：处理" + rankingName + "前${maxFriendsToProcess}位好友中的后续${remainingToProcess}位，共" + batches + "批（跳过${totalDatas.length() - maxFriendsToProcess}位好友）"
             )
 
             // 串行处理批次，避免总并发数过高
             var batchCount = 0
 
-            for (pos in 20..<totalDatas.length()) {
+            for (pos in 20..<minOf(totalDatas.length(), maxFriendsToProcess)) {
                 val friend = totalDatas.getJSONObject(pos)
                 val userId = friend.getString("userId")
                 if (userId == selfId) continue
@@ -2021,7 +2009,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         collectEnergy(friendId, friendHomeObj, "takeLook")
                     }
                     // 优化间隔：找到好友时减少等待时间，提高效率
-                    delay(1200L)
+                    GlobalThreadPools.sleepCompat(1200L)
                     consecutiveEmpty = 0 // 重置连续空结果计数
                 } else {
                     consecutiveEmpty++
@@ -3154,13 +3142,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             minutes = 59
         }
         val thresholdMs = hours * TimeFormatter.ONE_HOUR_MS + minutes * TimeFormatter.ONE_MINUTE_MS
-        if (shieldEnd <= nowMillis) { // 未生效或已过期
+        
+        // 检测异常数据
+        if (shieldEnd > 0 && shieldEnd < nowMillis - 365 * TimeFormatter.ONE_DAY_MS) {
+            Log.record(TAG, "[保护罩] ⚠️ 检测到异常时间数据(${TimeUtil.getCommonDate(shieldEnd)})，跳过检查")
+            return false
+        }
+        
+        if (shieldEnd > 0 && shieldEnd <= nowMillis) { // 已过期
             Log.record(
                 TAG,
-                "[保护罩] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(
+                "[保护罩] 已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(
                     nowMillis
                 )
             )
+            return true
+        }
+        
+        if (shieldEnd == 0L) { // 未生效
+            Log.record(TAG, "[保护罩] 未生效，尝试使用")
             return true
         }
         val remain = shieldEnd - nowMillis
@@ -3204,13 +3204,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val MAX_BOMB_DURATION = 4 * TimeFormatter.ONE_DAY_MS
         // 炸弹卡续用阈值为3天
         val BOMB_RENEW_THRESHOLD = 3 * TimeFormatter.ONE_DAY_MS
-        if (bombEnd <= nowMillis) { // 未生效或已过期
+        
+        // 检测异常数据
+        if (bombEnd > 0 && bombEnd < nowMillis - 365 * TimeFormatter.ONE_DAY_MS) {
+            Log.record(TAG, "[炸弹卡] ⚠️ 检测到异常时间数据(${TimeUtil.getCommonDate(bombEnd)})，跳过检查")
+            return false
+        }
+        
+        if (bombEnd > 0 && bombEnd <= nowMillis) { // 已过期
             Log.runtime(
                 TAG,
-                "[炸弹卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(
+                "[炸弹卡] 已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(
                     nowMillis
                 )
             )
+            return true
+        }
+        
+        if (bombEnd == 0L) { // 未生效
+            Log.record(TAG, "[炸弹卡] 未生效，尝试使用")
             return true
         }
         val remain = bombEnd - nowMillis
@@ -3259,13 +3271,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 双击卡最长有效期为62天（31+31）
         // 双击卡续用阈值为31天
         val doubleRenewThreshold = 31 * TimeFormatter.ONE_DAY_MS  // 改为小写开头
-        if (doubleEnd <= nowMillis) { // 未生效或已过期
+        
+        // 如果doubleEnd为0或很久以前的时间（超过1年），说明数据未初始化或有问题
+        if (doubleEnd > 0 && doubleEnd < nowMillis - 365 * TimeFormatter.ONE_DAY_MS) {
+            Log.record(TAG, "[双击卡] ⚠️ 检测到异常时间数据(${TimeUtil.getCommonDate(doubleEnd)})，跳过检查")
+            return false // 数据异常，不续用
+        }
+        
+        if (doubleEnd > 0 && doubleEnd <= nowMillis) { // 已过期
             Log.record(
                 TAG,
-                "[双击卡] 未生效/已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(
+                "[双击卡] 已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(
                     nowMillis
                 )
             )
+            return true
+        }
+        
+        if (doubleEnd == 0L) { // 未生效（初始值）
+            Log.record(TAG, "[双击卡] 未生效，尝试使用")
             return true
         }
 

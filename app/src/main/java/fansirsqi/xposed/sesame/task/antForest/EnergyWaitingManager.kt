@@ -569,6 +569,14 @@ object EnergyWaitingManager {
     }
     
     /**
+     * 获取当前正在等待的蹲点任务数量
+     * @return 蹲点任务数量
+     */
+    fun getWaitingTaskCount(): Int {
+        return waitingTasks.size
+    }
+    
+    /**
      * 格式化时间为人性化的字符串
      * @param milliseconds 毫秒数
      * @return 格式化后的时间字符串

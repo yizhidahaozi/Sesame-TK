@@ -54,7 +54,7 @@ public class AncientTree extends ModelTask {
         return false;
     }
     @Override
-    public void run() {
+    protected void runJava() {
         try {
             Log.record(TAG,"开始执行"+getName());
             ancientTree(ancientTreeCityCodeList.getValue());

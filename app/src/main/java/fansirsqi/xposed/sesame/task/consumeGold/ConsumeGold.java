@@ -65,7 +65,7 @@ public class ConsumeGold extends ModelTask {
         }
 
     }
-    public void run() {
+    protected void runJava() {
         try {
             Log.record(TAG,"执行开始-" + getName());
             RuntimeInfo.getInstance().put("consumeGold", System.currentTimeMillis());

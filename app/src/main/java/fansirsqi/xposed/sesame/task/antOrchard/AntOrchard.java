@@ -65,7 +65,7 @@ public class AntOrchard extends ModelTask {
     }
   }
   @Override
-  public void run() {
+  protected void runJava() {
     try {
       Log.record(TAG,"执行开始-" + getName());
       executeIntervalInt = Math.max(executeInterval.getValue(), 500);

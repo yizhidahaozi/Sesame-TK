@@ -150,7 +150,7 @@ public class AntSports extends ModelTask {
     }
 
     @Override
-    public void run() {
+    protected void runJava() {
         TimeCounter tc = new TimeCounter(TAG);
         Log.record(TAG, "执行开始-" + getName());
         try {

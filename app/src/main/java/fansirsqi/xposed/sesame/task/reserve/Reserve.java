@@ -62,7 +62,7 @@ public class Reserve extends ModelTask {
         }
     }
 
-    public void run() {
+    protected void runJava() {
         try {
             Log.record(TAG, "开始保护地任务");
             initReserve();

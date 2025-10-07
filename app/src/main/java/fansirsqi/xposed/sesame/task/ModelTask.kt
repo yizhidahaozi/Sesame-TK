@@ -100,8 +100,31 @@ abstract class ModelTask : Model() {
     /** 检查任务是否可以执行，子类必须实现  */
     abstract fun check(): Boolean?
 
-    /** 执行任务的具体逻辑，子类必须实现  */
-    abstract fun run()
+    /** 
+     * 执行任务的具体逻辑（协程版本）
+     * Kotlin子类应该覆盖此方法
+     */
+    protected open suspend fun runSuspend() {
+        // 默认调用Java兼容的run方法
+        runJava()
+    }
+
+    /** 
+     * 执行任务的具体逻辑（Java兼容版本）
+     * Java子类应该覆盖此方法
+     */
+    protected open fun runJava() {
+        // 子类必须覆盖 runSuspend() 或 runJava() 之一
+        throw NotImplementedError("子类必须实现 runSuspend() 或 runJava() 方法")
+    }
+
+    /** 
+     * 最终调用的run方法
+     * 子类不应该直接覆盖此方法
+     */
+    suspend fun run() {
+        runSuspend()
+    }
 
     /** 检查是否存在指定ID的子任务 */
     fun hasChildTask(childId: String): Boolean {

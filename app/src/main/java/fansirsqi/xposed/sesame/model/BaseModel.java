@@ -37,10 +37,6 @@ public class BaseModel extends Model {
     public static final IntegerModelField.MultiplyIntegerModelField checkInterval =
             new IntegerModelField.MultiplyIntegerModelField("checkInterval", "执行间隔(分钟)", 50, 1, 12 * 60, 60_000);//此处调整至30分钟执行一次，可能会比平常耗电一点。。
 
-    @Getter
-    public static final IntegerModelField taskWaitTime =
-            new IntegerModelField("taskWaitTime", "任务等待时间(-1:森林蹲点)", -1, -1, 12 * 60);
-
     /**
      * 任务执行轮数配置
      */
@@ -181,7 +177,6 @@ public class BaseModel extends Model {
         modelFields.addField(stayAwake);//是否保持唤醒状态
         modelFields.addField(manualTriggerAutoSchedule);//手动触发是否自动安排下次执行
         modelFields.addField(checkInterval);//执行间隔时间
-        modelFields.addField(taskWaitTime);//任务等待时间
         modelFields.addField(taskExecutionRounds);//轮数
         modelFields.addField(modelSleepTime);//模块休眠时间范围
         modelFields.addField(execAtTimeList);//定时执行的时间点列表

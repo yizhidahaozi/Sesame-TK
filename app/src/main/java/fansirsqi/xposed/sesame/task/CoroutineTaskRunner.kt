@@ -38,26 +38,14 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     companion object {
         private const val TAG = "CoroutineTaskRunner"
         
-        // 默认任务超时设置（毫秒）- 当配置为-1时，其他任务使用此超时
-        private const val DEFAULT_TASK_TIMEOUT = 600_000L // 默认10分钟
-        
         /**
-         * 获取动态任务超时时间
-         * @return 超时时间（毫秒），-1表示无限等待
+         * 任务超时时间配置（毫秒）
+         * 优化后的固定超时时间，足够各类任务完成
+         * - 森林：主任务完成后，蹲点在后台独立运行，不占用主流程
+         * - 庄园：主任务完成后，定时任务在后台独立运行
+         * - 其他：一般任务都能在此时间内完成
          */
-        private fun getTaskTimeout(): Long {
-            return try {
-                val waitTimeMinutes = BaseModel.taskWaitTime.value
-                if (waitTimeMinutes == -1) {
-                    -1L // 无限等待
-                } else {
-                    waitTimeMinutes * 60 * 1000L // 转换为毫秒
-                }
-            } catch (e: Exception) {
-                Log.error(TAG, "获取任务等待时间配置失败，使用默认值: ${e.message}")
-                DEFAULT_TASK_TIMEOUT
-            }
-        }
+        private const val DEFAULT_TASK_TIMEOUT = 10 * 60 * 1000L // 10分钟统一超时
         
         // 恢复任务的超时设置（毫秒）- 只用于日志提示，不会取消恢复任务
         private const val RECOVERY_TIMEOUT = 30_000L // 增加到30秒
@@ -70,20 +58,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         
         // 恢复任务的最大运行时间（毫秒）- 超过此时间后任务会被自动标记为完成
         private const val MAX_RECOVERY_RUNTIME = 10 * 60 * 1000L // 10分钟
-        
-        /**
-         * 判断任务是否为自定义任务，可以使用无限等待
-         * 当taskWaitTime配置为-1时：
-         * - 自定义任务（如蚂蚁森林）：使用无限等待
-         * - 其他任务：使用10分钟默认超时
-         */
-        private fun shouldUseInfiniteTimeout(task: ModelTask): Boolean {
-            return when (task.getName()) {
-                "森林" -> true // 蚂蚁森林任务为自定义任务，可使用无限等待
-                // 可以根据需要添加其他自定义任务
-                else -> false // 其他任务使用10分钟默认超时
-            }
-        }
     }
 
     private val taskList: List<ModelTask> = allModels.filterIsInstance<ModelTask>()
@@ -175,23 +149,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     private suspend fun executeTaskWithTimeout(task: ModelTask, round: Int) {
         val taskId = "${task.getName()}-Round$round"
         val taskStartTime = System.currentTimeMillis()
-        val taskTimeout = getTaskTimeout()
         
-        // 当配置为-1时：自定义任务使用无限等待，其他任务使用10分钟默认超时
-        val effectiveTimeout = if (taskTimeout == -1L && shouldUseInfiniteTimeout(task)) {
-            -1L // 自定义任务（如蚂蚁森林）使用无限等待
-        } else if (taskTimeout == -1L) {
-            DEFAULT_TASK_TIMEOUT // 其他任务使用10分钟默认超时
-        } else {
-            taskTimeout // 使用配置的具体超时时间
-        }
+        // 所有任务统一使用10分钟超时
+        // 森林和庄园的蹲点/定时任务会在后台独立协程中运行，不影响主流程
+        val effectiveTimeout = DEFAULT_TASK_TIMEOUT
         
-        val timeoutText = if (effectiveTimeout == -1L) {
-            "无限等待"
-        } else {
-            "${effectiveTimeout/1000}秒"
-        }
-        Log.record(TAG, "🚀 开始执行任务[$taskId]，超时设置: $timeoutText")
+        Log.record(TAG, "🚀 开始执行任务[$taskId]，超时设置: ${effectiveTimeout/1000}秒")
         try {
             // 使用智能超时机制
             executeTaskWithGracefulTimeout(task, round, taskStartTime, taskId, effectiveTimeout)

@@ -38,7 +38,7 @@ public class AntBookRead extends ModelTask {
         return System.currentTimeMillis() - executeTime >= 21600000;
     }
     @Override
-    public void run() {
+    protected void runJava() {
         try {
             Log.record("执行开始-" + getName());
             RuntimeInfo.getInstance().put("consumeGold", System.currentTimeMillis());
