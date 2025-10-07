@@ -93,6 +93,9 @@ public class ModelField<T> implements Serializable {
             reset(); // 如果传入值为 null，则重置为默认值
             return;
         }
+        if (valueType == Integer.class && objectValue instanceof Boolean) {
+            objectValue = (Boolean) objectValue ? 1 : 0;
+        }
         value = JsonUtil.parseObject(objectValue, valueType); // 解析并设置当前值
     }
 

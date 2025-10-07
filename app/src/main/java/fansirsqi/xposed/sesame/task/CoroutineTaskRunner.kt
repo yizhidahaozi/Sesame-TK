@@ -163,7 +163,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         } catch (e: TimeoutCancellationException) {
             val executionTime = System.currentTimeMillis() - taskStartTime
             failureCount.incrementAndGet()
-            val timeoutMsg = if (effectiveTimeout == -1L) "无限等待模式异常" else "${executionTime}ms > ${effectiveTimeout}ms"
+            val timeoutMsg = "${executionTime}ms > ${effectiveTimeout}ms"
             Log.error(TAG, "⏰ 任务[$taskId]执行超时($timeoutMsg)，准备自动恢复")
             
             // 记录任务状态信息

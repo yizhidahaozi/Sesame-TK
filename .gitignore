@@ -85,3 +85,6 @@ test
 .lingma/rules/project_rule.md
 serve-debug/webhook.db
 *.pyc
+
+# Cursor IDE
+.cursorignore
