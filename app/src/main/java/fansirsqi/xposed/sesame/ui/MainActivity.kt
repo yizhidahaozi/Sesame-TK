@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -17,7 +18,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
@@ -160,7 +160,14 @@ class MainActivity : BaseActivity() {
                 data += Files.getRecordLogFile().absolutePath
             }
             R.id.btn_github -> {
-                data = "https://github.com/Fansirsqi/Sesame-TK"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Fansirsqi/Sesame-TK"))
+                try {
+                    startActivity(intent)
+                } catch (exception: Exception) {
+                    Toast.makeText(this, "未找到可用的浏览器", Toast.LENGTH_SHORT).show()
+                    Log.error(TAG, "无法打开浏览器: ${exception.message}")
+                }
+                return
             }
             R.id.btn_settings -> {
                 showSelectionDialog(
@@ -183,7 +190,7 @@ class MainActivity : BaseActivity() {
             }
         }
         val it = Intent(this, HtmlViewerActivity::class.java)
-        it.data = data.toUri()
+        it.data = Uri.parse(data)
         startActivity(it)
     }
 
@@ -249,7 +256,7 @@ class MainActivity : BaseActivity() {
                 val intent = Intent(this, HtmlViewerActivity::class.java)
                 intent.putExtra("nextLine", false)
                 intent.putExtra("canClear", true)
-                intent.data = data.toUri()
+                intent.data = Uri.parse(data)
                 startActivity(intent)
                 return true
             }
@@ -258,7 +265,7 @@ class MainActivity : BaseActivity() {
                 val errorIt = Intent(this, HtmlViewerActivity::class.java)
                 errorIt.putExtra("nextLine", false)
                 errorIt.putExtra("canClear", true)
-                errorIt.data = errorData.toUri()
+                errorIt.data = Uri.parse(errorData)
                 startActivity(errorIt)
                 return true
             }
@@ -267,7 +274,7 @@ class MainActivity : BaseActivity() {
                 val otherIt = Intent(this, HtmlViewerActivity::class.java)
                 otherIt.putExtra("nextLine", false)
                 otherIt.putExtra("canClear", true)
-                otherIt.data = recordData.toUri()
+                otherIt.data = Uri.parse(recordData)
                 startActivity(otherIt)
                 return true
             }
@@ -276,7 +283,7 @@ class MainActivity : BaseActivity() {
                 val allIt = Intent(this, HtmlViewerActivity::class.java)
                 allIt.putExtra("nextLine", false)
                 allIt.putExtra("canClear", true)
-                allIt.data = runtimeData.toUri()
+                allIt.data = Uri.parse(runtimeData)
                 startActivity(allIt)
                 return true
             }
@@ -285,7 +292,7 @@ class MainActivity : BaseActivity() {
                 val captureIt = Intent(this, HtmlViewerActivity::class.java)
                 captureIt.putExtra("nextLine", false)
                 captureIt.putExtra("canClear", true)
-                captureIt.data = captureData.toUri()
+                captureIt.data = Uri.parse(captureData)
                 startActivity(captureIt)
                 return true
             }
