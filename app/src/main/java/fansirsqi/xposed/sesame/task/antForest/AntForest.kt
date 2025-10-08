@@ -122,7 +122,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     /** lzw add begin */
     @Volatile
-    private var _is_monday = false
+    private var monday = false
 
     /** lzw add end */
     private val delayTimeMath = Average(5)
@@ -134,24 +134,24 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private val concurrencyLimiter = Semaphore(60)
 
 
-    private var collectEnergy: BooleanModelField? = null
-    private var pkEnergy: BooleanModelField? = null // PK能量
-    private var energyRain: BooleanModelField? = null
-    private var advanceTime: IntegerModelField? = null
-    private var tryCount: IntegerModelField? = null
-    private var retryInterval: IntegerModelField? = null
-    private var dontCollectList: SelectModelField? = null
-    private var collectWateringBubble: BooleanModelField? = null
-    private var batchRobEnergy: BooleanModelField? = null
-    private var balanceNetworkDelay: BooleanModelField? = null
-    private var closeWhackMole: BooleanModelField? = null
-    private var collectProp: BooleanModelField? = null
-    private var queryInterval: StringModelField? = null
-    private var collectInterval: StringModelField? = null
-    private var doubleCollectInterval: StringModelField? = null
-    private var doubleCard: ChoiceModelField? = null // 双击卡
-    private var doubleCardTime: ListJoinCommaToStringModelField? = null // 双击卡时间
-    private var doubleCountLimit: IntegerModelField? = null // 双击卡次数限制
+    private var collectEnergy: BooleanModelField? = null // 收集能量开关
+    private var pkEnergy: BooleanModelField? = null // PK能量开关
+    private var energyRain: BooleanModelField? = null // 能量雨开关
+    private var advanceTime: IntegerModelField? = null // 提前时间（毫秒）
+    private var tryCount: IntegerModelField? = null // 尝试收取次数
+    private var retryInterval: IntegerModelField? = null // 重试间隔（毫秒）
+    private var dontCollectList: SelectModelField? = null // 不收取能量的用户列表
+    private var collectWateringBubble: BooleanModelField? = null // 收取浇水金球开关
+    private var batchRobEnergy: BooleanModelField? = null // 批量收取能量开关
+    private var balanceNetworkDelay: BooleanModelField? = null // 平衡网络延迟开关
+    private var closeWhackMole: BooleanModelField? = null // 自动关闭6秒拼手速开关
+    private var collectProp: BooleanModelField? = null // 收集道具开关
+    private var queryInterval: StringModelField? = null // 查询间隔时间
+    private var collectInterval: StringModelField? = null // 收取间隔时间
+    private var doubleCollectInterval: StringModelField? = null // 双击间隔时间
+    private var doubleCard: ChoiceModelField? = null // 双击卡类型选择
+    private var doubleCardTime: ListJoinCommaToStringModelField? = null // 双击卡使用时间列表
+    private var doubleCountLimit: IntegerModelField? = null // 双击卡使用次数限制
 
     /**
      * 获取双击卡使用次数限制
@@ -188,7 +188,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var userPatrol: BooleanModelField? = null
     private var collectGiftBox: BooleanModelField? = null
     private var medicalHealth: BooleanModelField? = null //医疗健康开关
-    private var ForestMarket: BooleanModelField? = null
+    private var forestMarket: BooleanModelField? = null
     private var combineAnimalPiece: BooleanModelField? = null
     private var consumeAnimalProp: BooleanModelField? = null
     private var whoYouWantToGiveTo: SelectModelField? = null
@@ -209,21 +209,29 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private var energyBombCardType: ChoiceModelField? = null
 
-    private val cacheCollectedMap: MutableMap<String?, String?> =
-        ConcurrentHashMap<String?, String?>()
+    /**
+     * 用户名缓存：userId -> userName 的映射
+     */
+    private val userNameCache: ConcurrentHashMap<String, String> = ConcurrentHashMap()
+    
+    /**
+     * 已处理用户缓存：记录本轮已处理过的用户ID，避免重复处理
+     */
+    private val processedUsersCache: ConcurrentHashMap.KeySetView<String, Boolean> = 
+        ConcurrentHashMap.newKeySet()
 
     /**
      * 空森林缓存，用于记录在本轮任务中已经确认没有能量的好友。
      * 在每轮蚂蚁森林任务开始时清空（见run方法finally块）。
      * “一轮任务”通常指由"执行间隔"触发的一次完整的好友遍历。
      */
-    private val emptyForestCache: MutableMap<String?, Long?> = ConcurrentHashMap<String?, Long?>()
+    private val emptyForestCache: ConcurrentHashMap<String, Long> = ConcurrentHashMap<String, Long>()
 
     /**
      * 跳过用户缓存，用于记录有保护罩或其他需要跳过的用户
      * Key: 用户ID，Value: 跳过原因（如"baohuzhao"表示有保护罩）
      */
-    private val skipUsersCache: MutableMap<String?, String?> = ConcurrentHashMap<String?, String?>()
+    private val skipUsersCache: ConcurrentHashMap<String, String> = ConcurrentHashMap<String, String>()
 
     private var forestChouChouLe: BooleanModelField? = null //森林抽抽乐
 
@@ -232,10 +240,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private var bubbleBoostTime: ListJoinCommaToStringModelField? = null
 
-    private val forestTaskTryCount: MutableMap<String?, AtomicInteger?> =
-        ConcurrentHashMap<String?, AtomicInteger?>()
+    private val forestTaskTryCount: ConcurrentHashMap<String, AtomicInteger> =
+        ConcurrentHashMap<String, AtomicInteger>()
 
-    private var dsontCollectMap: MutableSet<String?> = HashSet()
+    private var jsonCollectMap: MutableSet<String?> = HashSet()
 
     var emojiList: ArrayList<String> = ArrayList(
         listOf(
@@ -254,7 +262,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var cachedBagObject: JSONObject? = null
     private var lastQueryPropListTime: Long = 0
 
-    override fun getName(): String? {
+    override fun getName(): String {
         return "森林"
     }
 
@@ -266,7 +274,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         return "AntForest.png"
     }
 
-    @Suppress("unused")
     interface ApplyPropType {
         companion object {
             const val CLOSE: Int = 0
@@ -348,8 +355,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ChoiceModelField(
                 "doubleCard",
                 "双击卡开关 | 消耗类型",
-                ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames
+                ApplyPropType.CLOSE,
+                ApplyPropType.nickNames
             ).also { doubleCard = it })
         modelFields.addField(
             IntegerModelField(
@@ -373,8 +380,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ChoiceModelField(
                 "bubbleBoostCard",
                 "加速器开关 | 消耗类型",
-                ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames
+                ApplyPropType.CLOSE,
+                ApplyPropType.nickNames
             ).also { bubbleBoostCard = it })
 
         modelFields.addField(
@@ -392,8 +399,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ChoiceModelField(
                 "shieldCard",
                 "保护罩开关 | 消耗类型",
-                ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames
+                ApplyPropType.CLOSE,
+                ApplyPropType.nickNames
             ).also { shieldCard = it })
         modelFields.addField(
             BooleanModelField(
@@ -404,16 +411,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
         modelFields.addField(
             ChoiceModelField(
-                "energyBombCardType", "炸弹卡开关 | 消耗类型", ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames, "若开启了保护罩，则不会使用炸弹卡"
+                "energyBombCardType", "炸弹卡开关 | 消耗类型", ApplyPropType.CLOSE,
+                ApplyPropType.nickNames, "若开启了保护罩，则不会使用炸弹卡"
             ).also { energyBombCardType = it })
 
         modelFields.addField(
             ChoiceModelField(
                 "robExpandCard",
                 "1.1倍能量卡开关 | 消耗类型",
-                ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames
+                ApplyPropType.CLOSE,
+                ApplyPropType.nickNames
             ).also { robExpandCard = it })
 
         //1.1倍能量卡时间
@@ -438,8 +445,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ChoiceModelField(
                 "stealthCard",
                 "隐身卡开关 | 消耗类型",
-                ApplyPropType.Companion.CLOSE,
-                ApplyPropType.Companion.nickNames
+                ApplyPropType.CLOSE,
+                ApplyPropType.nickNames
             ).also { stealthCard = it })
         modelFields.addField(
             BooleanModelField(
@@ -510,8 +517,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ChoiceModelField(
                 "helpFriendCollectType",
                 "复活能量 | 选项",
-                HelpFriendCollectType.Companion.NONE,
-                HelpFriendCollectType.Companion.nickNames
+                HelpFriendCollectType.NONE,
+                HelpFriendCollectType.nickNames
             ).also { helpFriendCollectType = it })
         modelFields.addField(
             SelectModelField(
@@ -601,10 +608,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
         modelFields.addField(
             BooleanModelField(
-                "ForestMarket",
+                "forestMarket",
                 "森林集市",
                 false
-            ).also { ForestMarket = it })
+            ).also { forestMarket = it })
         modelFields.addField(
             BooleanModelField(
                 "youthPrivilege",
@@ -667,7 +674,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "advanceTime",
                 "提前时间(毫秒)",
                 0,
-                Int.Companion.MIN_VALUE,
+                Int.MIN_VALUE,
                 500
             ).also { advanceTime = it })
         modelFields.addField(
@@ -845,7 +852,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         advanceTime!!.value
 
 
-        dsontCollectMap = dontCollectList!!.value
+        jsonCollectMap = dontCollectList!!.value
 
         // 创建收取间隔实体
         collectIntervalEntity = createSafeIntervalLimit(
@@ -878,7 +885,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             errorWait = false
 
             // 计数器和时间记录
-            _is_monday = true
+            monday = true
             val tc = TimeCounter(TAG)
 
             if (showBagList!!.value) showBag()
@@ -901,14 +908,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 收PK好友能量
             // -------------------------------
             Log.runtime(TAG, "🚀 异步执行PK好友能量收取")
-            runBlocking { collectPKEnergyCoroutine() }  // 好友道具在 collectFriendEnergy 内会自动处理
+            collectPKEnergyCoroutine()  // 好友道具在 collectFriendEnergy 内会自动处理
             tc.countDebug("收PK好友能量（同步）")
 
             // -------------------------------
             // 收自己能量
             // -------------------------------
             Log.record(TAG, "🌳 【正常流程】开始收取自己的能量...")
-            val selfHomeObj = runBlocking {
+            val selfHomeObj = run {
                 val obj = querySelfHome()
                 tc.countDebug("获取自己主页对象信息")
                 if (obj != null) {
@@ -927,12 +934,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // -------------------------------
             // 先尝试使用找能量功能快速定位有能量的好友（协程）
             Log.runtime(TAG, "🚀 执行找能量功能（协程）")
-            runBlocking { collectEnergyByTakeLook() }
+            collectEnergyByTakeLook()
             tc.countDebug("找能量收取（协程）")
 
             // 然后执行传统的好友排行榜收取（协程）
             Log.runtime(TAG, "🚀 执行好友能量收取（协程）")
-            runBlocking { collectFriendEnergyCoroutine() } // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
+            collectFriendEnergyCoroutine() // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
             tc.countDebug("收取好友能量（同步）")
 
             // -------------------------------
@@ -997,7 +1004,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     tc.countDebug("能量雨")
                 }
 
-                if (ForestMarket!!.value) {
+                if (forestMarket!!.value) {
                     GreenLife.ForestMarket("GREEN_LIFE")
                     GreenLife.ForestMarket("ANTFOREST")
                     tc.countDebug("森林集市")
@@ -1045,7 +1052,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.record(TAG, "=" .repeat(50))
             Log.record(TAG, "🌲🌲🌲 森林主任务执行完毕 🌲🌲🌲")
             Log.record(TAG, "⏱️ 主任务耗时: ${timeInSeconds}秒 (${totalTime}ms)")
-            Log.record(TAG, "📊 收取统计: 收${totalCollected}g 帮${totalHelpCollected}g 浇${totalWatered}g")
+            Log.record(TAG, "📊 收取统计: 收${totalCollected}g 帮${TOTAL_HELP_COLLECTED}g 浇${TOTAL_WATERED}g")
             if (waitingTaskCount > 0) {
                 Log.record(TAG, "⏰ 后台蹲点任务: $waitingTaskCount 个 (将在指定时间自动收取)")
             } else {
@@ -1053,14 +1060,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             Log.record(TAG, "=" .repeat(50))
             
-            cacheCollectedMap.clear()
+            userNameCache.clear()
+            processedUsersCache.clear()
             // 清空本轮的空森林缓存，以便下一轮（如下次"执行间隔"到达）重新检查所有好友
             emptyForestCache.clear()
             // 清空跳过用户缓存，下一轮重新检测保护罩状态
             skipUsersCache.clear()
             // 清空好友主页缓存
             val strTotalCollected =
-                "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g"
+                "本次总 收:" + totalCollected + "g 帮:" + TOTAL_HELP_COLLECTED + "g 浇:" + TOTAL_WATERED + "g"
             updateLastExecText(strTotalCollected)
         }
     }
@@ -1106,7 +1114,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         var hasMore: Boolean
         var currentObj = initialObj
         do {
-            val jsonArray = if (currentObj != null) currentObj.optJSONArray(arrayKey) else null
+            val jsonArray = currentObj?.optJSONArray(arrayKey)
             if (jsonArray != null && jsonArray.length() > 0) {
                 handler.handle(jsonArray)
                 // 判断是否还有更多数据（比如返回满20个）
@@ -1149,8 +1157,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         for (i in 0..<wateringBubbles.length()) {
             try {
                 val wateringBubble = wateringBubbles.getJSONObject(i)
-                val bizType = wateringBubble.getString("bizType")
-                when (bizType) {
+                when (val bizType = wateringBubble.getString("bizType")) {
                     "jiaoshui" -> collectWater(wateringBubble)
                     "fuhuo" -> collectRebornEnergy()
                     "baohuhuizeng" -> collectReturnEnergy(wateringBubble)
@@ -1502,7 +1509,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      *
      * @return 首次收取后用户的能量信息，如果发生错误则返回null。
      */
-    private suspend fun collectSelfEnergy(): JSONObject? {
+    private fun collectSelfEnergy(): JSONObject? {
         try {
             val selfHomeObj = querySelfHome()
             if (selfHomeObj != null) {
@@ -1537,7 +1544,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param userHomeObj 用户主页的JSON对象，包含用户的蚂蚁森林信息
      * @return 更新后的用户主页JSON对象，如果发生异常返回null
      */
-    private suspend fun collectEnergy(
+    private fun collectEnergy(
         userId: String?,
         userHomeObj: JSONObject?,
         fromTag: String?
@@ -1555,13 +1562,18 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val isSelf = userId == UserMap.currentUid
 
             // 自己的能量不受缓存限制，好友的能量检查缓存避免重复处理
-            if (!isSelf && cacheCollectedMap.containsKey(userId)) {
+            if (!isSelf && !userId.isNullOrEmpty() && processedUsersCache.contains(userId)) {
                 return userHomeObj
+            }
+            
+            // 标记用户为已处理（无论是否成功收取能量）
+            if (!isSelf && !userId.isNullOrEmpty()) {
+                processedUsersCache.add(userId)
             }
             val userName = getAndCacheUserName(userId, userHomeObj, fromTag)
 
             // 3. 判断是否允许收取能量
-            if (!collectEnergy!!.value || dsontCollectMap.contains(userId)) {
+            if (!collectEnergy!!.value || jsonCollectMap.contains(userId)) {
                 Log.debug(TAG, "[$userName] 不允许收取能量，跳过")
                 return userHomeObj
             }
@@ -1569,7 +1581,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val availableBubbles: MutableList<Long> = ArrayList()
             extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
             if (availableBubbles.isEmpty()) {
-                emptyForestCache.put(userId, System.currentTimeMillis())
+                // 记录空森林的时间戳，避免本轮重复检查
+                if (!userId.isNullOrEmpty()) {
+                    emptyForestCache[userId] = System.currentTimeMillis()
+                }
                 return userHomeObj
             }
             // 检查是否有能量罩保护（影响当前收取）
@@ -1577,7 +1592,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (!isSelf) {
                 if (hasShield(userHomeObj, serverTime)) {
                     hasProtection = true
-                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取 状态判断:${isSelf} ${userId} == ${UserMap.currentUid}")
+                    Log.record(TAG, "[$userName]被能量罩❤️保护着哟，跳过收取 状态判断:${false} $userId == ${UserMap.currentUid}")
                 }
                 if (hasBombCard(userHomeObj, serverTime)) {
                     hasProtection = true
@@ -1702,7 +1717,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param fromTag     收取来源标识
      */
     @Throws(JSONException::class)
-    private suspend fun collectVivaEnergy(
+    private fun collectVivaEnergy(
         userId: String?,
         userHomeObj: JSONObject?,
         bubbleIds: MutableList<Long>,
@@ -1759,6 +1774,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     /**
      * 协程版本的排行榜收取方法
      */
+
     private suspend fun collectRankingsCoroutine(
         rankingName: String?,
         rpcCall: RpcSupplier<String?>,
@@ -1907,7 +1923,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * 使用找能量功能收取好友能量（协程版本）
      * 这是一个更高效的收取方式，可以直接找到有能量的好友
      */
-    private suspend fun collectEnergyByTakeLook() {
+    private fun collectEnergyByTakeLook() {
         try {
             // 检查是否还在冷却期
             val currentTime = System.currentTimeMillis()
@@ -2039,7 +2055,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun addToSkipUsers(userId: String?) {
         try {
-            skipUsersCache.put(userId, "baohuzhao")
+            if (!userId.isNullOrEmpty()) {
+                skipUsersCache[userId] = "baohuzhao"
+            }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "添加跳过用户失败", e)
         }
@@ -2093,7 +2111,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     batchObj.optJSONArray("friendRanking")
                 }
                 else -> {
-                    Log.error(TAG, "不支持的好友数据源类型: ${friendSource?.javaClass?.simpleName}")
+                    Log.error(TAG, "不支持的好友数据源类型: ${friendSource.javaClass.simpleName}")
                     return@withContext
                 }
             }
@@ -2170,7 +2188,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param flag 标记是普通好友还是PK好友
      */
     @Throws(Exception::class)
-    private suspend fun processEnergyInternal(obj: JSONObject, flag: String?) {
+    private fun processEnergyInternal(obj: JSONObject, flag: String?) {
         if (errorWait) return
         val userId = obj.getString("userId")
         if (userId == selfId) return  // 跳过自己
@@ -2200,9 +2218,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
             val needCollectEnergy =
-                collectEnergy!!.value && !dsontCollectMap.contains(userId)
+                collectEnergy!!.value && !jsonCollectMap.contains(userId)
             val needHelpProtect =
-                helpFriendCollectType!!.value != HelpFriendCollectType.Companion.NONE && obj.optBoolean(
+                helpFriendCollectType!!.value != HelpFriendCollectType.NONE && obj.optBoolean(
                     "canProtectBubble"
                 ) && Status.canProtectBubbleToday(selfId)
             val needCollectGiftBox =
@@ -2245,11 +2263,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private fun isIsProtected(userId: String?): Boolean {
         var isProtected: Boolean
         // Log.forest("is_monday:"+_is_monday);
-        if (_is_monday) {
+        if (monday) {
             isProtected = alternativeAccountList!!.value.contains(userId)
         } else {
             isProtected = helpFriendCollectList!!.value.contains(userId)
-            if (helpFriendCollectType!!.value != HelpFriendCollectType.Companion.HELP) {
+            if (helpFriendCollectType!!.value != HelpFriendCollectType.HELP) {
                 isProtected = !isProtected
             }
         }
@@ -2534,7 +2552,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.printStackTrace(e)
             } finally {
                 val strTotalCollected =
-                    "本次总 收:" + totalCollected + "g 帮:" + totalHelpCollected + "g 浇:" + totalWatered + "g"
+                    "本次总 收:" + totalCollected + "g 帮:" + TOTAL_HELP_COLLECTED + "g 浇:" + TOTAL_WATERED + "g"
                 updateLastExecText(strTotalCollected)
                 notifyMain()
             }
@@ -2545,11 +2563,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     private fun getReturnCount(collected: Int): Int {
         var returnCount = 0
-        if (returnWater33!!.value > 0 && collected >= returnWater33!!.value) {
+        if (returnWater33!!.value in 1..collected) {
             returnCount = 33
-        } else if (returnWater18!!.value > 0 && collected >= returnWater18!!.value) {
+        } else if (returnWater18!!.value in 1..collected) {
             returnCount = 18
-        } else if (returnWater10!!.value > 0 && collected >= returnWater10!!.value) {
+        } else if (returnWater10!!.value in 1..collected) {
             returnCount = 10
         }
         return returnCount
@@ -2884,9 +2902,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 // 提取森林任务列表
                 val forestSignVOList = jo.getJSONArray("forestSignVOList")
-                var SumawardCount = 0
-                val DailyawardCount = dailyTask(forestSignVOList) // 执行每日任务
-                SumawardCount = DailyawardCount + SumawardCount
+                var sumawardCount = 0
+                val dailyawardCount = dailyTask(forestSignVOList) // 执行每日任务
+                sumawardCount += dailyawardCount
 
                 // 提取森林任务
                 val forestTasksNew = jo.optJSONArray("forestTasksNew")
@@ -2924,7 +2942,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             ) // 领取奖励请求
                             if (ResChecker.checkRes(TAG + "领取森林任务奖励失败:", joAward)) {
                                 Log.forest("森林奖励🎖️[" + taskTitle + "]# " + awardCount + "活力值")
-                                SumawardCount += awardCount
+                                sumawardCount += awardCount
                                 doubleCheck = true // 标记需要重新检查任务
                             } else {
                                 Log.error(TAG, "领取失败: $taskTitle") // 记录领取失败信息
@@ -2938,11 +2956,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             if (!badTaskSet.contains(taskType)) {
                                 val bizKey = sceneCode + "_" + taskType
                                 val count = forestTaskTryCount
-                                    .computeIfAbsent(bizKey) { k: String? ->
+                                    .computeIfAbsent(bizKey) { _: String? ->
                                         AtomicInteger(
                                             0
                                         )
-                                    }!!
+                                    }
                                     .incrementAndGet()
 
                                 // 完成任务请求
@@ -2984,7 +3002,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             ) // 完成任务请求
                             if (ResChecker.checkRes(TAG + "完成游戏任务失败:", joFinishTask)) {
                                 Log.forest("游戏任务完成 🎮️[" + taskTitle + "]# " + awardCount + "活力值")
-                                SumawardCount += awardCount
+                                sumawardCount += awardCount
                                 doubleCheck = true // 标记需要重新检查任务
                             } else {
                                 Log.error(TAG, "游戏任务完成失败: $taskTitle") // 记录任务完成失败信息
@@ -3028,26 +3046,26 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val now = System.currentTimeMillis()
             // 双击卡判断
             val needDouble =
-                doubleCard!!.value != ApplyPropType.Companion.CLOSE && shouldRenewDoubleCard(
+                doubleCard!!.value != ApplyPropType.CLOSE && shouldRenewDoubleCard(
                     doubleEndTime,
                     now
                 )
 
             val needrobExpand =
-                robExpandCard!!.value != ApplyPropType.Companion.CLOSE && robExpandCardEndTime < now
+                robExpandCard!!.value != ApplyPropType.CLOSE && robExpandCardEndTime < now
             val needStealth =
-                stealthCard!!.value != ApplyPropType.Companion.CLOSE && stealthEndTime < now
+                stealthCard!!.value != ApplyPropType.CLOSE && stealthEndTime < now
 
             // 保护罩判断
             val needShield =
-                (shieldCard!!.value != ApplyPropType.Companion.CLOSE) && energyBombCardType!!.value == ApplyPropType.Companion.CLOSE
+                (shieldCard!!.value != ApplyPropType.CLOSE) && energyBombCardType!!.value == ApplyPropType.CLOSE
                         && shouldRenewShield(shieldEndTime, now)
             // 炸弹卡判断
             val needEnergyBombCard =
-                (energyBombCardType!!.value != ApplyPropType.Companion.CLOSE) && shieldCard!!.value == ApplyPropType.Companion.CLOSE
+                (energyBombCardType!!.value != ApplyPropType.CLOSE) && shieldCard!!.value == ApplyPropType.CLOSE
                         && shouldRenewEnergyBomb(energyBombCardEndTime, now)
 
-            val needBubbleBoostCard = bubbleBoostCard!!.value != ApplyPropType.Companion.CLOSE
+            val needBubbleBoostCard = bubbleBoostCard!!.value != ApplyPropType.CLOSE
 
             Log.runtime(
                 TAG, "道具使用检查: needDouble=" + needDouble + ", needrobExpand=" + needrobExpand +
@@ -3084,15 +3102,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
     }
 
-    fun useCardBoot(TargetTimeValue: MutableList<String?>, propName: String?, func: Runnable) {
-        for (targetTimeStr in TargetTimeValue) {
+    fun useCardBoot(targetTimeValue: MutableList<String?>, propName: String?, func: Runnable) {
+        for (targetTimeStr in targetTimeValue) {
             if ("-1" == targetTimeStr) {
                 return
             }
-            val targetTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(targetTimeStr)
-            if (targetTimeCalendar == null) {
-                return
-            }
+            val targetTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(targetTimeStr) ?: return
             val targetTime = targetTimeCalendar.getTimeInMillis()
             val now = System.currentTimeMillis()
             if (now > targetTime) {
@@ -3147,7 +3162,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             return false
         }
         
-        if (shieldEnd > 0 && shieldEnd <= nowMillis) { // 已过期
+        if (shieldEnd in 1..nowMillis) { // 已过期
             Log.record(
                 TAG,
                 "[保护罩] 已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(
@@ -3199,17 +3214,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     @SuppressLint("DefaultLocale")
     private fun shouldRenewEnergyBomb(bombEnd: Long, nowMillis: Long): Boolean {
         // 炸弹卡最长有效期为4天
-        val MAX_BOMB_DURATION = 4 * TimeFormatter.ONE_DAY_MS
+        val maxBombDuration = 4 * TimeFormatter.ONE_DAY_MS
         // 炸弹卡续用阈值为3天
-        val BOMB_RENEW_THRESHOLD = 3 * TimeFormatter.ONE_DAY_MS
-        
+        val bombRenewThreshold = 3 * TimeFormatter.ONE_DAY_MS
         // 检测异常数据
         if (bombEnd > 0 && bombEnd < nowMillis - 365 * TimeFormatter.ONE_DAY_MS) {
             Log.record(TAG, "[炸弹卡] ⚠️ 检测到异常时间数据(${TimeUtil.getCommonDate(bombEnd)})，跳过检查")
             return false
         }
         
-        if (bombEnd > 0 && bombEnd <= nowMillis) { // 已过期
+        if (bombEnd in 1..nowMillis) { // 已过期
             Log.runtime(
                 TAG,
                 "[炸弹卡] 已过期，立即续写；end=" + TimeUtil.getCommonDate(bombEnd) + ", now=" + TimeUtil.getCommonDate(
@@ -3226,10 +3240,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val remain = bombEnd - nowMillis
         // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
         val needRenew =
-            remain <= BOMB_RENEW_THRESHOLD && (bombEnd - nowMillis + remain) <= MAX_BOMB_DURATION
+            remain <= bombRenewThreshold && (bombEnd - nowMillis + remain) <= maxBombDuration
 
         val remainTimeStr = TimeFormatter.formatRemainingTime(remain)
-        val thresholdTimeStr = TimeFormatter.formatRemainingTime(BOMB_RENEW_THRESHOLD)
+        val thresholdTimeStr = TimeFormatter.formatRemainingTime(bombRenewThreshold)
 
         if (needRenew) {
             Log.runtime(
@@ -3251,8 +3265,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         Log.runtime(
             TAG, String.format(
                 "[炸弹卡] 详细对比: %dms ≤ %dms = %s, 总时长检查: %dms ≤ %dms",
-                remain, BOMB_RENEW_THRESHOLD, (remain <= BOMB_RENEW_THRESHOLD),
-                (bombEnd - nowMillis + remain), MAX_BOMB_DURATION
+                remain, bombRenewThreshold, (remain <= bombRenewThreshold),
+                (bombEnd - nowMillis + remain), maxBombDuration
             )
         )
 
@@ -3276,7 +3290,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             return false // 数据异常，不续用
         }
         
-        if (doubleEnd > 0 && doubleEnd <= nowMillis) { // 已过期
+        if (doubleEnd in 1..nowMillis) { // 已过期
             Log.record(
                 TAG,
                 "[双击卡] 已过期，立即续写；end=" + TimeUtil.getCommonDate(doubleEnd) + ", now=" + TimeUtil.getCommonDate(
@@ -3608,10 +3622,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             // 遍历动物属性
             for (i in 0..<animalProps.length()) {
-                val animalObject = animalProps.optJSONObject(i)
-                if (animalObject == null) {
-                    continue
-                }
+                val animalObject = animalProps.optJSONObject(i) ?: continue
                 val pieces = animalObject.optJSONArray("pieces")
                 if (pieces == null || pieces.length() == 0) {
                     Log.runtime(TAG, "动物碎片列表为空")
@@ -3673,8 +3684,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 // 获取第一个动物的属性
                 val animalProp = animalProps.getJSONObject(0)
-                val animal: JSONObject? = checkNotNull(animalProp.optJSONObject("animal"))
-                val id = animal!!.optInt("id", -1)
+                val animal: JSONObject = checkNotNull(animalProp.optJSONObject("animal"))
+                val id = animal.optInt("id", -1)
                 val name = animal.optString("name", "未知动物")
                 // 获取碎片信息
                 val pieces = animalProp.optJSONArray("pieces")
@@ -3792,16 +3803,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             return
         }
         try {
-            val forestPropVOList = bagObject?.optJSONArray("forestPropVOList")
-            if (forestPropVOList == null) return
+            val forestPropVOList = bagObject?.optJSONArray("forestPropVOList") ?: return
 
             val logBuilder = StringBuilder("\n======= 背包道具列表 =======\n")
             for (i in 0..<forestPropVOList.length()) {
-                val prop = forestPropVOList.optJSONObject(i)
-                if (prop == null) continue
+                val prop = forestPropVOList.optJSONObject(i) ?: continue
 
-                val propConfig = prop.optJSONObject("propConfigVO")
-                if (propConfig == null) continue
+                val propConfig = prop.optJSONObject("propConfigVO") ?: continue
 
                 val propName = propConfig.optString("propName")
                 val propType = prop.optString("propType")
@@ -3860,7 +3868,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 val status = resData.optString("usePropStatus")
                 if ("NEED_CONFIRM_CAN_PROLONG" == status) {
-                    // 情况1: 需要二次确认 (真正的续写)
+                    // 情况1: 需要二次确认 (真正地续写)
                     Log.record(TAG, propName + "需要二次确认，发送确认请求...")
                     GlobalThreadPools.sleepCompat(2000)
                     val confirmResponseStr =
@@ -3928,10 +3936,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return
             }
 
-            val forestPropVOList = bagObject.optJSONArray("forestPropVOList")
-            if (forestPropVOList == null) {
-                return
-            }
+            val forestPropVOList = bagObject.optJSONArray("forestPropVOList") ?: return
 
             // 永动机逻辑：如果背包内没有双击卡且开启了永动机，尝试兑换
             var hasProp = false
@@ -3965,10 +3970,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             for (i in 0..<forestPropVOList.length()) {
                 val prop = forestPropVOList.optJSONObject(i)
                 if (prop != null && "doubleClick" == prop.optString("propGroup")) {
-                    if (choice == ApplyPropType.Companion.ALL) {
+                    if (choice == ApplyPropType.ALL) {
                         // 设置为"所有道具": 添加所有双击卡
                         doubleClickProps.add(prop)
-                    } else if (choice == ApplyPropType.Companion.ONLY_LIMIT_TIME) {
+                    } else if (choice == ApplyPropType.ONLY_LIMIT_TIME) {
                         // 设置为"限时道具": 只添加用于续期的卡 (名字含LIMIT_TIME或DAYS)
                         val propType = prop.optString("propType")
                         if (propType.contains("LIMIT_TIME") || propType.contains("DAYS")) {
@@ -3986,8 +3991,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Collections.sort(
                 doubleClickProps,
                 Comparator { p1: JSONObject?, p2: JSONObject? ->
-                    val expireTime1 = p1!!.optLong("recentExpireTime", Long.Companion.MAX_VALUE)
-                    val expireTime2 = p2!!.optLong("recentExpireTime", Long.Companion.MAX_VALUE)
+                    val expireTime1 = p1!!.optLong("recentExpireTime", Long.MAX_VALUE)
+                    val expireTime2 = p2!!.optLong("recentExpireTime", Long.MAX_VALUE)
                     expireTime1.compareTo(expireTime2)
                 })
 
@@ -4007,7 +4012,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
 
                 // 特定条件检查2: 如果是限时卡，并且设置为"仅限时道具"，则只在过期前1天内使用
-                if ("LIMIT_TIME_ENERGY_DOUBLE_CLICK" == propType && choice == ApplyPropType.Companion.ONLY_LIMIT_TIME) {
+                if ("LIMIT_TIME_ENERGY_DOUBLE_CLICK" == propType && choice == ApplyPropType.ONLY_LIMIT_TIME) {
                     val expireTime = propObj.optLong("recentExpireTime", 0)
                     if (expireTime > 0 && (expireTime - System.currentTimeMillis() > 24 * 60 * 60 * 1000L)) {
                         Log.record(TAG, "跳过[$propName]，该卡有效期剩余超过1天 (仅限时模式)")
@@ -4155,10 +4160,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             var jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_RAIN_CHANCE")
             // 活力值商店兑换
             if (jo == null) {
-                val skuInfo = Vitality.findSkuInfoBySkuName("能量雨次卡")
-                if (skuInfo == null) {
-                    return
-                }
+                val skuInfo = Vitality.findSkuInfoBySkuName("能量雨次卡") ?: return
                 val skuId = skuInfo.getString("skuId")
                 if (Status.canVitalityExchangeToday(
                         skuId,
@@ -4254,21 +4256,31 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         userHomeObj: JSONObject?,
         fromTag: String?
     ): String? {
-        // 1. 尝试从缓存获取
-        var userName = cacheCollectedMap[userId]
-        if (userName != null && userName != userId) { // 如果缓存的不是userId本身
-            return userName
+        // 输入验证：userId为空时直接返回
+        if (userId.isNullOrEmpty()) {
+            return null
         }
 
-        // 2. 根据上下文解析
-        userName = resolveUserNameFromContext(userId, userHomeObj, fromTag)
-        // 3. Fallback处理
-        if (userName == null || userName.isEmpty()) {
+        // 1. 尝试从缓存获取
+        val cachedUserName = userNameCache.get(userId)
+        if (!cachedUserName.isNullOrEmpty() && cachedUserName != userId) {
+            // 如果缓存的不是userId本身，且不为空，则返回缓存值
+            return cachedUserName
+        }
+
+        // 2. 根据上下文解析用户名
+        var userName = resolveUserNameFromContext(userId, userHomeObj, fromTag)
+        
+        // 3. Fallback处理：如果解析失败，使用userId作为显示名
+        if (userName.isNullOrEmpty()) {
             userName = userId
         }
 
-        // 4. 存入缓存
-        cacheCollectedMap.put(userId, userName)
+        // 4. 存入缓存（只缓存有效的用户名）
+        if (userName.isNotEmpty()) {
+            userNameCache[userId] = userName
+        }
+        
         return userName
     }
 
@@ -4429,8 +4441,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         var ecoLifeOpen: BooleanModelField? = null
         private var canConsumeAnimalProp = false
         private var totalCollected = 0
-        private const val totalHelpCollected = 0
-        private const val totalWatered = 0
+        private const val TOTAL_HELP_COLLECTED = 0
+        private const val TOTAL_WATERED = 0
         private const val MAX_BATCH_SIZE = 6
 
         // 找能量功能的冷却时间（毫秒），15分钟
@@ -4471,7 +4483,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         if (!isSelf) {
             val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
             val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
-            val protectionEndTime = maxOf(shieldEndTime, bombEndTime)
+            maxOf(shieldEndTime, bombEndTime)
 
             if (shieldEndTime > serverTime) {
                 hasProtection = true
@@ -4492,7 +4504,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * 专门用于蹲点的能量收取方法
      */
     @SuppressLint("SimpleDateFormat")
-    private suspend fun collectEnergyForWaiting(
+    private fun collectEnergyForWaiting(
         userId: String,
         userHomeObj: JSONObject,
         fromTag: String?,
@@ -4536,14 +4548,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
 
             // 先查询用户能量状态
-            val queryResult = collectEnergy(userId, userHomeObj, fromTag)
-            if (queryResult == null) {
-                return CollectResult(
-                    success = false,
-                    userName = userName,
-                    message = "无法查询用户能量信息"
-                )
-            }
+            val queryResult = collectEnergy(userId, userHomeObj, fromTag) ?: return CollectResult(
+                success = false,
+                userName = userName,
+                message = "无法查询用户能量信息"
+            )
 
             // Log.debug(TAG, "蹲点收取查询结果: $queryResult")
 

@@ -403,15 +403,15 @@ object EnergyWaitingManager {
                 val protectionEndTime = task.getProtectionEndTime()
                 
                 // 无延迟，立即收取
-                val timingInfo = if (protectionEndTime > actualTime) {
-                    val protectionRemain = (protectionEndTime - actualTime) / 1000
-                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后立即收取"
-                } else if (energyTimeRemain > 0) {
-                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后立即收取"
-                } else {
-                    "能量已成熟 - 立即收取"
-                }
-                
+//                if (protectionEndTime > actualTime) {
+//                    val protectionRemain = (protectionEndTime - actualTime) / 1000
+//                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后立即收取"
+//                } else if (energyTimeRemain > 0) {
+//                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后立即收取"
+//                } else {
+//                    "能量已成熟 - 立即收取"
+//                }
+//
               //  Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
                 
                 // 🚨 严格时机检查：能量未成熟时直接跳过
@@ -439,7 +439,7 @@ object EnergyWaitingManager {
                         task.produceTime - actualTime
                     ) // 等待到正确时机，无额外延迟
                     
-                    if (additionalWait > 0 && additionalWait < 1800000L) { // 最多额外等待30分钟
+                    if (additionalWait in 1..<1800000L) { // 最多额外等待30分钟
                         Log.debug(TAG, "最终时机检查：等待${additionalWait/1000}秒到正确时机")
                         Log.debug(TAG, "  等待原因: ${if (!isEnergyMature) "能量未成熟" else ""}${if (!isProtectionEnd) "保护未结束" else ""}")
                         delay(additionalWait)

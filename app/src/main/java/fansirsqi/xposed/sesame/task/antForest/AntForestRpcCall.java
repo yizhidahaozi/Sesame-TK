@@ -76,7 +76,6 @@ public class AntForestRpcCall {
 
     /**
      * 批量获取好友能量信息（标准版）
-     * 
      * 用途：批量查询多个好友的蚂蚁森林信息，包括：
      * - 好友昵称（displayName）
      * - 是否可收取能量（canCollectEnergy）
@@ -84,7 +83,6 @@ public class AntForestRpcCall {
      * - 保护罩状态等
      * <p>
      * 性能优势：一次网络请求获取多个好友信息，比逐个查询快得多
-     * 
      * @param userIdList 用户ID列表（JSONArray），例如：["2088xxx", "2088yyy", ...]
      *                   通常每批20个好友ID
      * @return JSON字符串，包含 friendRanking 数组，每个元素是一个好友的详细信息
@@ -101,7 +99,7 @@ public class AntForestRpcCall {
      *     }
      *   ]
      * }
-     * 
+     *
      * 调用示例（Kotlin）：
      * val userIds = JSONArray(listOf("2088xxx", "2088yyy"))
      * val response = AntForestRpcCall.fillUserRobFlag(userIds)
@@ -124,22 +122,22 @@ public class AntForestRpcCall {
 
     /**
      * 批量获取好友能量信息（增强版 - PK排行榜专用）
-     * 
+     *
      * 与标准版的区别：
      * - 增加了 needFillUserInfo 参数
      * - 用于PK排行榜场景，需要更完整的用户信息
      * - 不指定 relationLocal，返回完整数据
-     * 
+     *
      * @param userIdList        用户ID列表（JSONArray）
      * @param needFillUserInfo  是否需要填充详细用户信息
      *                          true: 返回完整的用户资料（PK排行榜使用）
      *                          false: 只返回基本信息
      * @return JSON字符串，包含好友的完整信息
-     * 
+     *
      * 使用场景：
      * - 普通好友排行榜：fillUserRobFlag(userIds)
      * - PK好友排行榜：fillUserRobFlag(userIds, true)
-     * 
+     *
      * 调用示例（Kotlin）：
      * // PK排行榜场景
      * val response = AntForestRpcCall.fillUserRobFlag(userIds, true)
@@ -198,7 +196,7 @@ public class AntForestRpcCall {
 
     /**
      * 找能量方法 - 查找可收取能量的好友（带跳过用户列表）
-     * 
+     *
      * @param skipUsers 跳过的用户列表，格式：{"userId": "baohuzhao"} 表示该用户有保护罩
      * @return 找能量的响应结果
      */
@@ -212,7 +210,7 @@ public class AntForestRpcCall {
             requestData.put("takeLookEnd", false);
             requestData.put("takeLookStart", true);
             requestData.put("version", VERSION);
-            return RequestManager.requestString("alipay.antforest.forest.h5.takeLook", 
+            return RequestManager.requestString("alipay.antforest.forest.h5.takeLook",
                     "[" + requestData + "]");
         } catch (JSONException e) {
             Log.printStackTrace("AntForestRpcCall", "takeLook构建请求参数失败", e);
