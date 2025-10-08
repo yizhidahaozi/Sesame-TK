@@ -99,7 +99,6 @@ public class AntForestRpcCall {
      *     }
      *   ]
      * }
-     *
      * 调用示例（Kotlin）：
      * val userIds = JSONArray(listOf("2088xxx", "2088yyy"))
      * val response = AntForestRpcCall.fillUserRobFlag(userIds)
@@ -122,7 +121,6 @@ public class AntForestRpcCall {
 
     /**
      * 批量获取好友能量信息（增强版 - PK排行榜专用）
-     *
      * 与标准版的区别：
      * - 增加了 needFillUserInfo 参数
      * - 用于PK排行榜场景，需要更完整的用户信息
@@ -133,11 +131,9 @@ public class AntForestRpcCall {
      *                          true: 返回完整的用户资料（PK排行榜使用）
      *                          false: 只返回基本信息
      * @return JSON字符串，包含好友的完整信息
-     *
      * 使用场景：
      * - 普通好友排行榜：fillUserRobFlag(userIds)
      * - PK好友排行榜：fillUserRobFlag(userIds, true)
-     *
      * 调用示例（Kotlin）：
      * // PK排行榜场景
      * val response = AntForestRpcCall.fillUserRobFlag(userIds, true)
