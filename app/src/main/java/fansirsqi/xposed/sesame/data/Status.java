@@ -50,6 +50,8 @@ public class Status {
     private Set<String> dailyAnswerList = new HashSet<>();
     private Set<String> donationEggList = new HashSet<>();
     private int useAccelerateToolCount = 0;
+    private Map<String, Long> bigEaterToolUsageMap = new HashMap<>(); // 加饭卡使用时间记录
+    private Map<String, Integer> bigEaterToolDailyCount = new HashMap<>(); // 加饭卡每日使用次数
     
     /**
      * 小鸡换装
@@ -107,11 +109,7 @@ public class Status {
 
 
     public static long getCurrentDayTimestamp() {
-        Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
+        Calendar calendar = TimeUtil.getToday();
         return calendar.getTimeInMillis(); // 返回当天零点时间戳
     }
 
@@ -204,17 +202,6 @@ public class Status {
         }
     }
 
-    public static boolean canAnswerQuestionToday() {
-        return !getINSTANCE().answerQuestion;
-    }
-
-    public static void answerQuestionToday() {
-        if (!getINSTANCE().answerQuestion) {
-            getINSTANCE().answerQuestion = true;
-            save();
-        }
-    }
-
     public static boolean canFeedFriendToday(String id, int newCount) {
         Integer count = getINSTANCE().feedFriendLogList.get(id);
         if (count == null) {
@@ -267,6 +254,45 @@ public class Status {
         save();
     }
     
+    /**
+     * 获取加饭卡上次使用时间
+     * @param userId 用户ID
+     * @return 上次使用时间戳，如果从未使用则返回0
+     */
+    public static long getBigEaterToolLastUseTime(String userId) {
+        Long lastUseTime = getINSTANCE().bigEaterToolUsageMap.get(userId);
+        return lastUseTime != null ? lastUseTime : 0L;
+    }
+    
+    /**
+     * 设置加饭卡使用时间
+     * @param userId 用户ID
+     * @param timestamp 使用时间戳
+     */
+    public static void setBigEaterToolLastUseTime(String userId, long timestamp) {
+        getINSTANCE().bigEaterToolUsageMap.put(userId, timestamp);
+        save();
+    }
+    
+    /**
+     * 获取加饭卡今日使用次数
+     * @param userId 用户ID
+     * @return 今日使用次数
+     */
+    public static int getBigEaterToolDailyCount(String userId) {
+        Integer count = getINSTANCE().bigEaterToolDailyCount.get(userId);
+        return count != null ? count : 0;
+    }
+    
+    /**
+     * 增加加饭卡今日使用次数
+     * @param userId 用户ID
+     */
+    public static void incrementBigEaterToolDailyCount(String userId) {
+        int currentCount = getBigEaterToolDailyCount(userId);
+        getINSTANCE().bigEaterToolDailyCount.put(userId, currentCount + 1);
+        save();
+    }
 
     public static boolean canDonationEgg(String uid) {
         return !getINSTANCE().donationEggList.contains(uid);
@@ -377,11 +403,6 @@ public class Status {
             getINSTANCE().kbSignIn = todayZero;
             save();
         }
-    }
-
-    public static void setDadaDailySet(Set<String> dailyAnswerList) {
-        getINSTANCE().dailyAnswerList = dailyAnswerList;
-        save();
     }
 
     public static boolean canDonateCharityCoin() {

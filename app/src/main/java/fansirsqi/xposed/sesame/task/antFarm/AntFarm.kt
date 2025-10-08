@@ -83,7 +83,7 @@ class AntFarm : ModelTask() {
     private var familyGroupId: String? = null
     private var farmTools: Array<FarmTool> = emptyArray()
 
-    override fun getName(): String? {
+    override fun getName(): String {
         return "庄园"
     }
 
@@ -228,8 +228,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "recallAnimalType",
                 "召回小鸡",
-                RecallAnimalType.Companion.ALWAYS,
-                RecallAnimalType.Companion.nickNames
+                RecallAnimalType.ALWAYS,
+                RecallAnimalType.nickNames
             ).also { recallAnimalType = it })
         modelFields.addField(
             BooleanModelField(
@@ -258,8 +258,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "getFeedType",
                 "一起拿饲料 | 动作",
-                GetFeedType.Companion.GIVE,
-                GetFeedType.Companion.nickNames
+                GetFeedType.GIVE,
+                GetFeedType.nickNames
             ).also { getFeedType = it })
         modelFields.addField(
             SelectModelField(
@@ -290,8 +290,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "hireAnimalType",
                 "雇佣小鸡 | 动作",
-                HireAnimalType.Companion.DONT_HIRE,
-                HireAnimalType.Companion.nickNames
+                HireAnimalType.DONT_HIRE,
+                HireAnimalType.nickNames
             ).also { hireAnimalType = it })
         modelFields.addField(
             SelectModelField(
@@ -311,15 +311,15 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "sendBackAnimalWay",
                 "遣返 | 方式",
-                SendBackAnimalWay.Companion.NORMAL,
-                SendBackAnimalWay.Companion.nickNames
+                SendBackAnimalWay.NORMAL,
+                SendBackAnimalWay.nickNames
             ).also { sendBackAnimalWay = it })
         modelFields.addField(
             ChoiceModelField(
                 "sendBackAnimalType",
                 "遣返 | 动作",
-                SendBackAnimalType.Companion.NOT_BACK,
-                SendBackAnimalType.Companion.nickNames
+                SendBackAnimalType.NOT_BACK,
+                SendBackAnimalType.nickNames
             ).also { sendBackAnimalType = it })
         modelFields.addField(
             SelectModelField(
@@ -339,8 +339,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "notifyFriendType",
                 "通知赶鸡 | 动作",
-                NotifyFriendType.Companion.NOTIFY,
-                NotifyFriendType.Companion.nickNames
+                NotifyFriendType.NOTIFY,
+                NotifyFriendType.nickNames
             ).also { notifyFriendType = it })
         modelFields.addField(
             SelectModelField(
@@ -360,8 +360,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "donationCount",
                 "每日捐蛋 | 次数",
-                DonationCount.Companion.ONE,
-                DonationCount.Companion.nickNames
+                DonationCount.ONE,
+                DonationCount.nickNames
             ).also { donationCount = it })
         modelFields.addField(
             BooleanModelField(
@@ -434,8 +434,8 @@ class AntFarm : ModelTask() {
             ChoiceModelField(
                 "collectChickenDiary",
                 "小鸡日记 | 点赞",
-                collectChickenDiaryType.Companion.ONCE,
-                collectChickenDiaryType.Companion.nickNames
+                collectChickenDiaryType.ONCE,
+                collectChickenDiaryType.nickNames
             ).also { collectChickenDiary = it })
         modelFields.addField(
             BooleanModelField(
@@ -726,9 +726,9 @@ class AntFarm : ModelTask() {
                     AnimalFeedStatus.NONE -> Log.record(TAG, "小鸡在[$userName]的庄园里状态未知")
                 }
                     val recall = when (recallAnimalType!!.value) {
-                        RecallAnimalType.Companion.ALWAYS -> true
-                        RecallAnimalType.Companion.WHEN_THIEF -> !guest
-                        RecallAnimalType.Companion.WHEN_HUNGRY -> hungry
+                        RecallAnimalType.ALWAYS -> true
+                        RecallAnimalType.WHEN_THIEF -> !guest
+                        RecallAnimalType.WHEN_HUNGRY -> hungry
                         else -> false
                     }
                     if (recall) {
@@ -958,10 +958,7 @@ class AntFarm : ModelTask() {
                     while (it.hasNext()) {
                         val key = it.next()
                         if (key.contains("Gifts")) {
-                            val gifts = activityData.optJSONArray(key)
-                            if (gifts == null) {
-                                continue
-                            }
+                            val gifts = activityData.optJSONArray(key) ?: continue
                             for (i in 0..<gifts.length()) {
                                 val gift = gifts.optJSONObject(i)
                                 clickForGiftV2(gift)
@@ -1016,13 +1013,8 @@ class AntFarm : ModelTask() {
 
         // 2. 使用加饭卡（仅当正在吃饭且开启配置）
         if (useBigEaterTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
-            val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
-            if (result) {
-                Log.farm("使用道具🎭[加饭卡]！")
-                delay(1000)
+            if (tryUseBigEaterTool(ownerFarmId)) {
                 needReload = true
-            } else {
-                Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
             }
         }
 
@@ -1043,21 +1035,21 @@ class AntFarm : ModelTask() {
         if (AnimalFeedStatus.SLEEPY.name != ownerAnimal.animalFeedStatus) {
             try {
                 val startEatTime = ownerAnimal.startEatTime!!
-                var allFoodHaveEatten = 0.0
+                var allFoodHaveEaten = 0.0
                 var allConsumeSpeed = 0.0
 
                 for (animal in animals!!) {
-                    allFoodHaveEatten += animal.foodHaveEatten!!
+                    allFoodHaveEaten += animal.foodHaveEatten!!
                     allConsumeSpeed += animal.consumeSpeed!!
                 }
 
                 if (allConsumeSpeed > 0) {
                     val nextFeedTime =
-                        startEatTime + ((180 - allFoodHaveEatten) / allConsumeSpeed).toLong() * 1000
+                        startEatTime + ((180 - allFoodHaveEaten) / allConsumeSpeed).toLong() * 1000
                     // 调试日志：打印时间计算详情
                     Log.record(
                         TAG, "蹲点时间计算🕐[开始时间=" + TimeUtil.getCommonDate(startEatTime) +
-                                ", 已吃=" + allFoodHaveEatten + ", 速度=" + allConsumeSpeed +
+                                ", 已吃=" + allFoodHaveEaten + ", 速度=" + allConsumeSpeed +
                                 ", 计算时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
                     )
 
@@ -1087,7 +1079,7 @@ class AntFarm : ModelTask() {
                     // 消耗速度为0，无法计算准确时间，记录调试信息
                     Log.record(
                         TAG, "蹲点时间计算🕐[消耗速度为0，无法计算投喂时间 - 开始时间=" +
-                                TimeUtil.getCommonDate(startEatTime) + ", 已吃=" + allFoodHaveEatten +
+                                TimeUtil.getCommonDate(startEatTime) + ", 已吃=" + allFoodHaveEaten +
                                 ", 速度=" + allConsumeSpeed + "]"
                     )
                 }
@@ -1299,7 +1291,7 @@ class AntFarm : ModelTask() {
                     // 赶鸡
                     var user = AntFarmRpcCall.farmId2UserId(animal.masterFarmId)
                     var isSendBackAnimal = sendBackAnimalList!!.value.contains(user)
-                    if (sendBackAnimalType!!.value == SendBackAnimalType.Companion.BACK) {
+                    if (sendBackAnimalType!!.value == SendBackAnimalType.BACK) {
                         isSendBackAnimal = !isSendBackAnimal
                     }
                     if (isSendBackAnimal) {
@@ -1308,7 +1300,7 @@ class AntFarm : ModelTask() {
                     val sendTypeInt = sendBackAnimalWay!!.value
                     user = UserMap.getMaskName(user)
                     var s = AntFarmRpcCall.sendBackAnimal(
-                        SendBackAnimalWay.Companion.nickNames[sendTypeInt],
+                        SendBackAnimalWay.nickNames[sendTypeInt],
                         animal.animalId,
                         animal.currentFarmId,
                         animal.masterFarmId
@@ -1316,7 +1308,7 @@ class AntFarm : ModelTask() {
                     val jo = JSONObject(s)
                     val memo = jo.getString("memo")
                     if (ResChecker.checkRes(TAG, jo)) {
-                        if (sendTypeInt == SendBackAnimalWay.Companion.HIT) {
+                        if (sendTypeInt == SendBackAnimalWay.HIT) {
                             if (jo.has("hitLossFood")) {
                                 s =
                                     "胖揍小鸡🤺[" + user + "]，掉落[" + jo.getInt("hitLossFood") + "g]"
@@ -1429,7 +1421,7 @@ class AntFarm : ModelTask() {
                         activityName = jo.optString("projectName", activityId)
                         if (performDonation(activityId, activityName)) {
                             isDonation = true
-                            if (donationType == DonationCount.Companion.ONE) {
+                            if (donationType == DonationCount.ONE) {
                                 break
                             }
                         }
@@ -1596,7 +1588,7 @@ class AntFarm : ModelTask() {
                         val isCorrect = joActionTitle.getBoolean("correct")
                         if (isCorrect) {
                             val nextAnswer = joActionTitle.getString("title")
-                            farmAnswerCache.put(previewTitle, nextAnswer) // 缓存下一个问题的答案
+                            farmAnswerCache[previewTitle] = nextAnswer // 缓存下一个问题的答案
                         }
                     }
                 }
@@ -1630,7 +1622,7 @@ class AntFarm : ModelTask() {
                         val dateInt = convertDateToInt(dateStr)
                         if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
-                            cleanedMap.put(entry.key, entry.value) //保存7天内的答案
+                            cleanedMap[entry.key] = entry.value //保存7天内的答案
                             Log.runtime(
                                 TAG,
                                 "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0]
@@ -1659,10 +1651,10 @@ class AntFarm : ModelTask() {
             return -1 // 格式错误
         }
         try {
-            val year = dateStr.substring(0, 4).toInt()
+            val year = dateStr.take(4).toInt()
             val month = dateStr.substring(5, 7).toInt()
             val day = dateStr.substring(8, 10).toInt()
-            if (month < 1 || month > 12 || day < 1 || day > 31) {
+            if (month !in 1..12 || day < 1 || day > 31) {
                 Log.error("日期无效：$dateStr")
                 return -1 // 日期无效
             }
@@ -2005,7 +1997,54 @@ class AntFarm : ModelTask() {
         return isUseAccelerateTool
     }
 
-    private suspend fun useFarmTool(targetFarmId: String?, toolType: ToolType): Boolean {
+    /**
+     * 尝试使用加饭卡
+     * 规则:
+     * - 每天最多使用2次
+     * - 每次使用后有10小时冷却时间
+     * 
+     * @param ownerFarmId 农场ID
+     * @return 是否成功使用并需要重新加载
+     */
+    private suspend fun tryUseBigEaterTool(ownerFarmId: String?): Boolean {
+        val userId = UserMap.currentUid
+        val dailyCount = Status.getBigEaterToolDailyCount(userId)
+        val maxDailyUse = 2 // 每天最多使用2次
+        
+        // 1. 检查每日使用次数限制
+        if (dailyCount >= maxDailyUse) {
+            Log.record(TAG, "加饭卡今日已使用${dailyCount}次，达到每日上限(${maxDailyUse}次)⛔")
+            return false
+        }
+        
+        // 2. 检查加饭卡冷却时间（10小时）
+        val lastUseTime = Status.getBigEaterToolLastUseTime(userId)
+        val now = System.currentTimeMillis()
+        val cooldownMs = 10 * 60 * 60 * 1000L // 10小时
+        
+        if (lastUseTime > 0 && now - lastUseTime < cooldownMs) {
+            val remainingMs = cooldownMs - (now - lastUseTime)
+            val remainingHours = remainingMs / (60 * 60 * 1000)
+            val remainingMinutes = (remainingMs % (60 * 60 * 1000)) / (60 * 1000)
+            Log.record(TAG, "加饭卡冷却中🕐，剩余时间: ${remainingHours}小时${remainingMinutes}分钟")
+            return false
+        }
+        
+        // 3. 尝试使用加饭卡
+        val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
+        if (result) {
+            Log.farm("使用道具🎭[加饭卡]！(今日第${dailyCount + 1}次)")
+            Status.setBigEaterToolLastUseTime(userId, now)
+            Status.incrementBigEaterToolDailyCount(userId)
+            delay(1000)
+            return true
+        } else {
+            Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
+            return false
+        }
+    }
+
+    private fun useFarmTool(targetFarmId: String?, toolType: ToolType): Boolean {
         try {
             var s = AntFarmRpcCall.listFarmTool()
             var jo = JSONObject(s)
@@ -2134,7 +2173,7 @@ class AntFarm : ModelTask() {
                         val userId = jo.getString("userId")
                         val userName = UserMap.getMaskName(userId)
                         var isNotifyFriend = notifyFriendList!!.value.contains(userId)
-                        if (notifyFriendType!!.value == NotifyFriendType.Companion.DONT_NOTIFY) {
+                        if (notifyFriendType!!.value == NotifyFriendType.DONT_NOTIFY) {
                             isNotifyFriend = !isNotifyFriend
                         }
                         if (!isNotifyFriend || userId == UserMap.currentUid) {
@@ -2526,7 +2565,7 @@ class AntFarm : ModelTask() {
      *
      * @param queryDayStr 日期，格式：yyyy-MM-dd
      */
-    private suspend fun diaryTietze(queryDayStr: String?) {
+    private fun diaryTietze(queryDayStr: String?) {
         val diaryDateStr: String?
         try {
             var jo = JSONObject(AntFarmRpcCall.queryChickenDiary(queryDayStr))
@@ -2659,11 +2698,11 @@ class AntFarm : ModelTask() {
         var yearMonth = YearMonth.now()
         var previous = false
         try {
-            if (collectChickenDiary!!.value >= collectChickenDiaryType.Companion.ONCE) {
+            if (collectChickenDiary!!.value >= collectChickenDiaryType.ONCE) {
                 delay(300)
                 dateStr = collectChickenDiary("")
             }
-            if (collectChickenDiary!!.value >= collectChickenDiaryType.Companion.MONTH) {
+            if (collectChickenDiary!!.value >= collectChickenDiaryType.MONTH) {
                 if (dateStr == null) {
                     Log.error(TAG, "小鸡日记点赞-dateStr为空，使用当前日期")
                 } else {
@@ -2676,7 +2715,7 @@ class AntFarm : ModelTask() {
                     this.collectChickenDiary(queryDayStr)
                 }
             }
-            if (collectChickenDiary!!.value >= collectChickenDiaryType.Companion.ALL) {
+            if (collectChickenDiary!!.value >= collectChickenDiaryType.ALL) {
                 while (previous) {
                     delay(300)
                     yearMonth = yearMonth.minusMonths(1)
@@ -2693,7 +2732,7 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private suspend fun visitAnimal() {
+    private fun visitAnimal() {
         try {
             var jo = JSONObject(AntFarmRpcCall.visitAnimal())
             if (ResChecker.checkRes(TAG, jo)) {
@@ -2732,10 +2771,7 @@ class AntFarm : ModelTask() {
     private fun hireAnimal() {
         var animals: JSONArray? = null
         try {
-            val jsonObject = enterFarm()
-            if (jsonObject == null) {
-                return
-            }
+            val jsonObject = enterFarm() ?: return
             if ("SUCCESS" == jsonObject.getString("memo")) {
                 val farmVO = jsonObject.getJSONObject("farmVO")
                 val subFarmVO = farmVO.getJSONObject("subFarmVO")
@@ -2811,7 +2847,7 @@ class AntFarm : ModelTask() {
                         val joo = jaRankingList.getJSONObject(i)
                         val userId = joo.getString("userId")
                         var isHireAnimal = hireAnimalSet.contains(userId)
-                        if (hireAnimalType!!.value == HireAnimalType.Companion.DONT_HIRE) {
+                        if (hireAnimalType!!.value == HireAnimalType.DONT_HIRE) {
                             isHireAnimal = !isHireAnimal
                         }
                         if (!isHireAnimal || userId == UserMap.currentUid) {
@@ -3033,7 +3069,7 @@ class AntFarm : ModelTask() {
     }
 
     // 一起拿小鸡饲料
-    private suspend fun letsGetChickenFeedTogether() {
+    private fun letsGetChickenFeedTogether() {
         try {
             var jo = JSONObject(AntFarmRpcCall.letsGetChickenFeedTogether())
             if (jo.optBoolean("success")) {
@@ -3060,7 +3096,7 @@ class AntFarm : ModelTask() {
                     return
                 }
                 val getFeedSet = getFeedlList!!.value
-                if (getFeedType!!.value == GetFeedType.Companion.GIVE) {
+                if (getFeedType!!.value == GetFeedType.GIVE) {
                     for (userId in userIdList) {
                         if (invitesToSend <= 0) {
 //                            Log.record(TAG,"已达到最大邀请次数限制，停止发送邀请。");
@@ -3397,7 +3433,7 @@ class AntFarm : ModelTask() {
     }
 
 
-    private suspend fun syncFamilyStatusIntimacy(groupId: String?) {
+    private fun syncFamilyStatusIntimacy(groupId: String?) {
         try {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.syncFamilyStatus(groupId, "INTIMACY_VALUE", userId))
@@ -3491,10 +3527,7 @@ class AntFarm : ModelTask() {
 
     private suspend fun familyDrawTask(friendUserIds: MutableList<String?>, familyDrawInfo: JSONObject) {
         try {
-            val listFarmTask = familyDrawListFarmTask()
-            if (listFarmTask == null) {
-                return
-            }
+            val listFarmTask = familyDrawListFarmTask() ?: return
             for (i in 0..<listFarmTask.length()) {
                 val jo = listFarmTask.getJSONObject(i)
                 val taskStatus = TaskStatus.valueOf(jo.getString("taskStatus"))
@@ -3627,10 +3660,7 @@ class AntFarm : ModelTask() {
             if (Objects.isNull(friendUserIds) || friendUserIds.isEmpty()) {
                 return
             }
-            val array = queryRecentFarmFood(friendUserIds.size)
-            if (array == null) {
-                return
-            }
+            val array = queryRecentFarmFood(friendUserIds.size) ?: return
             val friendUserIdList = JSONArray()
             for (userId in friendUserIds) {
                 friendUserIdList.put(userId)
