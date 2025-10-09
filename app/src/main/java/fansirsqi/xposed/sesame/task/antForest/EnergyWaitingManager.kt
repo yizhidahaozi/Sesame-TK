@@ -586,9 +586,9 @@ object EnergyWaitingManager {
                 if (waitingTasks.isNotEmpty()) {
                     Log.record(TAG, "📋 当前活跃蹲点任务数量：${waitingTasks.size}")
                     waitingTasks.values.take(5).forEach { task ->
-                        val timeRemain = (task.produceTime - currentTime) / 1000
-                        val status = if (timeRemain > 0) "剩余${timeRemain}秒" else "已成熟${-timeRemain}秒"
-                        Log.record(TAG, "  - [${task.userName}] 能量球[${task.bubbleId}] $status")
+                        val status = formatTimeStatus(currentTime, task.produceTime)
+                        val executeTime = TimeUtil.getCommonDate(task.produceTime)
+                        Log.record(TAG, "  - [${task.userName}] 能量球[${task.bubbleId}] $status → $executeTime")
                     }
                     if (waitingTasks.size > 5) {
                         Log.record(TAG, "  ... 还有${waitingTasks.size - 5}个任务")
@@ -652,24 +652,19 @@ object EnergyWaitingManager {
         statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个):\n")
         
         waitingTasks.values.sortedBy { it.produceTime }.forEach { task ->
-            val timeRemain = (task.produceTime - currentTime) / 1000
+            val status = formatTimeStatus(currentTime, task.produceTime)
+            val executeTime = TimeUtil.getCommonDate(task.produceTime)
+            
             val protectionEndTime = task.getProtectionEndTime()
             val hasProtection = protectionEndTime > currentTime
             val protectionInfo = if (hasProtection) {
-                val protectionRemain = (protectionEndTime - currentTime) / 1000
-                " (保护${protectionRemain}秒)"
+                val protectionStatus = formatTimeStatus(currentTime, protectionEndTime)
+                " (保护${protectionStatus.removePrefix("剩余")})"
             } else {
                 ""
             }
             
-            statusBuilder.append("  - [${task.userName}] 球[${task.bubbleId}] ")
-            if (timeRemain > 0) {
-                statusBuilder.append("剩余${timeRemain}秒")
-            } else {
-                statusBuilder.append("已成熟${-timeRemain}秒")
-            }
-            statusBuilder.append(protectionInfo)
-            statusBuilder.append("\n")
+            statusBuilder.append("  - [${task.userName}] 球[${task.bubbleId}] $status$protectionInfo → $executeTime\n")
         }
         
         return statusBuilder.toString().trimEnd()
@@ -687,6 +682,33 @@ object EnergyWaitingManager {
             hours > 0 -> "${hours}小时${minutes}分钟"
             minutes > 0 -> "${minutes}分钟"
             else -> "${milliseconds / 1000}秒"
+        }
+    }
+    
+    /**
+     * 格式化剩余时间状态
+     * @param currentTime 当前时间
+     * @param targetTime 目标时间
+     * @return 格式化后的状态字符串（如："剩余2分19秒" 或 "已成熟1分5秒"）
+     */
+    private fun formatTimeStatus(currentTime: Long, targetTime: Long): String {
+        val timeRemainMs = targetTime - currentTime
+        val timeRemainSeconds = timeRemainMs / 1000
+        val timeRemainMinutes = timeRemainSeconds / 60
+        
+        return if (timeRemainMs > 0) {
+            if (timeRemainMinutes > 0) {
+                "剩余${timeRemainMinutes}分${timeRemainSeconds % 60}秒"
+            } else {
+                "剩余${timeRemainSeconds}秒"
+            }
+        } else {
+            val overTimeMinutes = (-timeRemainSeconds) / 60
+            if (overTimeMinutes > 0) {
+                "已成熟${overTimeMinutes}分${(-timeRemainSeconds) % 60}秒"
+            } else {
+                "已成熟${-timeRemainSeconds}秒"
+            }
         }
     }
     
