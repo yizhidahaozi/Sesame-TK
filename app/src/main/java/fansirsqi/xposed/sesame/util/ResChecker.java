@@ -41,7 +41,7 @@ public class ResChecker {
                     memo.contains("我的小鸡在睡觉中") ||
                     memo.contains("小鸡在睡觉") ||
                     memo.contains("无法操作") ||
-                    memo.contains("手速太快") || memo.contains("有人抢在你前面")) {
+                    memo.contains("手速太快") || memo.contains("有人抢在你前面")|| memo.contains("当日达到上限")|| memo.contains("适可而止")) {
                 return false; // 返回false，但不打印错误日志
             }
             // 获取调用栈信息以确定错误来源
