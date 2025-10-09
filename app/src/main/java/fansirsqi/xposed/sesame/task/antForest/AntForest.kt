@@ -790,20 +790,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             Log.error(TAG, "❌ 获取自己主页信息失败，跳过能量收取")
                         }
 
-                        // 只收能量时间段，关闭查找能量功能，避免拖慢速度
-                        Log.record(TAG, "👥 开始执行好友能量收取...")
+                        // 只收能量时间段，启用循环查找能量功能
+                        Log.record(TAG, "👥 开始执行查找能量...")
                         try {
-                            collectFriendEnergyCoroutine() // 好友能量收取（协程）
+                            collectEnergyByTakeLook() // 查找能量（协程）
                         } catch (e: CancellationException) {
-                            Log.runtime(TAG, "好友能量收取被取消，退出循环")
-                            break
-                        }
-
-                        Log.record(TAG, "⚔️ 开始执行PK好友能量收取...")
-                        try {
-                            collectPKEnergyCoroutine() // PK好友能量（协程）
-                        } catch (e: CancellationException) {
-                            Log.runtime(TAG, "PK好友能量收取被取消，退出循环")
+                            Log.runtime(TAG, "查找能量被取消，退出循环")
                             break
                         }
 
