@@ -169,11 +169,12 @@ object EnergyWaitingManager {
     // 最后执行时间，用于间隔控制
     private val lastExecuteTime = AtomicLong(0)
     
-    // 最小间隔时间（毫秒） - 防止频繁请求
-    private const val MIN_INTERVAL_MS = 10000L // 10秒
+    // 最小间隔时间（毫秒） - 防止频繁请求，使用随机间隔更自然
+    private const val MIN_INTERVAL_MS = 2000L // 最小2秒
+    private const val MAX_INTERVAL_MS = 5000L // 最大5秒
     
-    // 最大等待时间（毫秒） - 6小时
-    private const val MAX_WAIT_TIME_MS = 6 * 60 * 60 * 1000L
+    // 最大等待时间（毫秒） - 8小时
+    private const val MAX_WAIT_TIME_MS = 8 * 60 * 60 * 1000L
     
     // 基础检查间隔（毫秒）
     private const val BASE_CHECK_INTERVAL_MS = 30000L // 30秒检查一次
@@ -238,24 +239,7 @@ object EnergyWaitingManager {
                     Log.debug(TAG, "更新蹲点任务[$taskId]：时间从[${TimeUtil.getCommonDate(existingTask.produceTime)}]更新为[${TimeUtil.getCommonDate(produceTime)}]")
                 }
                 
-                // 检查时间有效性
-                if (produceTime <= currentTime) {
-                    Log.debug(TAG, "能量球[$bubbleId]已经成熟，跳过蹲点")
-                    // 如果已过期，移除现有任务
-                    waitingTasks.remove(taskId)
-                    return@withLock
-                }
-                
-                // 检查等待时间是否过长
-                val waitTime = produceTime - currentTime
-                if (waitTime > MAX_WAIT_TIME_MS) {
-                    Log.debug(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
-                    // 移除过长的任务
-                    waitingTasks.remove(taskId)
-                    return@withLock
-                }
-                
-                // 智能获取保护时间
+                // 智能获取保护时间（提前到时间检查之前）
                 var finalShieldEndTime = shieldEndTime
                 var finalBombEndTime = bombEndTime
 
@@ -276,6 +260,20 @@ object EnergyWaitingManager {
                         return@withLock
                     }
                 }
+
+                // 注释：原本的时间有效性检查已删除
+                // 因为 addWaitingTask 只在 produceTime > serverTime 时被调用
+                // 所以 produceTime <= currentTime 的情况几乎不会发生
+                
+                // 检查等待时间是否过长
+                val waitTime = produceTime - currentTime
+                if (waitTime > MAX_WAIT_TIME_MS) {
+                    Log.debug(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
+                    // 移除过长的任务
+                    waitingTasks.remove(taskId)
+                    return@withLock
+                }
+                
 
                 val task = WaitingTask(
                     userId = userId,
@@ -300,11 +298,13 @@ object EnergyWaitingManager {
                     ""
                 }
                 val actionText = if (existingTask != null) "更新" else "添加"
+                val waitTimeSeconds = (produceTime - currentTime) / 1000
                 Log.record(
                     TAG,
                     "${actionText}蹲点任务：[${fromTag}|${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟${protectionStatus}"
                 )
-                
+                Log.record(TAG, "  等待时间: ${waitTimeSeconds}秒 (${waitTimeSeconds/60}分钟)")
+                Log.record(TAG, "  任务ID: ${task.taskId}")
                 // 启动精确蹲点协程
                 startPreciseWaitingCoroutine(task)
             }
@@ -328,17 +328,39 @@ object EnergyWaitingManager {
                     } else {
                         "能量成熟后"
                     }
+                    Log.record(TAG, "🕐 精确蹲点任务[${task.taskId}]等待${waitTime/1000}秒${protectionInfo}立即收取")
+                    Log.record(TAG, "  当前时间: ${TimeUtil.getCommonDate(currentTime)}")
+                    Log.record(TAG, "  目标时间: ${TimeUtil.getCommonDate(preciseCollectTime)}")
                     
-                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]等待${waitTime/1000}秒${protectionInfo}立即收取")
+                    // 分段等待，每30秒检查一次任务有效性，避免长时间等待后发现任务被删除
+                    val checkInterval = 30000L // 30秒检查一次
+                    var remainingWait = waitTime
                     
-                    // 直接等待到精确时间，无需间隔检查
-                    delay(waitTime)
+                    while (remainingWait > 0 && isActive) {
+                        val currentWait = minOf(remainingWait, checkInterval)
+                        delay(currentWait)
+                        remainingWait -= currentWait
+                        
+                        // 检查任务是否仍然有效
+                        if (!waitingTasks.containsKey(task.taskId)) {
+                            Log.record(TAG, "⚠️ 精确蹲点任务[${task.taskId}]在等待过程中被移除，取消执行")
+                            Log.record(TAG, "  剩余等待时间: ${remainingWait/1000}秒")
+                            return@launch
+                        }
+                        
+                        // 如果还有剩余等待时间，记录进度
+                        if (remainingWait > 0) {
+                            Log.debug(TAG, "蹲点任务[${task.taskId}]等待中，剩余${remainingWait/1000}秒")
+                        }
+                    }
                     
-                    // 执行前再次确认任务是否有效
+                    // 最终检查任务是否有效
                     if (!waitingTasks.containsKey(task.taskId)) {
-                        Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，取消执行")
+                        Log.record(TAG, "⚠️ 精确蹲点任务[${task.taskId}]在等待完成后被移除，取消执行")
                         return@launch
                     }
+                    
+                    Log.record(TAG, "✅ 精确蹲点任务[${task.taskId}]等待完成，开始执行收取")
                 }
                 
                 // 执行收取任务
@@ -384,14 +406,27 @@ object EnergyWaitingManager {
                     return@withLock
                 }
                 
-                // 最小间隔控制：防止频繁请求
+                // 随机间隔控制：防止频繁请求，使用随机间隔更自然
                 val currentTime = System.currentTimeMillis()
-                val timeSinceLastExecute = currentTime - lastExecuteTime.get()
+                val lastExecute = lastExecuteTime.get()
                 
-                if (timeSinceLastExecute < MIN_INTERVAL_MS) {
-                    val delayTime = MIN_INTERVAL_MS - timeSinceLastExecute
-                    Log.debug(TAG, "间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]")
-                    delay(delayTime)
+                if (lastExecute == 0L) {
+                    // 第一次执行，立即收取
+                    Log.record(TAG, "⚡ 首次蹲点收取，立即执行任务[${task.taskId}]")
+                } else {
+                    // 非首次执行，应用随机间隔控制
+                    val timeSinceLastExecute = currentTime - lastExecute
+                    
+                    // 生成随机间隔时间（2-5秒）
+                    val randomIntervalMs = Random.nextLong(MIN_INTERVAL_MS, MAX_INTERVAL_MS + 1)
+                    
+                    if (timeSinceLastExecute < randomIntervalMs) {
+                        val delayTime = randomIntervalMs - timeSinceLastExecute
+                        Log.record(TAG, "🎲 随机间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]（随机间隔${randomIntervalMs/1000}秒）")
+                        delay(delayTime)
+                    } else {
+                        Log.debug(TAG, "⚡ 无需延迟：距离上次执行已超过${timeSinceLastExecute/1000}秒")
+                    }
                 }
                 
                 // 更新最后执行时间
@@ -402,36 +437,31 @@ object EnergyWaitingManager {
                 val energyTimeRemain = (task.produceTime - actualTime) / 1000
                 val protectionEndTime = task.getProtectionEndTime()
                 
-                // 无延迟，立即收取
-//                if (protectionEndTime > actualTime) {
-//                    val protectionRemain = (protectionEndTime - actualTime) / 1000
-//                    "能量剩余[${energyTimeRemain}秒] 保护剩余[${protectionRemain}秒] - 保护结束后立即收取"
-//                } else if (energyTimeRemain > 0) {
-//                    "能量剩余[${energyTimeRemain}秒] - 能量成熟后立即收取"
-//                } else {
-//                    "能量已成熟 - 立即收取"
-//                }
-//
-              //  Log.record(TAG, "精确蹲点执行：用户[${task.userName}] 能量球[${task.bubbleId}] $timingInfo")
-                
-                // 🚨 严格时机检查：能量未成熟时直接跳过
-                if (energyTimeRemain > 60) { // 如果还有超过1分钟才成熟，直接跳过
+
+
+                if (energyTimeRemain > 300) { // 如果还有超过5分钟才成熟，直接跳过
                     Log.debug(TAG, "⚠️ 能量距离成熟还有${energyTimeRemain}秒，时机过早，跳过本次收取")
                     return@withLock
                 }
                 
+                // 如果时间差在合理范围内，记录详细信息用于调试
+                if (energyTimeRemain > 0) {
+                    Log.debug(TAG, "⏰ 能量距离成熟还有${energyTimeRemain}秒，继续执行收取流程")
+                }
                 // 最终时机检查：如果还有保护或能量未成熟，等待一下
                 val isEnergyMature = task.produceTime <= actualTime
                 val isProtectionEnd = protectionEndTime <= actualTime
                 
-                Log.debug(TAG, "时机检查详情：")
-                Log.debug(TAG, "  系统当前时间: ${System.currentTimeMillis()} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())})")
-                Log.debug(TAG, "  实际执行时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
-                Log.debug(TAG, "  能量成熟时间: ${task.produceTime} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(task.produceTime))})")
-                Log.debug(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
-                Log.debug(TAG, "  时间差异: 系统时间与执行时间差${System.currentTimeMillis() - actualTime}ms")
-                Log.debug(TAG, "  能量是否成熟: $isEnergyMature")
-                Log.debug(TAG, "  保护是否结束: $isProtectionEnd")
+                // 增强调试信息：记录详细的时机检查信息
+                Log.record(TAG, "🔍 蹲点任务[${task.userName}]时机检查详情：")
+                Log.record(TAG, "  系统当前时间: ${System.currentTimeMillis()} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())})")
+                Log.record(TAG, "  实际执行时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
+                Log.record(TAG, "  能量成熟时间: ${task.produceTime} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(task.produceTime))})")
+                Log.record(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
+                Log.record(TAG, "  时间差异: 系统时间与执行时间差${System.currentTimeMillis() - actualTime}ms")
+                Log.record(TAG, "  能量剩余时间: ${energyTimeRemain}秒")
+                Log.record(TAG, "  能量是否成熟: $isEnergyMature")
+                Log.record(TAG, "  保护是否结束: $isProtectionEnd")
                 
                 if (!isEnergyMature || !isProtectionEnd) {
                     val additionalWait = max(
@@ -440,16 +470,30 @@ object EnergyWaitingManager {
                     ) // 等待到正确时机，无额外延迟
                     
                     if (additionalWait in 1..<1800000L) { // 最多额外等待30分钟
-                        Log.debug(TAG, "最终时机检查：等待${additionalWait/1000}秒到正确时机")
-                        Log.debug(TAG, "  等待原因: ${if (!isEnergyMature) "能量未成熟" else ""}${if (!isProtectionEnd) "保护未结束" else ""}")
+                        val waitReason = if (!isEnergyMature) "能量未成熟" else ""
+                        val protectionReason = if (!isProtectionEnd) "保护未结束" else ""
+                        val combinedReason = listOf(waitReason, protectionReason).filter { it.isNotEmpty() }.joinToString("且")
+                        
+                        Log.record(TAG, "⏳ 最终时机检查：等待${additionalWait/1000}秒到正确时机")
+                        Log.record(TAG, "  等待原因: $combinedReason")
                         delay(additionalWait)
+                        
+                        // 等待后重新检查时机
+                        val newActualTime = System.currentTimeMillis()
+                        val newIsEnergyMature = task.produceTime <= newActualTime
+                        val newIsProtectionEnd = task.getProtectionEndTime() <= newActualTime
+                        Log.record(TAG, "⏳ 等待完成后重新检查：能量成熟[$newIsEnergyMature] 保护结束[$newIsProtectionEnd]")
                     } else if (additionalWait > 1800000L) {
-                        Log.debug(TAG, "⚠️ 等待时间过长(${additionalWait/60000}分钟)，可能存在时间计算错误，跳过收取")
+                        Log.error(TAG, "⚠️ 等待时间过长(${additionalWait/60000}分钟)，可能存在时间计算错误，跳过收取")
+                        Log.error(TAG, "  任务详情：用户[${task.userName}] 能量球[${task.bubbleId}]")
                         return@withLock
+                    } else if (additionalWait <= 0) {
+                        // 时间已到或已过，直接执行
+                        Log.record(TAG, "✅ 时间已到，立即执行收取")
                     }
                 } else {
                     // 能量已成熟且无保护，立即收取
-                    Log.debug(TAG, "时机正确：能量已成熟且无保护，立即执行收取")
+                    Log.record(TAG, "✅ 时机正确：能量已成熟且无保护，立即执行收取")
                 }
                 
                 // 执行收取
@@ -459,7 +503,6 @@ object EnergyWaitingManager {
                 
                 // 更新用户模式数据
                 UserEnergyPatternManager.updateUserPattern(task.userId, result, executeTime)
-                
                 // 处理结果
                 if (result.success) {
                     if (result.energyCount > 0) {
@@ -523,15 +566,35 @@ object EnergyWaitingManager {
             taskMutex.withLock {
                 val currentTime = System.currentTimeMillis()
                 val expiredTasks = waitingTasks.filter { (_, task) ->
-                    currentTime > task.produceTime + 30 * 60 * 1000L // 超过成熟时间30分钟
+                    // 修复：增加更宽松的过期判断，避免误删有效任务
+                    // 只有在能量成熟后超过1小时才认为是过期任务
+                    currentTime > task.produceTime + 1 * 60 * 60 * 1000L // 超过成熟时间1小时
                 }
-                
-                expiredTasks.forEach { (taskId, _) ->
+                expiredTasks.forEach { (taskId, task) ->
                     waitingTasks.remove(taskId)
+                    val overTime = (currentTime - task.produceTime) / 1000 / 60 // 超时分钟数
+                    Log.record(TAG, "🗑️ 清理过期蹲点任务：[${task.userName}] 能量球[${task.bubbleId}] 成熟时间[${TimeUtil.getCommonDate(task.produceTime)}] 已超时${overTime}分钟")
                 }
                 
                 if (expiredTasks.isNotEmpty()) {
-                    Log.debug(TAG, "清理了${expiredTasks.size}个过期蹲点任务")
+                    Log.record(TAG, "🧹 清理了${expiredTasks.size}个过期蹲点任务")
+                } else {
+                    Log.debug(TAG, "定期清理检查：无过期蹲点任务")
+                }
+                
+                // 记录当前活跃任务状态
+                if (waitingTasks.isNotEmpty()) {
+                    Log.record(TAG, "📋 当前活跃蹲点任务数量：${waitingTasks.size}")
+                    waitingTasks.values.take(5).forEach { task ->
+                        val timeRemain = (task.produceTime - currentTime) / 1000
+                        val status = if (timeRemain > 0) "剩余${timeRemain}秒" else "已成熟${-timeRemain}秒"
+                        Log.record(TAG, "  - [${task.userName}] 能量球[${task.bubbleId}] $status")
+                    }
+                    if (waitingTasks.size > 5) {
+                        Log.record(TAG, "  ... 还有${waitingTasks.size - 5}个任务")
+                    }
+                } else {
+                    Log.debug(TAG, "定期清理检查：当前无活跃蹲点任务")
                 }
             }
         }
@@ -574,6 +637,42 @@ object EnergyWaitingManager {
      */
     fun getWaitingTaskCount(): Int {
         return waitingTasks.size
+    }
+    
+    /**
+     * 获取蹲点任务详细状态（调试用）
+     */
+    fun getWaitingTasksStatus(): String {
+        val currentTime = System.currentTimeMillis()
+        if (waitingTasks.isEmpty()) {
+            return "无蹲点任务"
+        }
+        
+        val statusBuilder = StringBuilder()
+        statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个):\n")
+        
+        waitingTasks.values.sortedBy { it.produceTime }.forEach { task ->
+            val timeRemain = (task.produceTime - currentTime) / 1000
+            val protectionEndTime = task.getProtectionEndTime()
+            val hasProtection = protectionEndTime > currentTime
+            val protectionInfo = if (hasProtection) {
+                val protectionRemain = (protectionEndTime - currentTime) / 1000
+                " (保护${protectionRemain}秒)"
+            } else {
+                ""
+            }
+            
+            statusBuilder.append("  - [${task.userName}] 球[${task.bubbleId}] ")
+            if (timeRemain > 0) {
+                statusBuilder.append("剩余${timeRemain}秒")
+            } else {
+                statusBuilder.append("已成熟${-timeRemain}秒")
+            }
+            statusBuilder.append(protectionInfo)
+            statusBuilder.append("\n")
+        }
+        
+        return statusBuilder.toString().trimEnd()
     }
     
     /**

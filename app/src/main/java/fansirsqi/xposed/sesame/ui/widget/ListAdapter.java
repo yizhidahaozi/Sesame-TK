@@ -68,8 +68,8 @@ public class ListAdapter extends BaseAdapter {
         this.selectModelFieldFunc = selectModelFieldFunc;
         try {
             Collections.sort(list, (o1, o2) -> {
-                boolean contains1 = selectModelFieldFunc.contains(o1.id);
-                boolean contains2 = selectModelFieldFunc.contains(o2.id);
+                boolean contains1 = Boolean.TRUE.equals(selectModelFieldFunc.contains(o1.id));
+                boolean contains2 = Boolean.TRUE.equals(selectModelFieldFunc.contains(o2.id));
                 if (contains1 == contains2) {
                     return o1.compareTo(o2);
                 }
@@ -131,7 +131,7 @@ public class ListAdapter extends BaseAdapter {
 
     public void SelectInvert() {
         for (MapperEntity item : list) {
-            if (!selectModelFieldFunc.contains(item.id)) {
+            if (Boolean.FALSE.equals(selectModelFieldFunc.contains(item.id))) {
                 selectModelFieldFunc.add(item.id, 0);
             } else {
                 selectModelFieldFunc.remove(item.id);
@@ -175,7 +175,7 @@ public class ListAdapter extends BaseAdapter {
         vh.tv.setText(item.name);
         int textColorPrimary = ContextCompat.getColor(context, R.color.textColorPrimary);
         vh.tv.setTextColor(findIndex == position ? Color.RED : textColorPrimary);
-        vh.cb.setChecked(selectModelFieldFunc != null && selectModelFieldFunc.contains(item.id));
+        vh.cb.setChecked(selectModelFieldFunc != null && Boolean.TRUE.equals(selectModelFieldFunc.contains(item.id)));
         return convertView;
     }
 

@@ -158,7 +158,7 @@ public class ListDialog {
                         selectModelFieldFunc.remove(cur.id);
                         holder.cb.setChecked(false);
                     } else {
-                        if (!selectModelFieldFunc.contains(cur.id)) selectModelFieldFunc.add(cur.id, 0);
+                        if (Boolean.FALSE.equals(selectModelFieldFunc.contains(cur.id))) selectModelFieldFunc.add(cur.id, 0);
                         holder.cb.setChecked(true);
                     }
                 }

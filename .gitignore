@@ -88,3 +88,4 @@ serve-debug/webhook.db
 
 # Cursor IDE
 .cursorignore
+/.cursor/rules/zh.mdc
