@@ -38,7 +38,7 @@ object CoroutineUtils {
     fun sleepCompat(millis: Long) {
         try {
             runBlocking {
-                kotlinx.coroutines.delay(millis)
+                delay(millis)
             }
         } catch (e: Exception) {
             // 降级到传统的 Thread.sleep()

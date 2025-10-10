@@ -28,6 +28,9 @@ public class CollectEnergyEntity {
     // 收取来源标识
     @Setter
     public String fromTag;
+    // 是否跳过道具检查（用于蹲点收取快速通道）
+    @Setter
+    public Boolean skipPropCheck = false;
     /**
      * 构造方法，仅指定用户 ID。
      * @param userId 用户 ID
@@ -68,6 +71,22 @@ public class CollectEnergyEntity {
         this.userHome = userHome;
         this.rpcEntity = rpcEntity;
         this.fromTag = fromTag;
+    }
+    
+    /**
+     * 构造方法，指定用户 ID、用户主页信息、RPC 请求实体、来源标识及是否跳过道具检查。
+     * @param userId 用户 ID
+     * @param userHome 用户主页 JSON 对象
+     * @param rpcEntity RPC 请求实体
+     * @param fromTag 收取来源标识
+     * @param skipPropCheck 是否跳过道具检查（用于快速收取通道）
+     */
+    public CollectEnergyEntity(String userId, JSONObject userHome, RpcEntity rpcEntity, String fromTag, Boolean skipPropCheck) {
+        this.userId = userId;
+        this.userHome = userHome;
+        this.rpcEntity = rpcEntity;
+        this.fromTag = fromTag;
+        this.skipPropCheck = skipPropCheck;
     }
     /**
      * 增加尝试次数。

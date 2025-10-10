@@ -1732,11 +1732,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param fromTag     收取来源标识
      */
     @Throws(JSONException::class)
+    /**
+     * 收取活力能量
+     * @param userId 用户ID
+     * @param userHomeObj 用户主页对象
+     * @param bubbleIds 能量球ID列表
+     * @param fromTag 来源标识
+     * @param skipPropCheck 是否跳过道具检查（用于蹲点收取快速通道）
+     */
     private fun collectVivaEnergy(
         userId: String?,
         userHomeObj: JSONObject?,
         bubbleIds: MutableList<Long>,
-        fromTag: String?
+        fromTag: String?,
+        skipPropCheck: Boolean = false
     ) {
         val bizType = "GREEN"
         if (bubbleIds.isEmpty()) return
@@ -1751,7 +1760,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         userId,
                         userHomeObj,
                         AntForestRpcCall.batchEnergyRpcEntity(bizType, userId, subList),
-                        fromTag
+                        fromTag,
+                        skipPropCheck  // 🚀 传递快速通道标记
                     )
                 )
                 i += MAX_BATCH_SIZE
@@ -1763,7 +1773,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         userId,
                         userHomeObj,
                         AntForestRpcCall.energyRpcEntity(bizType, userId, id),
-                        fromTag
+                        fromTag,
+                        skipPropCheck  // 🚀 传递快速通道标记
                     )
                 )
             }
@@ -2412,7 +2423,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val runnable = Runnable {
             try {
                 val userId = collectEnergyEntity.userId
-                usePropBeforeCollectEnergy(userId)
+                // 从 CollectEnergyEntity 中读取是否跳过道具检查的标记
+                val skipPropCheck = collectEnergyEntity.skipPropCheck ?: false
+                usePropBeforeCollectEnergy(userId, skipPropCheck)
                 val rpcEntity = collectEnergyEntity.rpcEntity
                 val needDouble = collectEnergyEntity.needDouble
                 val needRetry = collectEnergyEntity.needRetry
@@ -3070,8 +3083,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      *
      * @param userId 用户的ID。
      */
-    private fun usePropBeforeCollectEnergy(userId: String?) {
+    /**
+     * 在收集能量之前决定是否使用增益类道具卡
+     * @param userId 用户ID
+     * @param skipPropCheck 是否跳过道具检查（快速收取通道）
+     */
+    private fun usePropBeforeCollectEnergy(userId: String?, skipPropCheck: Boolean = false) {
         try {
+            // 🚀 快速收取通道：跳过道具检查，直接返回
+            if (skipPropCheck) {
+                Log.record(TAG, "⚡ 快速收取通道：跳过道具检查，加速蹲点收取")
+                return
+            }
+            
             /*
              * 在收集能量之前决定是否使用增益类道具卡。
              *
@@ -4619,8 +4643,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 记录收取前的总能量
             val beforeTotal = totalCollected
 
-            // 重用现有的collectVivaEnergy方法
-            collectVivaEnergy(userId, queryResult, availableBubbles, fromTag)
+            // 🚀 启用快速收取通道：跳过道具检查，加速蹲点收取
+            collectVivaEnergy(userId, queryResult, availableBubbles, fromTag, skipPropCheck = true)
 
             // 计算收取的能量数量
             val collectedEnergy = totalCollected - beforeTotal
