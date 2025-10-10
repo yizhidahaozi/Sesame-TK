@@ -40,6 +40,7 @@ import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import fansirsqi.xposed.sesame.util.maps.ParadiseCoinBenefitIdMap
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import lombok.ToString
 import org.json.JSONArray
@@ -794,6 +795,10 @@ class AntFarm : ModelTask() {
             }
             IdMapManager.getInstance(ParadiseCoinBenefitIdMap::class.java)
                 .save(UserMap.currentUid)
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "paradiseCoinExchangeBenefit 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "paradiseCoinExchangeBenefit err:")
             Log.printStackTrace(TAG, t)
@@ -947,7 +952,7 @@ class AntFarm : ModelTask() {
      *
      * @return 庄园信息
      */
-    private fun enterFarm(): JSONObject? {
+    private  fun enterFarm(): JSONObject? {
         try {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
@@ -1745,6 +1750,10 @@ class AntFarm : ModelTask() {
                     delay(2000)
                 }
             } while (true)
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "recordFarmGame 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "recordFarmGame err:")
             Log.printStackTrace(TAG, t)
@@ -1829,6 +1838,10 @@ class AntFarm : ModelTask() {
                     delay(1000)
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "doFarmTasks 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doFarmTasks 错误:", t)
         }
@@ -1895,6 +1908,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             } while (doubleCheck && !isFeedFull) // 如果饲料槽已满，不再进行双重检查
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "receiveFarmAwards 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t)
         }
@@ -2172,6 +2189,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "feedFriend 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "feedFriendAnimal err:", t)
         }
@@ -2461,6 +2482,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "cook 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "cook err:")
             Log.printStackTrace(TAG, t)
@@ -2547,6 +2572,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "visit 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "visit err:")
             Log.printStackTrace(TAG, t)
@@ -2583,6 +2612,10 @@ class AntFarm : ModelTask() {
                     delay(800L)
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "visitFriend 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "visitFriend err:")
             Log.printStackTrace(TAG, t)
@@ -2723,6 +2756,10 @@ class AntFarm : ModelTask() {
             } else {
                 Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "queryChickenDiaryList 协程被取消")
+            throw e
         } catch (t: Throwable) {
             hasPreviousMore = false
             Log.runtime(TAG, "queryChickenDiaryList err:")
@@ -2769,6 +2806,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "doChickenDiary 协程被取消")
+            throw e
         } catch (e: Exception) {
             Log.runtime(TAG, "doChickenDiary err:")
             Log.printStackTrace(TAG, e)
@@ -2811,7 +2852,7 @@ class AntFarm : ModelTask() {
     }
 
     /* 雇佣好友小鸡 */
-    private fun hireAnimal() {
+    private  fun hireAnimal() {
         var animals: JSONArray? = null
         try {
             val jsonObject = enterFarm() ?: return
@@ -3014,6 +3055,9 @@ class AntFarm : ModelTask() {
                         } else {
                             Log.runtime(TAG, "drawGameCenterAward falsed result: $jo")
                         }
+                    } catch (e: CancellationException) {
+                        // 协程取消异常必须重新抛出，不能吞掉
+                        throw e
                     } catch (t: Throwable) {
                         Log.printStackTrace(TAG, t)
                     }
@@ -3021,6 +3065,10 @@ class AntFarm : ModelTask() {
             } else {
                 Log.runtime(TAG, "queryGameList falsed result: $jo")
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "drawGameCenterAward 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "queryChickenDiaryList err:")
             Log.printStackTrace(TAG, t)
@@ -3477,17 +3525,29 @@ class AntFarm : ModelTask() {
     }
 
 
-    private fun syncFamilyStatusIntimacy(groupId: String?) {
+    /**
+     * 同步家庭亲密度状态
+     * @param groupId 家庭组ID
+     */
+    private suspend fun syncFamilyStatusIntimacy(groupId: String?) {
         try {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.syncFamilyStatus(groupId, "INTIMACY_VALUE", userId))
             ResChecker.checkRes(TAG, jo)
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "syncFamilyStatusIntimacy 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "syncFamilyStatus err:")
             Log.printStackTrace(TAG, t)
         }
     }
 
+    /**
+     * 邀请好友访问家庭
+     * @param friendUserIds 好友用户ID列表
+     */
     private suspend fun inviteFriendVisitFamily(friendUserIds: MutableList<String?>) {
         try {
             if (Status.hasFlagToday("antFarm::inviteFriendVisitFamily")) {
@@ -3516,12 +3576,21 @@ class AntFarm : ModelTask() {
                 delay(500)
                 syncFamilyStatusIntimacy(familyGroupId)
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "inviteFriendVisitFamily 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "inviteFriendVisitFamily err:")
             Log.printStackTrace(TAG, t)
         }
     }
 
+    /**
+     * 家庭批量邀请P2P任务
+     * @param friendUserIds 好友用户ID列表
+     * @param familyDrawInfo 家庭扭蛋信息
+     */
     private suspend fun familyBatchInviteP2PTask(
         friendUserIds: MutableList<String?>,
         familyDrawInfo: JSONObject
@@ -3563,12 +3632,21 @@ class AntFarm : ModelTask() {
                     delay(500)
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyBatchInviteP2PTask 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyBatchInviteP2PTask err:")
             Log.printStackTrace(TAG, t)
         }
     }
 
+    /**
+     * 家庭扭蛋任务
+     * @param friendUserIds 好友用户ID列表
+     * @param familyDrawInfo 家庭扭蛋信息
+     */
     private suspend fun familyDrawTask(friendUserIds: MutableList<String?>, familyDrawInfo: JSONObject) {
         try {
             val listFarmTask = familyDrawListFarmTask() ?: return
@@ -3610,6 +3688,10 @@ class AntFarm : ModelTask() {
                     delay(1500)
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyDrawTask 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyDrawTask err:")
             Log.printStackTrace(TAG, t)
@@ -3641,7 +3723,11 @@ class AntFarm : ModelTask() {
         return null
     }
 
-    private fun familyDraw(): Boolean {
+    /**
+     * 家庭扭蛋抽奖
+     * @return 是否还有剩余抽奖次数
+     */
+    private suspend fun familyDraw(): Boolean {
         try {
             val jo = JSONObject(AntFarmRpcCall.familyDraw())
             if (ResChecker.checkRes(TAG, jo)) {
@@ -3652,6 +3738,10 @@ class AntFarm : ModelTask() {
                 Log.farm("开扭蛋🎟️抽中[$title]#[$awardCount]")
                 return familyDrawTimes != 0
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyDraw 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyDraw err:")
             Log.printStackTrace(TAG, t)
@@ -3716,25 +3806,33 @@ class AntFarm : ModelTask() {
                 delay(500)
                 syncFamilyStatusIntimacy(familyGroupId)
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyEatTogether 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyEatTogether err:")
             Log.printStackTrace(TAG, t)
         }
     }
 
-    private fun familyDrawSignReceiveFarmTaskAward(taskId: String?, title: String?) {
+    private suspend fun familyDrawSignReceiveFarmTaskAward(taskId: String?, title: String?) {
         try {
             val jo = JSONObject(AntFarmRpcCall.familyDrawSignReceiveFarmTaskAward(taskId))
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm("亲密家庭🏠扭蛋任务#$title#奖励领取成功")
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyDrawSignReceiveFarmTaskAward 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyDrawSignReceiveFarmTaskAward err:")
             Log.printStackTrace(TAG, t)
         }
     }
 
-    private fun queryRecentFarmFood(queryNum: Int): JSONArray? {
+    private suspend fun queryRecentFarmFood(queryNum: Int): JSONArray? {
         try {
             val jo = JSONObject(AntFarmRpcCall.queryRecentFarmFood(queryNum))
             if (!ResChecker.checkRes(TAG, jo)) {
@@ -3751,6 +3849,10 @@ class AntFarm : ModelTask() {
             if (count >= queryNum) {
                 return cuisines
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "queryRecentFarmFood 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "queryRecentFarmFood err:")
             Log.printStackTrace(TAG, t)
@@ -3758,7 +3860,7 @@ class AntFarm : ModelTask() {
         return null
     }
 
-    private fun familyFeedFriendAnimal(animals: JSONArray) {
+    private suspend fun familyFeedFriendAnimal(animals: JSONArray) {
         try {
             for (i in 0..<animals.length()) {
                 val animal = animals.getJSONObject(i)
@@ -3788,6 +3890,10 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消异常必须重新抛出，不能吞掉
+            Log.debug(TAG, "familyFeedFriendAnimal 协程被取消")
+            throw e
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyFeedFriendAnimal err:")
             Log.printStackTrace(TAG, t)
@@ -3796,9 +3902,9 @@ class AntFarm : ModelTask() {
 
     /**
      * 点击领取活动食物
-     *
+     * @param gift 礼物信息对象
      */
-    private fun clickForGiftV2(gift: JSONObject?) {
+    private  fun clickForGiftV2(gift: JSONObject?) {
         if (gift == null) return
         try {
             val resultJson = JSONObject(
@@ -3810,7 +3916,7 @@ class AntFarm : ModelTask() {
             if (ResChecker.checkRes(TAG, resultJson)) {
                 Log.farm("领取活动食物成功," + "已领取" + resultJson.optInt("foodCount"))
             }
-        } catch (e: Exception) {
+        }  catch (e: Exception) {
             Log.runtime(TAG, "clickForGiftV2 err:")
             Log.printStackTrace(TAG, e)
         }
