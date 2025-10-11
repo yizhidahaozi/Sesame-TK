@@ -393,6 +393,47 @@ public class JsonUtil {
     }
 
     /**
+     * 安全地创建JSONObject，处理空字符串和null的情况
+     *
+     * @param jsonStr JSON字符串
+     * @return JSONObject对象，如果输入为空则返回空的JSONObject
+     */
+    public static JSONObject parseJSONObject(String jsonStr) {
+        try {
+            // 检查字符串是否为空或null
+            if (jsonStr == null || jsonStr.trim().isEmpty()) {
+                Log.runtime(TAG, "收到空响应，可能是网络异常或服务端错误");
+                return new JSONObject(); // 返回空的JSONObject
+            }
+            return new JSONObject(jsonStr);
+        } catch (Exception e) {
+            Log.runtime(TAG, "JSON解析失败: " + e.getMessage());
+            Log.runtime(TAG, "原始响应: " + (jsonStr.length() > 200 ? jsonStr.substring(0, 200) + "..." : jsonStr));
+            return new JSONObject(); // 返回空的JSONObject
+        }
+    }
+
+    /**
+     * 安全地创建JSONArray，处理空字符串和null的情况
+     *
+     * @param jsonStr JSON字符串
+     * @return JSONArray对象，如果输入为空则返回空的JSONArray
+     */
+    public static JSONArray parseJSONArray(String jsonStr) {
+        try {
+            // 检查字符串是否为空或null
+            if (jsonStr == null || jsonStr.trim().isEmpty()) {
+                Log.runtime(TAG, "收到空响应，可能是网络异常或服务端错误");
+                return new JSONArray(); // 返回空的JSONArray
+            }
+            return new JSONArray(jsonStr);
+        } catch (Exception e) {
+            Log.runtime(TAG, "JSON数组解析失败: " + e.getMessage());
+            return new JSONArray(); // 返回空的JSONArray
+        }
+    }
+
+    /**
      * 将 JSONArray 转换为字符串列表
      *
      * @param jsonArray 源 JSONArray

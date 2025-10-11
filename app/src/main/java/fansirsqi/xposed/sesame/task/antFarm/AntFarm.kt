@@ -1841,7 +1841,13 @@ class AntFarm : ModelTask() {
             var isFeedFull = false // 添加饲料槽已满的标志
             do {
                 doubleCheck = false
-                val jo = JSONObject(AntFarmRpcCall.listFarmTask())
+                val response = AntFarmRpcCall.listFarmTask()
+                // 检查空响应
+                if (response.isNullOrEmpty()) {
+                    Log.runtime(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
+                    return
+                }
+                val jo = JSONObject(response)
                 if (ResChecker.checkRes(TAG + "查询庄园任务失败:", jo)) {
                     val farmTaskList = jo.getJSONArray("farmTaskList")
                     val signList = jo.getJSONObject("signList")
@@ -2196,6 +2202,11 @@ class AntFarm : ModelTask() {
             var jo: JSONObject
             do {
                 s = AntFarmRpcCall.rankingList(pageStartSum)
+                // 检查空响应
+                if (s.isNullOrEmpty()) {
+                    Log.runtime(TAG, "notifyFriend.rankingList: 收到空响应，终止通知")
+                    break // 跳出do-while循环
+                }
                 jo = JSONObject(s)
                 var memo = jo.getString("memo")
                 if (ResChecker.checkRes(TAG, jo)) {
@@ -2217,6 +2228,10 @@ class AntFarm : ModelTask() {
                             jo.has("actionType") && "starve_action" == jo.getString("actionType")
                         if (jo.getBoolean("stealingAnimal") && !starve) {
                             s = AntFarmRpcCall.enterFarm(userId, userId)
+                            // 循环内的空响应检查：静默跳过该好友，继续处理下一个
+                            if (s.isNullOrEmpty()) {
+                                continue // 跳过当前好友，处理下一个
+                            }
                             jo = JSONObject(s)
                             memo = jo.getString("memo")
                             if (ResChecker.checkRes(TAG, jo)) {
@@ -2806,20 +2821,34 @@ class AntFarm : ModelTask() {
 
     private fun visitAnimal() {
         try {
-            var jo = JSONObject(AntFarmRpcCall.visitAnimal())
+            val response = AntFarmRpcCall.visitAnimal()
+            if (response.isNullOrEmpty()) {
+                Log.runtime(TAG, "visitAnimal: 收到空响应")
+                return
+            }
+            var jo = JSONObject(response)
             if (ResChecker.checkRes(TAG, jo)) {
                 if (!jo.has("talkConfigs")) return
                 val talkConfigs = jo.getJSONArray("talkConfigs")
                 val talkNodes = jo.getJSONArray("talkNodes")
                 val data = talkConfigs.getJSONObject(0)
                 val farmId = data.getString("farmId")
-                jo = JSONObject(AntFarmRpcCall.feedFriendAnimalVisit(farmId))
+                
+                val response2 = AntFarmRpcCall.feedFriendAnimalVisit(farmId)
+                if (response2.isNullOrEmpty()) {
+                    Log.runtime(TAG, "feedFriendAnimalVisit: 收到空响应")
+                    return
+                }
+                jo = JSONObject(response2)
                 if (ResChecker.checkRes(TAG, jo)) {
                     for (i in 0..<talkNodes.length()) {
                         jo = talkNodes.getJSONObject(i)
                         if ("FEED" != jo.getString("type")) continue
                         val consistencyKey = jo.getString("consistencyKey")
-                        jo = JSONObject(AntFarmRpcCall.visitAnimalSendPrize(consistencyKey))
+                        
+                        val response3 = AntFarmRpcCall.visitAnimalSendPrize(consistencyKey)
+                        if (response3.isNullOrEmpty()) continue // 静默跳过，继续处理下一个
+                        jo = JSONObject(response3)
                         if (ResChecker.checkRes(TAG, jo)) {
                             val prizeName = jo.getString("prizeName")
                             Log.farm("小鸡到访💞[$prizeName]")
