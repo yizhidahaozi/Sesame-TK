@@ -35,6 +35,7 @@ public class ResChecker {
             // 特殊情况：如果是"人数过多"或"小鸡睡觉"等系统状态，我们认为这不是一个需要记录的"失败"
             String resultDesc = jo.optString("resultDesc", "");
             String memo = jo.optString("memo", "");
+            String resultCode = jo.optString("resultCode", "");
             if (resultDesc.contains("当前参与人数过多") || resultDesc.contains("请稍后再试") ||
                     resultDesc.contains("手速太快") || resultDesc.contains("频繁") ||
                     resultDesc.contains("操作过于频繁") ||
@@ -45,7 +46,9 @@ public class ResChecker {
                     memo.contains("有人抢在你前面") ||
                     memo.contains("饲料槽已满") ||
                     memo.contains("当日达到上限") ||
-                    memo.contains("适可而止")
+                    memo.contains("适可而止") ||
+                    memo.contains("庄园的小鸡太多了") ||
+                    "I07".equals(resultCode)
 
 
 

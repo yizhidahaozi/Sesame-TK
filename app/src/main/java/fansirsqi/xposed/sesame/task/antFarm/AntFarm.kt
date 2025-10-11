@@ -2927,9 +2927,18 @@ class AntFarm : ModelTask() {
                         }
                         val actionTypeListStr = joo.getJSONArray("actionTypeList").toString()
                         if (actionTypeListStr.contains("can_hire_action")) {
-                            if (hireAnimalAction(userId)) {
-                                animalCount++
-                                break
+                            try {
+                                if (hireAnimalAction(userId)) {
+                                    animalCount++
+                                    break
+                                }
+                            } catch (e: Exception) {
+                                if (e.message == "FARM_FULL") {
+                                    Log.record("庄园小鸡已满，停止雇佣")
+                                    animalCount = 3  // 标记庄园已满，避免下次循环继续尝试
+                                    break  // 跳出for循环
+                                }
+                                throw e  // 重新抛出其他异常
                             }
                         }
                     }
@@ -2943,6 +2952,11 @@ class AntFarm : ModelTask() {
                 Log.farm("雇佣小鸡失败，没有足够的小鸡可以雇佣")
             }
         } catch (t: Throwable) {
+            // 如果是庄园已满的情况，不记录为错误
+            if (t.message == "FARM_FULL") {
+                Log.record("庄园小鸡已满，已停止雇佣")
+                return
+            }
             Log.runtime(TAG, "hireAnimal err:")
             Log.printStackTrace(TAG, t)
         }
@@ -2996,7 +3010,13 @@ class AntFarm : ModelTask() {
                             }
                             return true
                         } else {
-                            Log.record(jo.getString("memo"))
+                            val resultCode = jo.optString("resultCode", "")
+                            val memo = jo.optString("memo", "")
+                            // 如果庄园已满，抛出异常停止循环
+                            if (resultCode == "I07" || memo.contains("庄园的小鸡太多了")) {
+                                throw Exception("FARM_FULL")
+                            }
+                            Log.record(memo)
                             Log.runtime(s)
                         }
                         return false
