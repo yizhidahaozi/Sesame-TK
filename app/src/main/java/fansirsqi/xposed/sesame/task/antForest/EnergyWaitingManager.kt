@@ -509,6 +509,7 @@ object EnergyWaitingManager {
                     if (result.energyCount > 0) {
                         Log.record(TAG,"✅ 蹲点收取[${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
+                        EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                     } else {
                         Log.record(TAG, "⚠️ 蹲点收取[${task.userName}]异常：返回0能量(${result.message})")
                         
@@ -535,6 +536,7 @@ object EnergyWaitingManager {
                     if (result.hasShield || result.hasBomb) {
                         Log.record(TAG, "  → 检测到保护罩/炸弹卡")
                         waitingTasks.remove(task.taskId)
+                        EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                     } else {
                         // 可重试的错误，主动触发重试
                         if (task.retryCount < task.maxRetries) {
@@ -599,8 +601,11 @@ object EnergyWaitingManager {
 
     /**
      * 清理过期的蹲点任务并重新触发已成熟任务
+     * @param enableRevalidation 是否启用重新验证（默认每5次清理执行一次）
      */
-    fun cleanExpiredTasks() {
+    private var cleanupCounter = 0
+    
+    fun cleanExpiredTasks(enableRevalidation: Boolean = false) {
         managerScope.launch {
             taskMutex.withLock {
                 val currentTime = System.currentTimeMillis()
@@ -634,8 +639,19 @@ object EnergyWaitingManager {
                     expiredTasks.forEach { (taskId, _) ->
                         waitingTasks.remove(taskId)
                     }
+                    EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                 } else {
                     Log.debug(TAG, "定期清理检查：无过期任务")
+                }
+                
+                // 3. 定期重新验证任务有效性（每5次清理执行一次，或手动启用）
+                cleanupCounter++
+                if (enableRevalidation || cleanupCounter >= 5) {
+                    if (waitingTasks.isNotEmpty()) {
+                        Log.record(TAG, "🔍 定期验证：开始检查蹲点任务保护罩状态...")
+                        revalidateAllWaitingTasks()
+                    }
+                    cleanupCounter = 0
                 }
                 
                 // 记录当前活跃任务状态（简化版）
@@ -731,6 +747,74 @@ object EnergyWaitingManager {
     }
     
     /**
+     * 重新验证所有蹲点任务的有效性（第2层防护）
+     * 适用于管理器启动或任务恢复后的场景，确保移除已有保护罩覆盖的任务
+     */
+    private fun revalidateAllWaitingTasks() {
+        managerScope.launch {
+            taskMutex.withLock {
+                if (waitingTasks.isEmpty()) {
+                    Log.debug(TAG, "无需验证：当前无蹲点任务")
+                    return@withLock
+                }
+                
+                val currentTime = System.currentTimeMillis()
+                val tasksToRevalidate = waitingTasks.values.toList()
+                val tasksToRemove = mutableListOf<String>()
+                
+                Log.record(TAG, "🔄 开始重新验证${tasksToRevalidate.size}个蹲点任务...")
+                
+                tasksToRevalidate.forEach { task ->
+                    try {
+                        // 重新查询用户主页以获取最新的保护罩状态
+                        val userHomeResponse = AntForestRpcCall.queryFriendHomePage(task.userId, task.fromTag)
+                        
+                        if (userHomeResponse.isNullOrEmpty()) {
+                            Log.debug(TAG, "  验证[${task.userName}]：无法获取主页信息，保留任务")
+                            return@forEach
+                        }
+                        
+                        val userHomeObj = JSONObject(userHomeResponse)
+                        
+                        // 使用封装的保护罩检查方法
+                        if (ForestUtil.shouldSkipWaitingDueToProtection(userHomeObj, task.produceTime)) {
+                            val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
+                            val timeDifference = protectionEndTime - task.produceTime
+                            val formattedTimeDifference = formatTime(timeDifference)
+                            
+                            Log.record(
+                                TAG,
+                                "  ❌ 移除[${task.userName}]球[${task.bubbleId}]：保护罩覆盖能量成熟期($formattedTimeDifference)"
+                            )
+                            tasksToRemove.add(task.taskId)
+                        } else {
+                            Log.debug(TAG, "  ✅ 保留[${task.userName}]球[${task.bubbleId}]：可正常收取")
+                        }
+                        
+                        // 添加短暂延迟，避免请求过快
+                        delay(200)
+                    } catch (e: Exception) {
+                        Log.debug(TAG, "  验证任务[${task.taskId}]时出错: ${e.message}，保留任务")
+                    }
+                }
+                
+                // 批量移除无效任务
+                tasksToRemove.forEach { taskId ->
+                    waitingTasks.remove(taskId)
+                }
+                
+                val validCount = tasksToRevalidate.size - tasksToRemove.size
+                if (tasksToRemove.isNotEmpty()) {
+                    Log.record(TAG, "🧹 验证完成：移除${tasksToRemove.size}个无效任务，保留${validCount}个有效任务")
+                    EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
+                } else {
+                    Log.record(TAG, "✅ 验证完成：所有${validCount}个任务均有效")
+                }
+            }
+        }
+    }
+    
+    /**
      * 格式化时间为人性化的字符串
      * @param milliseconds 毫秒数
      * @return 格式化后的时间字符串
@@ -772,9 +856,69 @@ object EnergyWaitingManager {
         }
     }
     
+    /**
+     * 从持久化存储恢复蹲点任务（内部方法）
+     */
+    private fun restoreTasksFromPersistence() {
+        managerScope.launch {
+            try {
+                // 延迟5秒，确保主任务和回调已初始化
+                delay(5000)
+                
+                // 加载持久化的任务
+                val loadedTasks = EnergyWaitingPersistence.loadTasks()
+                
+                if (loadedTasks.isEmpty()) {
+                    Log.debug(TAG, "持久化存储中无任务需要恢复")
+                    return@launch
+                }
+                
+                Log.record(TAG, "🔄 从持久化存储恢复${loadedTasks.size}个蹲点任务...")
+                
+                // 验证并重新添加任务
+                val restoredCount = EnergyWaitingPersistence.validateAndRestoreTasks(loadedTasks) { task ->
+                    taskMutex.withLock {
+                        try {
+                            // 检查任务是否已经存在（避免重复添加）
+                            if (waitingTasks.containsKey(task.taskId)) {
+                                Log.debug(TAG, "任务[${task.taskId}]已存在，跳过重复添加")
+                                return@withLock false
+                            }
+                            
+                            // 添加任务到内存
+                            waitingTasks[task.taskId] = task
+                            
+                            // 启动蹲点协程
+                            startPreciseWaitingCoroutine(task)
+                            
+                            true
+                        } catch (e: Exception) {
+                            Log.error(TAG, "恢复任务[${task.taskId}]失败: ${e.message}")
+                            false
+                        }
+                    }
+                }
+                
+                if (restoredCount > 0) {
+                    Log.record(TAG, "✅ 成功恢复${restoredCount}个蹲点任务，避免重新遍历好友")
+                    // 保存更新后的任务列表
+                    EnergyWaitingPersistence.saveTasks(waitingTasks)
+                }
+                
+            } catch (e: Exception) {
+                Log.error(TAG, "恢复蹲点任务失败: ${e.message}")
+                Log.printStackTrace(TAG, e)
+            }
+        }
+    }
+    
     init {
         // 启动定期清理任务
         startPeriodicCleanup()
-        Log.record(TAG, "精确能量球蹲点管理器已初始化")
+        
+        // 从持久化存储恢复任务
+        restoreTasksFromPersistence()
+        
+        Log.record(TAG, "精确能量球蹲点管理器已初始化（支持持久化）")
     }
 }

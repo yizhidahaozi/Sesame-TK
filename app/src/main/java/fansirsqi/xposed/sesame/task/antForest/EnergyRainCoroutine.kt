@@ -22,6 +22,10 @@ object EnergyRainCoroutine {
     suspend fun execEnergyRain() {
         try {
             energyRain()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消是正常现象，不记录为错误
+            Log.debug(TAG, "execEnergyRain 协程被取消")
+            throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
             Log.runtime(TAG, "执行能量雨出错:")
             Log.printStackTrace(TAG, th)
@@ -82,6 +86,10 @@ object EnergyRainCoroutine {
             if (ResChecker.checkRes(TAG, joEnergyRainHome) && joEnergyRainHome.getBoolean("canPlayToday")) {
                 startEnergyRain()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消是正常现象，不记录为错误
+            Log.debug(TAG, "energyRain 协程被取消")
+            throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
             Log.runtime(TAG, "energyRain err:")
             Log.printStackTrace(TAG, th)
@@ -117,6 +125,10 @@ object EnergyRainCoroutine {
             } else {
                 Log.runtime(TAG, "startEnergyRain: $joStart")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消是正常现象，不记录为错误
+            Log.debug(TAG, "startEnergyRain 协程被取消")
+            throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
             Log.runtime(TAG, "startEnergyRain err:")
             Log.printStackTrace(TAG, th)

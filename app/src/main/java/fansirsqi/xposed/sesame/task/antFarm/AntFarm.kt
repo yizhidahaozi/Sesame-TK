@@ -685,6 +685,10 @@ class AntFarm : ModelTask() {
             animalSleepAndWake()
             tc.countDebug("小鸡睡觉&起床")
             tc.stop()
+        } catch (e: CancellationException) {
+            // 协程取消是正常现象，不记录为错误
+            Log.debug(TAG, "AntFarm 协程被取消")
+            throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (t: Throwable) {
             Log.runtime(TAG, "AntFarm.start.run err:")
             Log.printStackTrace(TAG, t)

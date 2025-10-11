@@ -1633,6 +1633,25 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
+     * 检查保护罩是否覆盖能量成熟期
+     * 
+     * @param userHomeObj 用户主页对象
+     * @param produceTime 能量成熟时间
+     * @param serverTime 服务器时间
+     * @return true表示应该跳过蹲点（保护罩覆盖），false表示可以蹲点
+     */
+    private fun shouldSkipWaitingTaskDueToProtection(
+        userHomeObj: JSONObject,
+        produceTime: Long,
+        serverTime: Long
+    ): Boolean {
+        val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+        val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+        val protectionEndTime = maxOf(shieldEndTime, bombEndTime)
+        return protectionEndTime > produceTime
+    }
+
+    /**
      * 提取能量球状态
      *
      * @param userHomeObj      用户主页的JSON对象
@@ -1694,6 +1713,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     // 等待成熟的能量球，添加到蹲点队列
                     val produceTime = bubble.optLong("produceTime", 0L)
                     if (produceTime > 0 && produceTime > serverTime) {
+                        // 检查保护罩时间：如果保护罩覆盖整个成熟期，跳过蹲点
+                        if (!isSelf && shouldSkipWaitingTaskDueToProtection(userHomeObj, produceTime, serverTime)) {
+                            val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
+                            val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
+                            val protectionEndTime = maxOf(shieldEndTime, bombEndTime)
+                            val remainingHours = (protectionEndTime - serverTime) / (1000 * 60 * 60)
+                            Log.record(
+                                TAG,
+                                "⏭️ 跳过蹲点[$userName]球[$bubbleId]：保护罩覆盖整个成熟期(保护还剩${remainingHours}h，能量${TimeUtil.getCommonDate(produceTime)}成熟)"
+                            )
+                            continue
+                        }
+                        
                         waitingBubblesCount++
                         // 添加蹲点任务
                         EnergyWaitingManager.addWaitingTask(
@@ -4706,6 +4738,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     )
                 }
             }
+        } catch (e: CancellationException) {
+            // 协程取消是正常现象，不记录为错误
+            Log.debug(TAG, "collectUserEnergyForWaiting 协程被取消")
+            throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "蹲点收取异常", e)
             CollectResult(
