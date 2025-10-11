@@ -548,7 +548,6 @@ object EnergyWaitingManager {
                             
                             // 根据错误类型决定重试延迟
                             val retryDelay = when {
-                                result.message.contains("参与人数过多") -> 3000L // 3秒
                                 result.message.contains("网络") -> 5000L // 5秒
                                 result.message.contains("频繁") -> 10000L // 10秒
                                 else -> 5000L // 默认5秒
