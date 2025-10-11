@@ -35,7 +35,6 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
-import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.RunType;
 import fansirsqi.xposed.sesame.data.Status;
@@ -707,7 +706,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
                 Model.bootAllModel(classLoader);
                 Status.load(userId);
-                DataCache.INSTANCE.load();
                 DataStore.INSTANCE.init(Files.CONFIG_DIR);
                 updateDay(userId);
 

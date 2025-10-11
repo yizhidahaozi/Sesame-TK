@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -12,6 +13,7 @@ object FansirsqiUtil {
     // 定义一言API的URL
 
     private const val HIROHITO_API_URL = "https://international.v1.hitokoto.cn/"
+
     /**
      * 获取一言（挂起函数），推荐在协程中使用
      * @return 成功返回句子，失败返回默认句子
@@ -53,4 +55,14 @@ object FansirsqiUtil {
             .joinToString("")
     }
 
+
+    //获取目标文件夹下的文件夹列表
+    fun getFolderList(folderPath: String): List<String> {
+        val file = File(folderPath)
+        return if (file.exists() && file.isDirectory) {
+            file.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
 }

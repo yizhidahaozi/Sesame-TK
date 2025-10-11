@@ -1,11 +1,12 @@
+@file:Suppress("ClassName")
+
 package fansirsqi.xposed.sesame.task.antFarm
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import fansirsqi.xposed.sesame.data.DataCache.getData
-import fansirsqi.xposed.sesame.data.DataCache.saveData
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.entity.AlipayUser
 import fansirsqi.xposed.sesame.entity.MapperEntity
@@ -23,6 +24,8 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.newutil.DataStore.getOrCreate
+import fansirsqi.xposed.sesame.newutil.DataStore.put
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
@@ -722,6 +725,7 @@ class AntFarm : ModelTask() {
                         SubAnimalType.NORMAL -> Log.record(TAG, "小鸡太饿，离家出走了")
                         SubAnimalType.PIRATE -> Log.record(TAG, "小鸡外出探险了")
                         SubAnimalType.WORK -> Log.record(TAG, "小鸡出去工作啦")
+                        else -> Log.record(TAG, "小鸡不在庄园" + " " + ownerAnimal.subAnimalType)
                     }
                     var hungry = false
                     val userName =
@@ -1516,17 +1520,13 @@ class AntFarm : ModelTask() {
         try {
             val today = TimeUtil.getDateStr2()
             val tomorrow = TimeUtil.getDateStr2(1)
-            val farmAnswerCache: MutableMap<String?, String?>? =
-                getData<HashMap<String?, String?>?>(
-                    FARM_ANSWER_CACHE_KEY, HashMap()
-                )
+            val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY) as MutableMap<String, String>
             cleanOldAnswers(farmAnswerCache, today)
-
             // 检查是否今天已经答过题
             if (Status.hasFlagToday(ANSWERED_FLAG)) {
                 if (!Status.hasFlagToday(CACHED_FLAG)) {
                     val jo = JSONObject(DadaDailyRpcCall.home(activityId))
-                    if (ResChecker.checkRes(TAG, jo)) {
+                    if (ResChecker.checkRes(TAG + "查询答题活动失败:", jo)) {
                         val operationConfigList = jo.getJSONArray("operationConfigList")
                         updateTomorrowAnswerCache(operationConfigList, tomorrow)
                         Status.setFlagToday(CACHED_FLAG)
@@ -1537,7 +1537,7 @@ class AntFarm : ModelTask() {
 
             // 获取题目信息
             val jo = JSONObject(DadaDailyRpcCall.home(activityId))
-            if (!ResChecker.checkRes(TAG, jo)) return
+            if (!ResChecker.checkRes(TAG + "获取答题题目失败:", jo)) return
 
             val question = jo.getJSONObject("question")
             val questionId = question.getLong("questionId")
@@ -1549,7 +1549,7 @@ class AntFarm : ModelTask() {
             val cacheKey = "$title|$today"
 
             // 改进的缓存匹配逻辑
-            if (farmAnswerCache != null && farmAnswerCache.containsKey(cacheKey)) {
+            if (farmAnswerCache.containsKey(cacheKey)) {
                 val cachedAnswer = farmAnswerCache[cacheKey]
                 Log.farm("🎉 缓存[$cachedAnswer] 🎯 题目：$cacheKey")
 
@@ -1589,14 +1589,10 @@ class AntFarm : ModelTask() {
             // 提交答案
             val joDailySubmit = JSONObject(DadaDailyRpcCall.submit(activityId, answer, questionId))
             Status.setFlagToday(ANSWERED_FLAG)
-            if (ResChecker.checkRes(TAG, joDailySubmit)) {
+            if (ResChecker.checkRes(TAG + "提交答题答案失败:", joDailySubmit)) {
                 val extInfo = joDailySubmit.getJSONObject("extInfo")
                 val correct = joDailySubmit.getBoolean("correct")
-                Log.farm(
-                    "饲料任务答题：" + (if (correct) "正确" else "错误") + "领取饲料［" + extInfo.getString(
-                        "award"
-                    ) + "g］"
-                )
+                Log.farm("饲料任务答题：" + (if (correct) "正确" else "错误") + "领取饲料［" + extInfo.getString("award") + "g］")
                 val operationConfigList = joDailySubmit.getJSONArray("operationConfigList")
                 updateTomorrowAnswerCache(operationConfigList, tomorrow)
                 Status.setFlagToday(CACHED_FLAG)
@@ -1615,13 +1611,7 @@ class AntFarm : ModelTask() {
     private fun updateTomorrowAnswerCache(operationConfigList: JSONArray, date: String?) {
         try {
             Log.runtime(TAG, "updateTomorrowAnswerCache 开始更新缓存")
-            var farmAnswerCache: MutableMap<String?, String?>? =
-                getData<HashMap<String?, String?>?>(
-                    FARM_ANSWER_CACHE_KEY, HashMap()
-                )
-            if (farmAnswerCache == null) {
-                farmAnswerCache = HashMap()
-            }
+            val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY)
             for (j in 0..<operationConfigList.length()) {
                 val operationConfig = operationConfigList.getJSONObject(j)
                 val type = operationConfig.getString("type")
@@ -1633,12 +1623,12 @@ class AntFarm : ModelTask() {
                         val isCorrect = joActionTitle.getBoolean("correct")
                         if (isCorrect) {
                             val nextAnswer = joActionTitle.getString("title")
-                            farmAnswerCache[previewTitle] = nextAnswer // 缓存下一个问题的答案
+                            farmAnswerCache.put(previewTitle, nextAnswer) // 缓存下一个问题的答案
                         }
                     }
                 }
             }
-            saveData<MutableMap<String?, String?>?>(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
+            put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
             Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e)
@@ -1649,7 +1639,7 @@ class AntFarm : ModelTask() {
     /**
      * 清理缓存超过7天的B答案
      */
-    private fun cleanOldAnswers(farmAnswerCache: MutableMap<String?, String?>?, today: String?) {
+    private fun cleanOldAnswers(farmAnswerCache: MutableMap<String, String>?, today: String?) {
         try {
             Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
             if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return
@@ -1659,7 +1649,7 @@ class AntFarm : ModelTask() {
             val daysToKeep = 7
             val cleanedMap: MutableMap<String?, String?> = HashMap()
             for (entry in farmAnswerCache.entries) {
-                val key: String = entry.key!!
+                val key: String = entry.key
                 if (key.contains("|")) {
                     val parts: Array<String?> = key.split("\\|".toRegex(), limit = 2).toTypedArray()
                     if (parts.size == 2) {
@@ -1667,21 +1657,19 @@ class AntFarm : ModelTask() {
                         val dateInt = convertDateToInt(dateStr)
                         if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
-                            cleanedMap[entry.key] = entry.value //保存7天内的答案
-                            Log.runtime(
-                                TAG,
-                                "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0]
-                            )
+                            cleanedMap.put(entry.key, entry.value) //保存7天内的答案
+                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
                         }
                     }
                 }
             }
-            saveData<MutableMap<String?, String?>?>(FARM_ANSWER_CACHE_KEY, cleanedMap)
+            put(FARM_ANSWER_CACHE_KEY, cleanedMap)
             Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "cleanOldAnswers error:", e)
         }
     }
+
 
     /**
      * 将日期字符串转为数字格式
@@ -1696,10 +1684,10 @@ class AntFarm : ModelTask() {
             return -1 // 格式错误
         }
         try {
-            val year = dateStr.take(4).toInt()
+            val year = dateStr.substring(0, 4).toInt()
             val month = dateStr.substring(5, 7).toInt()
             val day = dateStr.substring(8, 10).toInt()
-            if (month !in 1..12 || day < 1 || day > 31) {
+            if (month < 1 || month > 12 || day < 1 || day > 31) {
                 Log.error("日期无效：$dateStr")
                 return -1 // 日期无效
             }
@@ -3956,6 +3944,7 @@ class AntFarm : ModelTask() {
          */
         @JvmField
         var foodStock: Int = 0
+
         @JvmField
         var foodStockLimit: Int = 0
 
