@@ -298,13 +298,11 @@ object EnergyWaitingManager {
                     ""
                 }
                 val actionText = if (existingTask != null) "更新" else "添加"
-                val waitTimeSeconds = (produceTime - currentTime) / 1000
+                val waitTimeMinutes = (produceTime - currentTime) / 1000 / 60
                 Log.record(
                     TAG,
-                    "${actionText}蹲点任务：[${fromTag}|${userName}]能量球[${bubbleId}]将在[${TimeUtil.getCommonDate(produceTime)}]成熟${protectionStatus}"
+                    "${actionText}蹲点：[${fromTag}|${userName}]球[${bubbleId}]在[${TimeUtil.getCommonDate(produceTime)}]成熟(等待${waitTimeMinutes}分钟)${protectionStatus}"
                 )
-                Log.record(TAG, "  等待时间: ${waitTimeSeconds}秒 (${waitTimeSeconds/60}分钟)")
-                Log.record(TAG, "  任务ID: ${task.taskId}")
                 // 启动精确蹲点协程
                 startPreciseWaitingCoroutine(task)
             }
@@ -325,13 +323,12 @@ object EnergyWaitingManager {
                 if (waitTime > 0) {
                     // 需要等待的任务
                     val protectionInfo = if (task.hasProtection(currentTime)) {
-                        "保护结束后"
+                        "保护结束"
                     } else {
-                        "能量成熟后"
+                        "能量成熟"
                     }
-                    Log.record(TAG, "🕐 精确蹲点任务[${task.userName}]等待${waitTime/1000}秒${protectionInfo}立即收取")
-                    Log.record(TAG, "  当前时间: ${TimeUtil.getCommonDate(currentTime)}")
-                    Log.record(TAG, "  目标时间: ${TimeUtil.getCommonDate(preciseCollectTime)}")
+                    val waitMinutes = waitTime / 1000 / 60
+                    Log.record(TAG, "🕐 蹲点[${task.userName}]等待${waitMinutes}分钟(${protectionInfo}→${TimeUtil.getCommonDate(preciseCollectTime)})")
                     
                     // 分段等待，每30秒检查一次任务有效性
                     val checkInterval = 30000L // 30秒检查一次
@@ -344,7 +341,7 @@ object EnergyWaitingManager {
                         
                         // 检查任务是否仍然有效
                         if (!waitingTasks.containsKey(task.taskId)) {
-                            Log.record(TAG, "⚠️ 精确蹲点任务[${task.userName}]在等待过程中被移除，取消执行")
+                            Log.record(TAG, "⚠️ 蹲点[${task.userName}]已被移除")
                             return@launch
                         }
                         
@@ -356,20 +353,20 @@ object EnergyWaitingManager {
                     
                     // 等待完成，最终检查任务有效性
                     if (!waitingTasks.containsKey(task.taskId)) {
-                        Log.record(TAG, "⚠️ 精确蹲点任务[${task.userName}]在等待完成后被移除，取消执行")
+                        Log.record(TAG, "⚠️ 蹲点[${task.userName}]等待过程中被移除")
                         return@launch
                     }
                     
-                    Log.record(TAG, "✅ 精确蹲点任务[${task.userName}]等待完成，开始执行收取")
+                    Log.record(TAG, "✅ 蹲点[${task.userName}]等待完成，开始收取")
                 } else {
                     // 已经到时间的任务，立即执行
-                    val overdueTime = (-waitTime) / 1000
-                    if (overdueTime > 120) {
+                    val overdueMinutes = (-waitTime) / 1000 / 60
+                    if (overdueMinutes > 2) {
                         // 超时超过2分钟，记录警告
-                        Log.record(TAG, "⚡ 精确蹲点任务[${task.userName}]已超时${overdueTime/60}分钟，立即执行收取")
+                        Log.record(TAG, "⚡ 蹲点[${task.userName}]已超时${overdueMinutes}分钟，立即收取")
                     } else {
                         // 刚到时间或刚超时，正常执行
-                        Log.record(TAG, "✅ 精确蹲点任务[${task.userName}]时间已到，立即执行收取")
+                        Log.record(TAG, "✅ 蹲点[${task.userName}]时间已到，立即收取")
                     }
                 }
                 
@@ -510,35 +507,33 @@ object EnergyWaitingManager {
                 // 处理结果
                 if (result.success) {
                     if (result.energyCount > 0) {
-                        Log.record(TAG,"✅ 精确蹲点收取成功：用户[${task.userName}] 收取能量[${result.energyCount}g] 耗时[${executeTime}ms]")
+                        Log.record(TAG,"✅ 蹲点收取[${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
                     } else {
-                        Log.record(TAG, "⚠️ 精确蹲点收取异常：用户[${task.userName}] 返回success=true但energyCount=0")
-                        Log.record(TAG, "  收取结果详情: ${result.message}")
+                        Log.record(TAG, "⚠️ 蹲点收取[${task.userName}]异常：返回0能量(${result.message})")
                         
                         // 判断是否需要重试
                         if (task.retryCount < task.maxRetries) {
                             val retryTask = task.withRetry()
                             waitingTasks[task.taskId] = retryTask
                             val retryDelay = 5000L // 5秒后重试
-                            Log.record(TAG, "  将在${retryDelay/1000}秒后重试 (第${retryTask.retryCount}/${task.maxRetries}次)")
+                            Log.record(TAG, "  → 5秒后重试(${retryTask.retryCount}/${task.maxRetries})")
                             
                             managerScope.launch {
                                 delay(retryDelay)
                                 startPreciseWaitingCoroutine(retryTask)
                             }
                         } else {
-                            Log.record(TAG, "  已达最大重试次数，移除任务")
+                            Log.record(TAG, "  → 已达最大重试次数")
                             waitingTasks.remove(task.taskId)
                         }
                     }
                 } else {
-                    Log.record(TAG, "❌ 精确蹲点收取失败：用户[${task.userName}]")
-                    Log.record(TAG, "  失败原因: ${result.message}")
+                    Log.record(TAG, "❌ 蹲点收取[${task.userName}]失败：${result.message}")
                     
                     // 根据失败原因决定是否重试
                     if (result.hasShield || result.hasBomb) {
-                        Log.record(TAG, "  检测到保护罩/炸弹卡，移除蹲点任务")
+                        Log.record(TAG, "  → 检测到保护罩/炸弹卡")
                         waitingTasks.remove(task.taskId)
                     } else {
                         // 可重试的错误，主动触发重试
@@ -553,7 +548,7 @@ object EnergyWaitingManager {
                                 else -> 5000L // 默认5秒
                             }
                             
-                            Log.record(TAG, "  可重试错误，将在${retryDelay/1000}秒后重试 (第${retryTask.retryCount}/${task.maxRetries}次)")
+                            Log.record(TAG, "  → ${retryDelay/1000}秒后重试(${retryTask.retryCount}/${task.maxRetries})")
                             
                             managerScope.launch {
                                 delay(retryDelay)
@@ -562,7 +557,7 @@ object EnergyWaitingManager {
                                 }
                             }
                         } else {
-                            Log.record(TAG, "  已达最大重试次数(${task.maxRetries}次)，移除任务")
+                            Log.record(TAG, "  → 已达最大重试次数")
                             waitingTasks.remove(task.taskId)
                         }
                     }
@@ -619,11 +614,10 @@ object EnergyWaitingManager {
                 
                 // 重新触发已成熟任务
                 if (matureTasks.isNotEmpty()) {
-                    Log.record(TAG, "🔄 发现${matureTasks.size}个已成熟但未执行的蹲点任务，尝试重新触发")
-                    matureTasks.forEach { (taskId, task) ->
-                        val overTime = (currentTime - task.produceTime) / 1000 / 60
-                        Log.record(TAG, "  ⚡ 重新触发：[${task.userName}] 能量球[${task.bubbleId}] 已成熟${overTime}分钟")
-                        // 重新启动协程
+                    val taskNames = matureTasks.values.map { it.userName }.take(3).joinToString(",")
+                    val moreText = if (matureTasks.size > 3) "等${matureTasks.size}个" else ""
+                    Log.record(TAG, "🔄 重新触发蹲点：[${taskNames}${moreText}]已成熟但未执行")
+                    matureTasks.forEach { (_, task) ->
                         startPreciseWaitingCoroutine(task)
                     }
                 }
@@ -633,31 +627,27 @@ object EnergyWaitingManager {
                     currentTime > task.produceTime + 60 * 60 * 1000L // 超过成熟时间1小时
                 }
                 
-                expiredTasks.forEach { (taskId, task) ->
-                    waitingTasks.remove(taskId)
-                    val overTime = (currentTime - task.produceTime) / 1000 / 60
-                    Log.record(TAG, "🗑️ 清理过期蹲点任务：[${task.userName}] 能量球[${task.bubbleId}] 成熟时间[${TimeUtil.getCommonDate(task.produceTime)}] 已超时${overTime}分钟")
-                }
-                
                 if (expiredTasks.isNotEmpty()) {
-                    Log.record(TAG, "🧹 清理了${expiredTasks.size}个过期蹲点任务")
+                    val taskNames = expiredTasks.values.map { it.userName }.take(3).joinToString(",")
+                    val moreText = if (expiredTasks.size > 3) "等${expiredTasks.size}个" else ""
+                    Log.record(TAG, "🧹 清理过期蹲点：[${taskNames}${moreText}]")
+                    expiredTasks.forEach { (taskId, _) ->
+                        waitingTasks.remove(taskId)
+                    }
                 } else {
-                    Log.debug(TAG, "定期清理检查：无过期蹲点任务")
+                    Log.debug(TAG, "定期清理检查：无过期任务")
                 }
                 
-                // 记录当前活跃任务状态
+                // 记录当前活跃任务状态（简化版）
                 if (waitingTasks.isNotEmpty()) {
-                    Log.record(TAG, "📋 当前活跃蹲点任务数量：${waitingTasks.size}")
-                    waitingTasks.values.take(5).forEach { task ->
-                        val status = formatTimeStatus(currentTime, task.produceTime)
-                        val executeTime = TimeUtil.getCommonDate(task.produceTime)
-                        Log.record(TAG, "  - [${task.userName}] 能量球[${task.bubbleId}] $status → $executeTime")
-                    }
-                    if (waitingTasks.size > 5) {
-                        Log.record(TAG, "  ... 还有${waitingTasks.size - 5}个任务")
+                    val sortedTasks = waitingTasks.values.sortedBy { it.produceTime }
+                    val nearestTask = sortedTasks.firstOrNull()
+                    if (nearestTask != null) {
+                        val timeToNearest = (nearestTask.produceTime - currentTime) / 1000 / 60
+                        Log.record(TAG, "📋 活跃蹲点${waitingTasks.size}个，最近[${nearestTask.userName}]${timeToNearest}分钟后")
                     }
                 } else {
-                    Log.debug(TAG, "定期清理检查：当前无活跃蹲点任务")
+                    Log.debug(TAG, "当前无活跃蹲点任务")
                 }
             }
         }
@@ -703,7 +693,7 @@ object EnergyWaitingManager {
     }
     
     /**
-     * 获取蹲点任务详细状态（调试用）
+     * 获取蹲点任务详细状态（仅显示最近的3个）
      */
     fun getWaitingTasksStatus(): String {
         val currentTime = System.currentTimeMillis()
@@ -712,9 +702,12 @@ object EnergyWaitingManager {
         }
         
         val statusBuilder = StringBuilder()
-        statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个):\n")
+        val sortedTasks = waitingTasks.values.sortedBy { it.produceTime }
+        val displayCount = minOf(3, sortedTasks.size)
         
-        waitingTasks.values.sortedBy { it.produceTime }.forEach { task ->
+        statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个，显示最近${displayCount}个):\n")
+        
+        sortedTasks.take(displayCount).forEach { task ->
             val status = formatTimeStatus(currentTime, task.produceTime)
             val executeTime = TimeUtil.getCommonDate(task.produceTime)
             
@@ -728,6 +721,10 @@ object EnergyWaitingManager {
             }
             
             statusBuilder.append("  - [${task.userName}] 球[${task.bubbleId}] $status$protectionInfo → $executeTime\n")
+        }
+        
+        if (sortedTasks.size > displayCount) {
+            statusBuilder.append("  ... 还有${sortedTasks.size - displayCount}个任务")
         }
         
         return statusBuilder.toString().trimEnd()
