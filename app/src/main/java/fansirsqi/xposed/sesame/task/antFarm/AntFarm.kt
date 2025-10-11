@@ -25,7 +25,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.DataStore.getOrCreate
-import fansirsqi.xposed.sesame.newutil.DataStore.put
+
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
@@ -1628,7 +1628,7 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
-            put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
+            DataStore.put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
             Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e)
@@ -1663,7 +1663,7 @@ class AntFarm : ModelTask() {
                     }
                 }
             }
-            put(FARM_ANSWER_CACHE_KEY, cleanedMap)
+            DataStore.put(FARM_ANSWER_CACHE_KEY, cleanedMap)
             Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "cleanOldAnswers error:", e)

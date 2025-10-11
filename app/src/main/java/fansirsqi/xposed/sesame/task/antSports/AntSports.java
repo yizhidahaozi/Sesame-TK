@@ -15,6 +15,7 @@ import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.model.BaseModel;
+import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
@@ -34,6 +35,8 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 public class AntSports extends ModelTask {
     private static final String TAG = AntSports.class.getSimpleName();
+    private static final String SPORTS_TASKS_COMPLETED_DATE = "SPORTS_TASKS_COMPLETED_DATE"; // 运动任务完成日期缓存键
+    private static final String TRAIN_FRIEND_ZERO_COIN_DATE = "TRAIN_FRIEND_ZERO_COIN_DATE"; // 训练好友0金币达上限日期缓存键
     private int tmpStepCount = -1;
     private BooleanModelField walk;
     private ChoiceModelField walkPathTheme;
@@ -172,8 +175,15 @@ public class AntSports extends ModelTask {
                 tc.countDebug("同步步数");
             }
             if (sportsTasks.getValue()) {
-                sportsTasks();                
-                tc.countDebug("运动任务");
+                // 检查今天是否已完成所有任务
+                String today = TimeUtil.getDateStr2();
+                String completedDate = DataStore.INSTANCE.getOrCreate(SPORTS_TASKS_COMPLETED_DATE, String.class);
+                if (today.equals(completedDate)) {
+                    Log.record(TAG, "运动任务今日已完成，跳过执行");
+                } else {
+                    sportsTasks();                
+                    tc.countDebug("运动任务");
+                }
             }
 
             ClassLoader loader = ApplicationHook.getClassLoader();
@@ -217,9 +227,16 @@ public class AntSports extends ModelTask {
             
             // 训练好友功能
             if (trainFriend.getValue()) {
-                queryClubHome();
-                queryTrainItem();
-                tc.countDebug("训练好友");
+                // 检查今天是否已达到0金币上限
+                String today = TimeUtil.getDateStr2();
+                String zeroCoinDate = DataStore.INSTANCE.getOrCreate(TRAIN_FRIEND_ZERO_COIN_DATE, String.class);
+                if (today.equals(zeroCoinDate)) {
+                    Log.record(TAG, "训练好友今日已达0金币上限，跳过执行");
+                } else {
+                    queryClubHome();
+                    queryTrainItem();
+                    tc.countDebug("训练好友");
+                }
             }
             if (receiveCoinAsset.getValue()) {
                 receiveCoinAsset();
@@ -399,10 +416,11 @@ public class AntSports extends ModelTask {
                 }
                 // 检查是否所有可执行任务都已完成
                 Log.record(TAG, "运动任务完成情况：" + completedTasks + "/" + totalTasks + "，可执行任务：" + availableTasks);
-                // 如果所有可执行的任务都已完成（没有可执行的任务了），自动关闭运动任务功能
+                // 如果所有可执行的任务都已完成（没有可执行的任务了），记录当天日期，今日不再执行
                 if (totalTasks > 0 && completedTasks >= totalTasks && availableTasks == 0) {
-                    sportsTasks.setValue(false);
-                    Log.debug(TAG, "所有运动任务已完成，临时关闭运动任务功能，重启开启");
+                    String today = TimeUtil.getDateStr2();
+                    DataStore.INSTANCE.put(SPORTS_TASKS_COMPLETED_DATE, today);
+                    Log.record(TAG, "✅ 所有运动任务已完成，今日不再执行，明日自动恢复");
                 }
             }
         } catch (Exception e) {
@@ -709,7 +727,7 @@ public class AntSports extends ModelTask {
             int index = -1;
             String title = null;
             String pathId = null;
-            JSONObject jo = new JSONObject();
+            JSONObject jo;
             for (int i = allPathBaseInfoList.length() - 1; i >= 0; i--) {
                 jo = allPathBaseInfoList.getJSONObject(i);
                 if (jo.getBoolean("unlocked")) {
@@ -899,9 +917,9 @@ public class AntSports extends ModelTask {
                 jo = jo.getJSONObject("dailyStepModel");
                 int produceQuantity = jo.getInt("produceQuantity");
                 int hour = Integer.parseInt(TimeUtil.getFormatTime().split(":")[0]);
-                ;
+
                 if (produceQuantity >= minExchangeCount.getValue() || hour >= latestExchangeTime.getValue()) {
-                    s = AntSportsRpcCall.walkDonateSignInfo(produceQuantity);
+                     AntSportsRpcCall.walkDonateSignInfo(produceQuantity);
                     s = AntSportsRpcCall.donateWalkHome(produceQuantity);
                     jo = new JSONObject(s);
                     if (!jo.getBoolean("isSuccess"))
@@ -1177,10 +1195,12 @@ public class AntSports extends ModelTask {
     /* 抢好友大战 */
     private void queryClubHome() {
         try {
-            // 检查是否已达到0金币上限
+            // 检查是否已达到0金币上限（实时检查）
             int maxCount = zeroCoinLimit.getValue();
             if (zeroTrainCoinCount >= maxCount) {
-                Log.record(TAG, "训练好友获得0金币已超过" + maxCount + "次，今日不再训练");
+                String today = TimeUtil.getDateStr2();
+                DataStore.INSTANCE.put(TRAIN_FRIEND_ZERO_COIN_DATE, today);
+                Log.record(TAG, "✅ 训练好友获得0金币已达" + maxCount + "次上限，今日不再执行");
                 return;
             }
             // 发送 RPC 请求获取 club home 数据
@@ -1221,10 +1241,11 @@ public class AntSports extends ModelTask {
                         zeroTrainCoinCount++;
                         // 获取用户设置的0金币上限次数
                         int maxCount = zeroCoinLimit.getValue();
-                        // 如果0金币次数达到设置的上限，自动关闭训练好友功能
+                        // 如果0金币次数达到设置的上限，记录今天日期，今日不再执行
                         if (zeroTrainCoinCount >= maxCount) {
-                            trainFriend.setValue(false);
-                            Log.record(TAG, "训练好友获得0金币已超过" + maxCount + "次，临时关闭训练好友功能");
+                            String today = TimeUtil.getDateStr2();
+                            DataStore.INSTANCE.put(TRAIN_FRIEND_ZERO_COIN_DATE, today);
+                            Log.record(TAG, "✅ 训练好友获得0金币已超过" + maxCount + "次，今日不再执行，明日自动恢复");
                             return; // 立即退出处理
                         } else {
                             // 显示当前计数情况
@@ -1410,4 +1431,6 @@ public class AntSports extends ModelTask {
         int DONT_ROB = 1;
         String[] nickNames = {"选中抢", "选中不抢"};
     }
+
+
 }
