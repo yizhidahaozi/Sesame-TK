@@ -3,11 +3,11 @@ run-name: 📦 ${{ github.actor }} @ 构建027魔改版本
 
 on:
   push:
-    branches: [ "n" ]
+    branches: ["n"]
   pull_request:
-    branches: [ "n" ]
+    branches: ["n"]
   release:
-    types: [ published ]
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -125,22 +125,24 @@ jobs:
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
           COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
-          COMMIT_MESSAGE: |+
-            **🎉 New Test Version Build Scuess！**
-            
-            target by [${{ github.event.pull_request.user.login || github.actor }}](${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }})
+          COMMIT_MESSAGE: |
+            <b>🎉 New Test Version Build Success!</b>
+            Target by <a href="${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }}">${{ github.event.pull_request.user.login || github.actor }}</a>
 
-            ✨What's Changed:
-            
-            ```text
+            <i>✨ What's Changed:</i>
+            <pre>
             ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
-            ```
-            参考配置文件： [魔改版\-config\_v2\.json](https://t.me/Sesame_TK_Channel/306)
+            </pre>
 
-            See commit detail [here](${{ github.event.head_commit.url }})
+            参考配置文件：<a href="https://t.me/Sesame_TK_Channel/306">魔改版-config_v2.json</a>
+
+            See commit detail <a href="${{ github.event.head_commit.url }}">here</a>
         run: |
-          ESCAPED=$(python3 -c 'import json, os, urllib.parse; import re; msg = os.environ["COMMIT_MESSAGE"]; msg = re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", msg); print(urllib.parse.quote(json.dumps(msg)))')
-          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
+          # 直接 URL 编码整个 HTML 消息（无需额外转义特殊字符）
+          ESCAPED=$(python3 -c 'import urllib.parse, os; print(urllib.parse.quote(os.environ["COMMIT_MESSAGE"]))')
+          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
+            -F "chat_id=${CHANNEL_ID}" \
+            -F "media=[{\"type\":\"document\", \"media\":\"attach://normal.apk\", \"parse_mode\":\"HTML\", \"caption\":\"${ESCAPED}\"}, {\"type\":\"document\", \"media\":\"attach://compatible.apk\"}]" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
 
