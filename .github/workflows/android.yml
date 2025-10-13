@@ -3,9 +3,11 @@ run-name: 📦 ${{ github.actor }} @ 构建027魔改版本
 
 on:
   push:
-    branches: ["n"]
+    branches: [ "n" ]
   pull_request:
-    branches: ["n"]
+    branches: [ "n" ]
+  release:
+    types: [ published ]
   workflow_dispatch:
 
 jobs:
@@ -124,22 +126,26 @@ jobs:
           NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
           COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
           COMMIT_MESSAGE: |+
-            🎉 new Version build Scuess！
-            ```
+            **🎉 New Test Version Build Scuess！**
+            
+            __target by [${{ github.event.pull_request.user.login || github.actor }}](${{ github.event.pull_request.user.html_url || 'https://github.com/' + github.actor }})__
+
+            ✨What's Changed:
+            
+            ```text
             ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
-
-            ```target by `${{ github.event.head_commit.author.name || github.event.pull_request.user.login || github.actor }}`
-
+            ```
             参考配置文件： [魔改版\-config\_v2\.json](https://t.me/Sesame_TK_Channel/306)
 
             See commit detail [here](${{ github.event.head_commit.url }})
         run: |
-          ESCAPED=$(python3 -c 'import json, os, urllib.parse; print(urllib.parse.quote(json.dumps(os.environ["COMMIT_MESSAGE"])))')
+          ESCAPED=$(python3 -c 'import json, os, urllib.parse; import re; msg = os.environ["COMMIT_MESSAGE"]; msg = re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", msg); print(urllib.parse.quote(json.dumps(msg)))')
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHANNEL_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://normal.apk%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D,%20%7B%22type%22:%22document%22,%22media%22:%22attach://compatible.apk%22%7D%5D" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
 
       - name: Upload Assets to Source Release
+        if: github.event_name == 'release' && github.event.action == 'published'
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
