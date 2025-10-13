@@ -135,7 +135,7 @@ class MainActivity : BaseActivity() {
                 Log.printStackTrace(e)
             }
         }
-        updateSubTitle(RunType.LOADED.nickName)
+        updateSubTitle(ViewAppInfo.runType.nickName)
     }
 
     fun onClick(v: View) {
@@ -170,14 +170,7 @@ class MainActivity : BaseActivity() {
             }
 
             R.id.btn_settings -> {
-                showSelectionDialog(
-                    "📌 请选择配置",
-                    userNameArray,
-                    { index: Int -> this.goSettingActivity(index) },
-                    "😡 老子就不选",
-                    {},
-                    true
-                )
+                selectSettingUid()
                 return
             }
 
@@ -335,39 +328,17 @@ class MainActivity : BaseActivity() {
     }
 
     private fun selectSettingUid() {
-        val latch = CountDownLatch(1)
-        val dialog = StringDialog.showSelectionDialog(
+        StringDialog.showSelectionDialog(
             this,
             "📌 请选择配置",
             userNameArray,
-            { dialog1: DialogInterface, which: Int ->
+            { dialog: DialogInterface, which: Int ->
                 goSettingActivity(which)
-                dialog1.dismiss()
-                latch.countDown()
+                dialog.dismiss()
             },
-            "返回",
-            { dialog1: DialogInterface ->
-                dialog1.dismiss()
-                latch.countDown()
-            })
-
-        val length = userNameArray.size
-        if (length in 1..2) {
-            val timeoutMillis: Long = 800
-            Thread {
-                try {
-                    if (!latch.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
-                        runOnUiThread {
-                            if (dialog.isShowing) {
-                                goSettingActivity(length - 1)
-                                dialog.dismiss()
-                            }
-                        }
-                    }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                }
-            }.start()
+            "返回"
+        ) { dialog: DialogInterface ->
+            dialog.dismiss()
         }
     }
 
@@ -435,6 +406,7 @@ class MainActivity : BaseActivity() {
     private fun goSettingActivity(index: Int) {
         if (Detector.loadLibrary("checker")) {
             val userEntity = userEntityArray[index]
+            Log.runtime("载入用户配置 ${userEntity?.showName}")
             val targetActivity = UIConfig.INSTANCE.targetActivityClass
             val intent = Intent(this, targetActivity)
             if (userEntity != null) {
@@ -452,7 +424,6 @@ class MainActivity : BaseActivity() {
 
 
     fun updateSubTitle(runType: String) {
-        // Log.runtime(TAG, "updateSubTitle$runType")
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]"
         when (runType) {
             RunType.DISABLE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))
