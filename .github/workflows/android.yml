@@ -128,7 +128,7 @@ jobs:
           COMMIT_MESSAGE: |+
             **🎉 New Test Version Build Scuess！**
             
-            __target by [${{ github.event.pull_request.user.login || github.actor }}](${{ github.event.pull_request.user.html_url || 'https://github.com/' + github.actor }})__
+            target by [${{ github.event.pull_request.user.login || github.actor }}](${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }})
 
             ✨What's Changed:
             
