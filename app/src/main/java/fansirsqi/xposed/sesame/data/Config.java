@@ -42,6 +42,75 @@ public class Config {
     private final Map<String, ModelFields> modelFieldsMap = new ConcurrentHashMap<>();
 
     /**
+     * 设置新的模型字段配置
+     *
+     * @param newModels 新的模型字段映射
+     */
+    public void setModelFieldsMap(Map<String, ModelFields> newModels) {
+        modelFieldsMap.clear();
+        Map<String, ModelConfig> modelConfigMap = ModelTask.getModelConfigMap();
+        // 如果传入的 newModels 为 null，初始化为空
+        if (newModels == null) {
+            newModels = new HashMap<>();
+        }
+        // 遍历所有模型配置，合并字段配置
+        for (ModelConfig modelConfig : modelConfigMap.values()) {
+            String modelCode = modelConfig.getCode();
+            ModelFields newModelFields = new ModelFields();
+            ModelFields configModelFields = modelConfig.getFields();
+            ModelFields modelFields = newModels.get(modelCode);
+            if (modelFields != null) {
+                // 如果已有模型字段，则按值覆盖配置
+                for (ModelField<?> configModelField : configModelFields.values()) {
+                    ModelField<?> modelField = modelFields.get(configModelField.getCode());
+                    try {
+                        if (modelField != null) {
+                            Object value = modelField.getValue();
+                            if (value != null) {
+                                configModelField.setObjectValue(value);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.printStackTrace(e);
+                    }
+                    newModelFields.addField(configModelField);
+                }
+            } else {
+                // 如果没有找到对应的模型字段，则直接添加配置字段
+                for (ModelField<?> configModelField : configModelFields.values()) {
+                    newModelFields.addField(configModelField);
+                }
+            }
+            modelFieldsMap.put(modelCode, newModelFields);
+        }
+    }
+
+    /**
+     * 检查是否存在指定的模型字段
+     *
+     * @param modelCode 模型代码
+     * @return 是否存在该模型字段
+     */
+    public Boolean hasModelFields(String modelCode) {
+        return modelFieldsMap.containsKey(modelCode);
+    }
+
+    /**
+     * 检查指定模型字段是否存在
+     *
+     * @param modelCode 模型代码
+     * @param fieldCode 字段代码
+     * @return 是否存在该字段
+     */
+    public Boolean hasModelField(String modelCode, String fieldCode) {
+        ModelFields modelFields = modelFieldsMap.get(modelCode);
+        if (modelFields == null) {
+            return false;
+        }
+        return modelFields.containsKey(fieldCode);
+    }
+
+    /**
      * 判断配置文件是否已修改
      *
      * @param userId 用户 ID
