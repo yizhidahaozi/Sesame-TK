@@ -42,7 +42,6 @@ public class AntCooperate extends ModelTask {
         return "AntCooperate.png";
     }
 
-    private final BooleanModelField cooperateWater = new BooleanModelField("cooperateWater", "合种浇水|开启", false);
     private final SelectAndCountModelField cooperateWaterList = new SelectAndCountModelField("cooperateWaterList", "合种浇水列表", new LinkedHashMap<>(), CooperateEntity.Companion.getList(), "开启合种浇水后执行一次重载");
     private final SelectAndCountModelField cooperateWaterTotalLimitList = new SelectAndCountModelField("cooperateWaterTotalLimitList", "浇水总量限制列表", new LinkedHashMap<>(), CooperateEntity.Companion.getList());
     private final BooleanModelField cooperateSendCooperateBeckon = new BooleanModelField("cooperateSendCooperateBeckon", "合种 | 召唤队友浇水| 仅队长 ", false);
@@ -50,7 +49,6 @@ public class AntCooperate extends ModelTask {
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
-        modelFields.addField(cooperateWater);
         modelFields.addField(cooperateWaterList);
         modelFields.addField(cooperateWaterTotalLimitList);
         modelFields.addField(cooperateSendCooperateBeckon);
@@ -74,65 +72,62 @@ public class AntCooperate extends ModelTask {
     protected void runJava() {
         try {
             Log.record(TAG, "执行开始-" + getName());
-            if (cooperateWater.getValue()) {
-                String s = AntCooperateRpcCall.queryUserCooperatePlantList();
-                JSONObject jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
-                    Log.runtime(TAG, "获取合种列表成功");
-                    int userCurrentEnergy = jo.getInt("userCurrentEnergy");
-                    JSONArray ja = jo.getJSONArray("cooperatePlants");
-                    for (int i = 0; i < ja.length(); i++) {
-                        jo = ja.getJSONObject(i);
-                        String cooperationId = jo.getString("cooperationId");
-                        if (!jo.has("name")) {
-                            s = AntCooperateRpcCall.queryCooperatePlant(cooperationId);
-                            jo = new JSONObject(s).getJSONObject("cooperatePlant");
-                        }
-                        String admin = jo.getString("admin");
-                        String name = jo.getString("name");
-                        if (cooperateSendCooperateBeckon.getValue() && Objects.equals(UserMap.getCurrentUid(), admin)) {
-                            cooperateSendCooperateBeckon(cooperationId, name);
-                        }
-                        int waterDayLimit = jo.getInt("waterDayLimit");
-                        Log.runtime(TAG, "合种[" + name + "]: 日限额:" + waterDayLimit);
-                        CooperateMap.getInstance(CooperateMap.class).add(cooperationId, name);
-                        if (!Status.canCooperateWaterToday(UserMap.getCurrentUid(), cooperationId)) {
-                            Log.runtime(TAG, "[" + name + "]今日已浇水💦");
-                            continue;
-                        }
-                        Integer waterId = cooperateWaterList.getValue().get(cooperationId);
-                        if (waterId != null) {
-                            Integer limitNum = cooperateWaterTotalLimitList.getValue().get(cooperationId);
-                            if (limitNum != null) {
-                                int cumulativeWaterAmount = calculatedWaterNum(cooperationId);
-                                if (cumulativeWaterAmount < 0) {
-                                    Log.runtime(TAG, "当前用户[" + UserMap.getCurrentUid() + "]的累计浇水能量获取失败,跳过本次浇水！");
-                                    continue;
-                                }
-                                waterId = limitNum - cumulativeWaterAmount;
-                                Log.runtime(TAG, "[" + name + "] 调整后的浇水数量: " + waterId);
-                            }
-                            if (waterId > waterDayLimit) {
-                                waterId = waterDayLimit;
-                            }
-                            if (waterId > userCurrentEnergy) {
-                                waterId = userCurrentEnergy;
-                            }
-                            if (waterId > 0) {
-                                cooperateWater(cooperationId, waterId, name);
-                            } else {
-                                Log.runtime(TAG, "浇水数量为0，跳过[" + name + "]");
-                            }
-                        } else {
-                            Log.runtime(TAG, "浇水列表中没有为[" + name + "]配置");
-                        }
+
+            String s = AntCooperateRpcCall.queryUserCooperatePlantList();
+            JSONObject jo = new JSONObject(s);
+            if (ResChecker.checkRes(TAG, jo)) {
+                Log.runtime(TAG, "获取合种列表成功");
+                int userCurrentEnergy = jo.getInt("userCurrentEnergy");
+                JSONArray ja = jo.getJSONArray("cooperatePlants");
+                for (int i = 0; i < ja.length(); i++) {
+                    jo = ja.getJSONObject(i);
+                    String cooperationId = jo.getString("cooperationId");
+                    if (!jo.has("name")) {
+                        s = AntCooperateRpcCall.queryCooperatePlant(cooperationId);
+                        jo = new JSONObject(s).getJSONObject("cooperatePlant");
                     }
-                } else {
-                    Log.error(TAG, "获取合种列表失败:");
-                    Log.runtime(TAG + "获取合种列表失败:", jo.getString("resultDesc"));
+                    String admin = jo.getString("admin");
+                    String name = jo.getString("name");
+                    if (cooperateSendCooperateBeckon.getValue() && Objects.equals(UserMap.getCurrentUid(), admin)) {
+                        cooperateSendCooperateBeckon(cooperationId, name);
+                    }
+                    int waterDayLimit = jo.getInt("waterDayLimit");
+                    Log.runtime(TAG, "合种[" + name + "]: 日限额:" + waterDayLimit);
+                    CooperateMap.getInstance(CooperateMap.class).add(cooperationId, name);
+                    if (!Status.canCooperateWaterToday(UserMap.getCurrentUid(), cooperationId)) {
+                        Log.runtime(TAG, "[" + name + "]今日已浇水💦");
+                        continue;
+                    }
+                    Integer waterId = cooperateWaterList.getValue().get(cooperationId);
+                    if (waterId != null) {
+                        Integer limitNum = cooperateWaterTotalLimitList.getValue().get(cooperationId);
+                        if (limitNum != null) {
+                            int cumulativeWaterAmount = calculatedWaterNum(cooperationId);
+                            if (cumulativeWaterAmount < 0) {
+                                Log.runtime(TAG, "当前用户[" + UserMap.getCurrentUid() + "]的累计浇水能量获取失败,跳过本次浇水！");
+                                continue;
+                            }
+                            waterId = limitNum - cumulativeWaterAmount;
+                            Log.runtime(TAG, "[" + name + "] 调整后的浇水数量: " + waterId);
+                        }
+                        if (waterId > waterDayLimit) {
+                            waterId = waterDayLimit;
+                        }
+                        if (waterId > userCurrentEnergy) {
+                            waterId = userCurrentEnergy;
+                        }
+                        if (waterId > 0) {
+                            cooperateWater(cooperationId, waterId, name);
+                        } else {
+                            Log.runtime(TAG, "浇水数量为0，跳过[" + name + "]");
+                        }
+                    } else {
+                        Log.runtime(TAG, "浇水列表中没有为[" + name + "]配置");
+                    }
                 }
             } else {
-                Log.runtime(TAG, "合种浇水功能未开启");
+                Log.error(TAG, "获取合种列表失败:");
+                Log.runtime(TAG + "获取合种列表失败:", jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "start.run err:");
@@ -147,7 +142,7 @@ public class AntCooperate extends ModelTask {
         try {
             String s = AntCooperateRpcCall.cooperateWater(UserMap.getCurrentUid(), coopId, count);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 Log.forest("合种浇水🚿[" + name + "]" + jo.getString("barrageText"));
                 Status.cooperateWaterToday(UserMap.getCurrentUid(), coopId);
             } else {
@@ -200,7 +195,7 @@ public class AntCooperate extends ModelTask {
                     JSONObject rankInfo = cooperateRankInfos.getJSONObject(i);
                     if (rankInfo.getBoolean("canBeckon")) {
                         jo = new JSONObject(AntCooperateRpcCall.sendCooperateBeckon(rankInfo.getString("userId"), cooperationId));
-                        if (ResChecker.checkRes(TAG,jo)) {
+                        if (ResChecker.checkRes(TAG, jo)) {
                             Log.forest("合种🚿[" + name + "]#召唤队友[" + rankInfo.getString("displayName") + "]成功");
                         }
                         TimeUtil.sleepCompat(1000);

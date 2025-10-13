@@ -127,9 +127,11 @@ jobs:
           COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
           COMMIT_MESSAGE: |
             <b>🎉 New Test Version Build Success!</b>
+            
             Target by <a href="${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }}">${{ github.event.pull_request.user.login || github.actor }}</a>
 
             <i>✨ What's Changed:</i>
+            
             <pre>
             ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
             </pre>
