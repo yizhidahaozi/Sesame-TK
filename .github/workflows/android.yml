@@ -138,11 +138,9 @@ jobs:
 
             See commit detail <a href="${{ github.event.head_commit.url }}">here</a>
         run: |
-          # 直接 URL 编码整个 HTML 消息（无需额外转义特殊字符）
-          ESCAPED=$(python3 -c 'import urllib.parse, os; print(urllib.parse.quote(os.environ["COMMIT_MESSAGE"]))')
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
             -F "chat_id=${CHANNEL_ID}" \
-            -F "media=[{\"type\":\"document\", \"media\":\"attach://normal.apk\", \"parse_mode\":\"HTML\", \"caption\":\"${ESCAPED}\"}, {\"type\":\"document\", \"media\":\"attach://compatible.apk\"}]" \
+            -F "media=[{\"type\":\"document\",\"media\":\"attach://normal.apk\",\"parse_mode\":\"HTML\",\"caption\":\"${COMMIT_MESSAGE}\"},{\"type\":\"document\",\"media\":\"attach://compatible.apk\"}]" \
             -F "normal.apk=@${NORMAL_FILE}" \
             -F "compatible.apk=@${COMPATIBLE_FILE}"
 
