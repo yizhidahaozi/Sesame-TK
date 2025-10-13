@@ -1,13 +1,13 @@
-name: 📦构建027魔改版本
-run-name: 📦 ${{ github.actor }} @ 构建027魔改版本
+name: 📦Auto Build for N
+run-name: 📦 ${{ github.actor }} @ Github Action
 
 on:
   push:
-    branches: ["n"]
+    branches: [ "n" ]
   pull_request:
-    branches: ["n"]
+    branches: [ "n" ]
   release:
-    types: [published]
+    types: [ published ]
   workflow_dispatch:
 
 jobs:
@@ -138,11 +138,18 @@ jobs:
 
             See commit detail <a href="${{ github.event.head_commit.url }}">here</a>
         run: |
+          ESCAPED=$(python3 -c '
+          import os, json
+          msg = os.environ["COMMIT_MESSAGE"]
+          print(json.dumps(msg))
+          ')
+          
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
-            -F "chat_id=${CHANNEL_ID}" \
-            -F "media=[{\"type\":\"document\",\"media\":\"attach://normal.apk\",\"parse_mode\":\"HTML\",\"caption\":\"${COMMIT_MESSAGE}\"},{\"type\":\"document\",\"media\":\"attach://compatible.apk\"}]" \
-            -F "normal.apk=@${NORMAL_FILE}" \
-            -F "compatible.apk=@${COMPATIBLE_FILE}"
+          -F "chat_id=${CHANNEL_ID}" \
+          -F "media=[{\"type\":\"document\",\"media\":\"attach://normal.apk\",\"parse_mode\":\"HTML\",\"caption\":${ESCAPED}},{\"type\":\"document\",\"media\":\"attach://compatible.apk\"}]" \
+          -F "normal.apk=@${NORMAL_FILE}" \
+          -F "compatible.apk=@${COMPATIBLE_FILE}"
+
 
       - name: Upload Assets to Source Release
         if: github.event_name == 'release' && github.event.action == 'published'
