@@ -24,6 +24,7 @@ import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
+import fansirsqi.xposed.sesame.data.ServiceManager
 import fansirsqi.xposed.sesame.data.UIConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
@@ -135,7 +136,13 @@ class MainActivity : BaseActivity() {
                 Log.printStackTrace(e)
             }
         }
-        updateSubTitle(ViewAppInfo.runType.nickName)
+
+        Log.runtime(TAG, "isModuleActivated: ${ServiceManager.isModuleActivated}")
+        if (ServiceManager.isModuleActivated) {
+            updateSubTitle(RunType.ACTIVE.nickName)
+        } else {
+            updateSubTitle(RunType.LOADED.nickName)
+        }
     }
 
     fun onClick(v: View) {
