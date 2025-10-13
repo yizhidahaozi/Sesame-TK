@@ -266,6 +266,7 @@ object HookUtil {
 
     fun hookUser(lpparam: XposedModuleInterface.PackageLoadedParam) {
         runCatching {
+            Log.runtime(TAG, "loading userCache from target app")
             UserMap.unload()
             val selfId = getUserId(lpparam.classLoader)
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下
@@ -298,8 +299,10 @@ object HookUtil {
                     Log.printStackTrace(it)
                 }
             }
+
             UserMap.saveSelf(selfEntity)
             UserMap.save(selfId)
+            Log.runtime(TAG, "userCache load scuess !")
         }.onFailure {
             Log.printStackTrace(TAG, "hookUser 失败", it)
         }

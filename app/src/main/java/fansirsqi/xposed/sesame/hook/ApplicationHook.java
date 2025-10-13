@@ -257,14 +257,6 @@ public class ApplicationHook {
 
     public void loadModelPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
         if (General.MODULE_PACKAGE_NAME.equals(lpparam.getPackageName())) {
-//            try {
-//                @SuppressLint("PrivateApi") Class<?> loadedApkClass = lpparam.getClassLoader().loadClass("android.app.LoadedApk");
-//                deoptimizeMethod(loadedApkClass);
-//            } catch (Throwable t) {
-//                Log.runtime(TAG, "deoptimize makeApplicationInner err:");
-//                Log.printStackTrace(TAG, t);
-//            }
-//            不知道为什么hook不到自身
             try {
                 Class<?> applicationClass = lpparam.getClassLoader().loadClass("android.app.Application");
                 XposedHelpers.findAndHookMethod(applicationClass, "onCreate", new XC_MethodHook() {
@@ -364,8 +356,7 @@ public class ApplicationHook {
                                         Toast.show("用户已切换");
                                         return;
                                     }
-                                    //                                    UserMap.initUser(targetUid);
-                                    HookUtil.INSTANCE.hookUser(appLloadPackageParam);
+//                                    HookUtil.INSTANCE.hookUser(appLloadPackageParam);
                                 }
                                 if (offline) {
                                     offline = false;

@@ -30,21 +30,19 @@ import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
 import fansirsqi.xposed.sesame.entity.FriendWatch
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc
+import fansirsqi.xposed.sesame.newui.DeviceInfoCard
+import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.widget.ListDialog
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.Detector
-import fansirsqi.xposed.sesame.newui.DeviceInfoCard
-import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.Logback
 import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -55,7 +53,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
     private var hasPermissions = false
-    private var userNameArray = arrayOf("默认")
+    private var userNameArray = arrayOf<String>()
     private var userEntityArray = arrayOf<UserEntity?>(null)
     private lateinit var oneWord: TextView
 
@@ -130,12 +128,9 @@ class MainActivity : BaseActivity() {
                         }
                     }
                 }
-                userNameList.add(0, "默认")
-                userEntityList.add(0, null)
                 userNameArray = userNameList.toTypedArray()
                 userEntityArray = userEntityList.toTypedArray()
             } catch (e: Exception) {
-                userNameArray = arrayOf("默认")
                 userEntityArray = arrayOf(null)
                 Log.printStackTrace(e)
             }
@@ -150,15 +145,19 @@ class MainActivity : BaseActivity() {
             R.id.btn_forest_log -> {
                 data += Files.getForestLogFile().absolutePath
             }
+
             R.id.btn_farm_log -> {
                 data += Files.getFarmLogFile().absolutePath
             }
+
             R.id.btn_view_error_log_file -> {
                 data += Files.getErrorLogFile().absolutePath
             }
+
             R.id.btn_view_all_log_file -> {
                 data += Files.getRecordLogFile().absolutePath
             }
+
             R.id.btn_github -> {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Fansirsqi/Sesame-TK"))
                 try {
@@ -169,6 +168,7 @@ class MainActivity : BaseActivity() {
                 }
                 return
             }
+
             R.id.btn_settings -> {
                 showSelectionDialog(
                     "📌 请选择配置",
@@ -180,6 +180,7 @@ class MainActivity : BaseActivity() {
                 )
                 return
             }
+
             R.id.one_word -> {
                 oneWord.text = "😡 正在获取句子，请稍后……"
                 lifecycleScope.launch {
@@ -240,6 +241,7 @@ class MainActivity : BaseActivity() {
                 Toast.makeText(this, "设置已保存，可能需要重启桌面才能生效", Toast.LENGTH_SHORT).show()
                 return true
             }
+
             2 -> { // 好友关注列表
                 showSelectionDialog(
                     "🤣 请选择有效账户[别选默认]",
@@ -251,6 +253,7 @@ class MainActivity : BaseActivity() {
                 )
                 return true
             }
+
             3 -> { // 查看其他日志
                 val data = "file://" + Files.getOtherLogFile().absolutePath
                 val intent = Intent(this, HtmlViewerActivity::class.java)
@@ -260,6 +263,7 @@ class MainActivity : BaseActivity() {
                 startActivity(intent)
                 return true
             }
+
             4 -> { // 查看错误日志文件
                 val errorData = "file://" + Files.getErrorLogFile().absolutePath
                 val errorIt = Intent(this, HtmlViewerActivity::class.java)
@@ -269,6 +273,7 @@ class MainActivity : BaseActivity() {
                 startActivity(errorIt)
                 return true
             }
+
             5 -> { // 查看全部日志文件
                 val recordData = "file://" + Files.getRecordLogFile().absolutePath
                 val otherIt = Intent(this, HtmlViewerActivity::class.java)
@@ -278,6 +283,7 @@ class MainActivity : BaseActivity() {
                 startActivity(otherIt)
                 return true
             }
+
             6 -> { // 查看运行时日志文件
                 val runtimeData = "file://" + Files.getRuntimeLogFile().absolutePath
                 val allIt = Intent(this, HtmlViewerActivity::class.java)
@@ -287,6 +293,7 @@ class MainActivity : BaseActivity() {
                 startActivity(allIt)
                 return true
             }
+
             7 -> { // 查看截图
                 val captureData = "file://" + Files.getCaptureLogFile().absolutePath
                 val captureIt = Intent(this, HtmlViewerActivity::class.java)
@@ -296,14 +303,17 @@ class MainActivity : BaseActivity() {
                 startActivity(captureIt)
                 return true
             }
+
             8 -> { // 扩展
                 startActivity(Intent(this, ExtendActivity::class.java))
                 return true
             }
+
             9 -> { // 设置
                 selectSettingUid()
                 return true
             }
+
             10 -> { // 清除配置
                 AlertDialog.Builder(this)
                     .setTitle("⚠️ 警告")
@@ -431,7 +441,8 @@ class MainActivity : BaseActivity() {
                 intent.putExtra("userId", userEntity.userId)
                 intent.putExtra("userName", userEntity.showName)
             } else {
-                intent.putExtra("userName", userNameArray[index])
+                ToastUtil.showToast(this, "请选择有效用户！")
+                return
             }
             startActivity(intent)
         } else {
@@ -439,47 +450,9 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun clearLogsOnStart() {
-        try {
-            val logDir = Files.LOG_DIR
-            var clearedCount = 0
-            if (logDir != null && logDir.exists() && logDir.isDirectory) {
-                val logsToClear = listOf("runtime", "record")
-                // 使用clearFile方法清空主日志文件内容，而不是删除文件
-                logsToClear.forEach { logName ->
-                    val logFile = File(logDir, "$logName.log")
-                    if (logFile.exists()) {
-                        try {
-                            if (Files.clearFile(logFile)) {
-                               clearedCount++
-                                Log.system("MainActivity", "已清空日志文件: $logName.log")
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w("MainActivity", "清空日志文件失败: $logName.log - ${e.message}")
-                        }
-                    }
-                }
-                // 清空文件后写入初始化日志
-                if (clearedCount > 0) {
-                    // 等待一小段时间确保文件操作完成
-                    fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(100)
-                    Log.runtime("MainActivity", "runtime日志已清空并重新开始记录")
-                    Log.record("MainActivity", "record日志已清空并重新开始记录")
-                }
-            }
-            
-            if (clearedCount > 0) {
-                Toast.makeText(this, "清空了 $clearedCount 个日志文件", Toast.LENGTH_SHORT).show()
-                Logback.configureLogbackDirectly()
-            }
-        } catch (t: Throwable) {
-            android.util.Log.e("MainActivity", "清理日志时发生错误: ${t.message}")
-            Log.printStackTrace(t)
-        }
-    }
 
     fun updateSubTitle(runType: String) {
-       // Log.runtime(TAG, "updateSubTitle$runType")
+        // Log.runtime(TAG, "updateSubTitle$runType")
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]"
         when (runType) {
             RunType.DISABLE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))
