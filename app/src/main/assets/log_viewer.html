@@ -84,12 +84,15 @@
     </div>
     <!-- 第二行：筛选功能 -->
     <div class="toolbar-row">
-        <input type="text" id="filterInput" placeholder="输入关键字筛选..." />
-        <button onclick="applyFilter()">筛选</button>
+        <input type="text" id="filterInput" placeholder="输入关键字实时筛选..." />
         <button onclick="clearFilter()">清除筛选</button>
+        <span class="muted" id="filterStats"></span>
     </div>
 </div>
 
+<div id="loadingIndicator" style="display: none; text-align: center; padding: 10px; color: var(--muted);">
+    ⏳ 正在加载更多...
+</div>
 <div id="log"></div>
 
 <script>
@@ -97,9 +100,21 @@
     const autoScrollEl = document.getElementById('autoScroll');
     const statusEl = document.getElementById('status');
     const filterInputEl = document.getElementById('filterInput');
+    const filterStatsEl = document.getElementById('filterStats');
+    const loadingIndicator = document.getElementById('loadingIndicator');
 
     let fullLogText = ''; // 保存完整的日志内容
     let currentFilter = ''; // 当前筛选关键字
+    let filterDebounceTimer = null; // 防抖计时器
+    
+    // 懒加载相关
+    let isLoading = false;  // 是否正在加载
+    let hasMoreData = true; // 是否还有更多数据
+    let totalAvailable = 0; // 总可用行数
+    let currentLoaded = 0;  // 当前已加载行数
+    let lineHeight = 0;     // 平均每行高度（自动计算）
+    let visibleLines = 0;   // 可视区域可显示的行数
+    let loadLinesPerBatch = 500; // 每批次加载行数（自适应）
 
     function _scrollToBottom() {
       if (!autoScrollEl.checked) return;
@@ -137,6 +152,29 @@
       _scrollToBottom();
     }
 
+    // 供原生调用：批量追加行（Flow 流式加载专用）
+    function appendLines(lines) {
+      if (!lines || lines.length === 0) return;
+      
+      const chunk = lines.join('\n') + '\n';
+      fullLogText += chunk;
+      
+      if (currentFilter) {
+        // 筛选模式下：只追加包含关键字的行
+        const filtered = lines.filter(line => line.includes(currentFilter));
+        if (filtered.length > 0) {
+          logEl.textContent += (logEl.textContent ? '\n' : '') + filtered.join('\n');
+          statusEl.textContent = '追加 ' + filtered.length + ' 条匹配记录';
+        }
+      } else {
+        // 使用 DocumentFragment 优化 DOM 操作性能
+        const text = logEl.textContent;
+        logEl.textContent = text + (text && !text.endsWith('\n') ? '\n' : '') + lines.join('\n');
+        statusEl.textContent = '已加载 ' + lines.length + ' 行';
+      }
+      _scrollToBottom();
+    }
+
     // 清空显示（不影响原文件，仅清 UI）
     function clearLog() {
       fullLogText = '';
@@ -144,9 +182,13 @@
       statusEl.textContent = '已清空显示';
     }
 
-    // 应用筛选 (优化版：支持大文件)
-    function applyFilter() {
-      const keyword = filterInputEl.value.trim();
+    // 应用筛选 (优化版：支持倒排索引加速)
+    function applyFilter(keyword) {
+      // 如果没有传入关键词，从输入框获取
+      if (keyword === undefined) {
+        keyword = filterInputEl.value.trim();
+      }
+      
       if (!keyword) {
         clearFilter();
         return;
@@ -154,8 +196,30 @@
 
       currentFilter = keyword;
       statusEl.textContent = '正在筛选...';
+      filterStatsEl.textContent = '';
 
-      // 使用 setTimeout 避免阻塞 UI
+      // 尝试使用倒排索引快速搜索
+      if (window.SearchBridge) {
+        try {
+          const lineNumbers = JSON.parse(window.SearchBridge.search(keyword));
+          
+          if (lineNumbers && lineNumbers.length > 0) {
+            // 使用索引快速定位
+            const lines = fullLogText.split('\n');
+            const filtered = lineNumbers.map(i => lines[i]).filter(l => l);
+            
+            logEl.textContent = filtered.join('\n');
+            statusEl.textContent = '就绪';
+            filterStatsEl.textContent = '🔍 ' + filtered.length + ' 个结果';
+            _scrollToBottom();
+            return;
+          }
+        } catch (e) {
+          console.warn('索引搜索失败，回退到普通搜索:', e);
+        }
+      }
+
+      // 回退到传统筛选方式
       setTimeout(() => {
         const lines = fullLogText.split('\n');
         const filtered = [];
@@ -179,7 +243,8 @@
           } else {
             // 完成筛选
             logEl.textContent = filtered.join('\n');
-            statusEl.textContent = '筛选结果: ' + filtered.length + '/' + lines.length + ' 行';
+            statusEl.textContent = '就绪';
+            filterStatsEl.textContent = filtered.length + '/' + lines.length + ' 行';
             _scrollToBottom();
           }
         }
@@ -188,20 +253,212 @@
       }, 10);
     }
 
+    // 🚀 预计算初始加载量（在有数据前预估）
+    function calculateInitialLoad() {
+      const viewportHeight = window.innerHeight;
+      const toolbarHeight = document.getElementById('toolbar')?.offsetHeight || 150;
+      const availableHeight = viewportHeight - toolbarHeight - 50;
+      
+      // 预估行高（一般是 12-16px）
+      const estimatedLineHeight = 14;
+      const estimatedVisibleLines = Math.ceil(availableHeight / estimatedLineHeight);
+      
+      // 预加载 5 屏数据（确保不会太快到顶）
+      const initialLoadCount = Math.max(estimatedVisibleLines * 5, 300);
+      
+      console.log('📱 预计算初始加载:');
+      console.log('  - 屏幕高度:', viewportHeight, 'px');
+      console.log('  - 可用高度:', availableHeight, 'px');
+      console.log('  - 预估行数:', estimatedVisibleLines);
+      console.log('  - 初始加载:', initialLoadCount, '行');
+      
+      // 通知原生端
+      if (window.SearchBridge && window.SearchBridge.setLoadBatchSize) {
+        window.SearchBridge.setLoadBatchSize(initialLoadCount);
+      }
+      
+      return initialLoadCount;
+    }
+
+    // 🔥 精确计算可视区域能显示多少行（有数据后）
+    function calculateVisibleLines() {
+      // 等待DOM渲染完成
+      setTimeout(() => {
+        // 计算平均行高
+        const logLines = logEl.textContent.split('\n').filter(l => l.trim());
+        if (logLines.length > 0) {
+          const totalHeight = logEl.scrollHeight;
+          lineHeight = totalHeight / logLines.length;
+          
+          // 计算可视区域高度
+          const viewportHeight = window.innerHeight;
+          const toolbarHeight = document.getElementById('toolbar').offsetHeight;
+          const availableHeight = viewportHeight - toolbarHeight - 50; // 减去工具栏和边距
+          
+          // 计算可视行数（加载3-5屏的数据）
+          visibleLines = Math.ceil(availableHeight / lineHeight);
+          loadLinesPerBatch = Math.max(visibleLines * 5, 300); // 至少300行，5屏数据
+          
+          console.log('📐 精确计算:');
+          console.log('  - 实际行高:', lineHeight.toFixed(1), 'px');
+          console.log('  - 可视区域:', availableHeight, 'px');
+          console.log('  - 可视行数:', visibleLines);
+          console.log('  - 每批次加载:', loadLinesPerBatch, '行');
+          
+          // 通知原生端调整批次大小
+          if (window.SearchBridge && window.SearchBridge.setLoadBatchSize) {
+            window.SearchBridge.setLoadBatchSize(loadLinesPerBatch);
+          }
+        }
+      }, 100);
+    }
+
+    // 初始加载完成回调（由原生端调用）
+    function onInitialLoadComplete(keywordCount, loaded, total, hasMore) {
+      console.log('📑 初始加载完成:', loaded, '/', total, '行');
+      console.log('🔍 索引就绪:', keywordCount, '个关键词');
+      
+      currentLoaded = loaded;
+      totalAvailable = total;
+      hasMoreData = hasMore;
+      
+      // 计算自适应行数
+      calculateVisibleLines();
+      
+      // 更新状态显示
+      if (hasMore) {
+        statusEl.textContent = '已加载 ' + loaded + '/' + total + ' 行 (往上滑动加载更多)';
+      } else {
+        statusEl.textContent = '已加载全部 ' + total + ' 行';
+      }
+    }
+
+    // 🔥 加载更多数据
+    function loadMoreData() {
+      if (isLoading || !hasMoreData || !window.SearchBridge) {
+        return;
+      }
+      
+      isLoading = true;
+      loadingIndicator.style.display = 'block'; // 显示加载指示器
+      statusEl.textContent = '正在加载更多...';
+      
+      try {
+        // 调用原生方法加载更多（使用自适应行数）
+        const moreLines = JSON.parse(window.SearchBridge.loadMore(loadLinesPerBatch));
+        
+        if (moreLines && moreLines.length > 0) {
+          // 记录当前滚动位置
+          const scrollBefore = window.scrollY;
+          const heightBefore = document.body.scrollHeight;
+          
+          // 在顶部插入新数据
+          const newText = moreLines.join('\n') + '\n';
+          fullLogText = newText + fullLogText;
+          logEl.textContent = newText + logEl.textContent;
+          
+          // 恢复滚动位置（保持用户当前视图）
+          const heightAfter = document.body.scrollHeight;
+          const heightDiff = heightAfter - heightBefore;
+          window.scrollTo(0, scrollBefore + heightDiff);
+          
+          currentLoaded += moreLines.length;
+          
+          // 检查是否还有更多
+          hasMoreData = window.SearchBridge.hasMore();
+          
+          if (hasMoreData) {
+            statusEl.textContent = '已加载 ' + currentLoaded + '/' + totalAvailable + ' 行 (继续往上滑动)';
+          } else {
+            statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行';
+            loadingIndicator.textContent = '✅ 已加载全部日志';
+          }
+          
+          console.log('📄 加载更多成功:', moreLines.length, '行');
+        } else {
+          hasMoreData = false;
+          statusEl.textContent = '没有更多日志';
+          loadingIndicator.textContent = '✅ 已加载全部';
+        }
+      } catch (e) {
+        console.error('加载更多失败:', e);
+        statusEl.textContent = '加载失败';
+        loadingIndicator.textContent = '❌ 加载失败';
+      } finally {
+        isLoading = false;
+        // 延迟隐藏加载指示器
+        setTimeout(() => {
+          if (!hasMoreData || loadingIndicator.textContent.includes('✅') || loadingIndicator.textContent.includes('❌')) {
+            // 如果已全部加载或有错误，保持显示
+          } else {
+            loadingIndicator.style.display = 'none';
+          }
+        }, 500);
+      }
+    }
+
+    // 监听滚动事件，触底加载
+    let scrollDebounceTimer = null;
+    window.addEventListener('scroll', function() {
+      if (scrollDebounceTimer) {
+        clearTimeout(scrollDebounceTimer);
+      }
+      
+      scrollDebounceTimer = setTimeout(() => {
+        // 检测是否滚动到顶部（或接近顶部）
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const threshold = 300; // 距离顶部300px时触发
+        
+        if (scrollTop < threshold && hasMoreData && !isLoading) {
+          loadMoreData();
+        }
+      }, 100);
+    });
+
     // 清除筛选
     function clearFilter() {
       currentFilter = '';
       filterInputEl.value = '';
       logEl.textContent = fullLogText;
-      statusEl.textContent = '已清除筛选';
+      statusEl.textContent = '就绪';
+      filterStatsEl.textContent = '';
       _scrollToBottom();
     }
 
-    // 支持回车键触发筛选
-    filterInputEl.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        applyFilter();
+    // 🔥 实时筛选：输入时自动筛选（带防抖优化）
+    filterInputEl.addEventListener('input', function(e) {
+      const keyword = e.target.value.trim();
+      
+      // 清除之前的定时器
+      if (filterDebounceTimer) {
+        clearTimeout(filterDebounceTimer);
       }
+      
+      // 如果输入为空，立即清除筛选
+      if (!keyword) {
+        clearFilter();
+        return;
+      }
+      
+      // 防抖：300ms 后执行筛选（避免频繁触发）
+      filterDebounceTimer = setTimeout(() => {
+        applyFilter(keyword);
+      }, 300);
+    });
+
+    // 📱 监听窗口大小变化（屏幕旋转、窗口调整）
+    let resizeTimer = null;
+    window.addEventListener('resize', function() {
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
+      
+      resizeTimer = setTimeout(() => {
+        if (currentLoaded > 0) {
+          calculateVisibleLines();
+          console.log('📱 窗口调整，重新计算自适应行数');
+        }
+      }, 300);
     });
 
     // 为防止一次性注入超大文本导致掉帧，可用以下节流版（可选）：

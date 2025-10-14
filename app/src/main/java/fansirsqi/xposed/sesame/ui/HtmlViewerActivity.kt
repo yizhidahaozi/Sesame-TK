@@ -1,259 +1,204 @@
-package fansirsqi.xposed.sesame.ui;
+package fansirsqi.xposed.sesame.ui
 
-import android.annotation.SuppressLint;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Intent;
-import android.content.res.ColorStateList;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.widget.ProgressBar;
-import android.widget.Toast;
+import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.content.res.ColorStateList
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.widget.ProgressBar
+import android.widget.Toast
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import fansirsqi.xposed.sesame.R
+import fansirsqi.xposed.sesame.newui.WatermarkView.Companion.install
+import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.LanguageUtil
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.ToastUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
-import androidx.core.view.OnApplyWindowInsetsListener;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
+class HtmlViewerActivity : BaseActivity() {
+    var mWebView: MyWebView? = null
+    var progressBar: ProgressBar? = null
+    private var uri: Uri? = null
+    private var canClear: Boolean? = null
+    var settings: WebSettings? = null
+    
+    // 倒排索引：关键词 -> 行号列表（用于快速搜索）
+    private val searchIndex = mutableMapOf<String, MutableList<Int>>()
+    
+    // 保存所有日志行（用于懒加载）
+    private var allLogLines: List<String> = emptyList()
+    private var currentLoadedCount = 0  // 当前已加载行数
+    private var dynamicBatchSize = LOAD_MORE_LINES  // 动态批次大小（前端自适应计算）
 
-import androidx.core.content.ContextCompat;
-import androidx.webkit.WebSettingsCompat;
-import androidx.webkit.WebViewFeature;
-
-import java.io.File;
-
-import fansirsqi.xposed.sesame.R;
-import fansirsqi.xposed.sesame.newui.WatermarkView;
-import fansirsqi.xposed.sesame.util.Files;
-import fansirsqi.xposed.sesame.util.LanguageUtil;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.ToastUtil;
-
-public class HtmlViewerActivity extends BaseActivity {
-    private static final String TAG = HtmlViewerActivity.class.getSimpleName();
-    MyWebView mWebView;
-    ProgressBar progressBar;
-    private Uri uri;
-    private Boolean canClear;
-    WebSettings settings = null;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        LanguageUtil.setLocale(this);
-        setContentView(R.layout.activity_html_viewer);
-        WatermarkView.Companion.install(this);
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        LanguageUtil.setLocale(this)
+        setContentView(R.layout.activity_html_viewer)
+        install(this)
         // 初始化 WebView 和进度条
-        mWebView = findViewById(R.id.mwv_webview);
-        progressBar = findViewById(R.id.pgb_webview);
+        mWebView = findViewById(R.id.mwv_webview)
+        progressBar = findViewById(R.id.pgb_webview)
 
-        setupWebView();
-        settings = mWebView.getSettings();
+        setupWebView()
+        settings = mWebView!!.getSettings()
 
         // 安全设置 WebView
         try {
             if (mWebView != null) {
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                     try {
-                        WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, true);
-                    } catch (Exception e) {
-                        Log.error(TAG, "设置夜间模式失败: " + e.getMessage());
-                        Log.printStackTrace(TAG, e);
+                        WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings!!, true)
+                    } catch (e: Exception) {
+                        Log.error(TAG, "设置夜间模式失败: " + e.message)
+                        Log.printStackTrace(TAG, e)
                     }
                 }
 
-                settings.setJavaScriptEnabled(false);
-                settings.setDomStorageEnabled(false);
-                progressBar.setProgressTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.selection_color)));
-                mWebView.setBackgroundColor(ContextCompat.getColor(this, R.color.background));
+                settings!!.javaScriptEnabled = false
+                settings!!.domStorageEnabled = false
+                progressBar!!.setProgressTintList(
+                    ColorStateList.valueOf(
+                        ContextCompat.getColor(
+                            this,
+                            R.color.selection_color
+                        )
+                    )
+                )
+                mWebView!!.setBackgroundColor(ContextCompat.getColor(this, R.color.background))
             }
-        } catch (Exception e) {
-            Log.error(TAG, "WebView初始化异常: " + e.getMessage());
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.error(TAG, "WebView初始化异常: " + e.message)
+            Log.printStackTrace(TAG, e)
         }
 
-        View contentView = findViewById(android.R.id.content);
+        val contentView = findViewById<View>(android.R.id.content)
 
-        ViewCompat.setOnApplyWindowInsetsListener(contentView, new OnApplyWindowInsetsListener() {
-            @NonNull
-            @Override
-            public WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
-                int systemBarsBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+        ViewCompat.setOnApplyWindowInsetsListener(contentView) { _, insets ->
+            val systemBarsBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
 
-                mWebView.setPadding(
-                        mWebView.getPaddingLeft(),
-                        mWebView.getPaddingTop(),
-                        mWebView.getPaddingRight(),
-                        systemBarsBottom
-                );
+            mWebView!!.setPadding(
+                mWebView!!.getPaddingLeft(),
+                mWebView!!.paddingTop,
+                mWebView!!.getPaddingRight(),
+                systemBarsBottom
+            )
 
-                return insets;
-            }
-        });
+            insets
+        }
     }
 
     /**
      * 设置 WebView 的 WebChromeClient 和进度变化监听
      */
-    private void setupWebView() {
-        mWebView.setWebChromeClient(
-                new WebChromeClient() {
-                    @SuppressLint("WrongConstant")
-                    @Override
-                    public void onProgressChanged(WebView view, int progress) {
-                        progressBar.setProgress(progress);
-                        if (progress < 100) {
-                            setBaseSubtitle("Loading...");
-                            progressBar.setVisibility(View.VISIBLE);
-                        } else {
-                            setBaseSubtitle(mWebView.getTitle());
-                            progressBar.setVisibility(View.GONE);
-                        }
-                    }
-                });
-    }
-
-    private static String toJsString(String s) {
-        if (s == null) return "''";
-        StringBuilder sb = new StringBuilder(s.length() + 16);
-        sb.append('\'');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\'': sb.append("\\'"); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                case '\f': sb.append("\\f"); break;
-                case '\b': sb.append("\\b"); break;
-                default:
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int)c));
+    private fun setupWebView() {
+        mWebView!!.setWebChromeClient(
+            object : WebChromeClient() {
+                @SuppressLint("WrongConstant")
+                override fun onProgressChanged(view: WebView?, progress: Int) {
+                    progressBar!!.progress = progress
+                    if (progress < 100) {
+                        baseSubtitle = "Loading..."
+                        progressBar!!.visibility = View.VISIBLE
                     } else {
-                        sb.append(c);
+                        baseSubtitle = mWebView!!.getTitle()
+                        progressBar!!.visibility = View.GONE
                     }
-            }
-        }
-        sb.append('\'');
-        return sb.toString();
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.O)
-    private static String readAllTextSafe(String path) {
-        try {
-            java.nio.charset.Charset cs = java.nio.charset.StandardCharsets.UTF_8;
-            byte[] data = java.nio.file.Files.readAllBytes(new File(path).toPath());
-            return new String(data, cs);
-        } catch (Throwable t) {
-            return "";
-        }
+                }
+            })
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    @Override
-    protected void onResume() {
-        super.onResume();
+    override fun onResume() {
+        super.onResume()
         // 安全设置WebView
         try {
-            Intent intent = getIntent();// 获取传递过来的 Intent
+            val intent = getIntent() // 获取传递过来的 Intent
             if (intent != null) {
                 if (mWebView != null) {
-                    settings.setSupportZoom(true); // 支持缩放
-                    settings.setBuiltInZoomControls(true); // 启用内置缩放机制
-                    settings.setDisplayZoomControls(false); // 不显示缩放控件
-                    settings.setUseWideViewPort(true);// 启用触摸缩放
-                    settings.setLoadWithOverviewMode(true);//概览模式加载
-                    settings.setTextZoom(85);
+                    settings!!.setSupportZoom(true) // 支持缩放
+                    settings!!.builtInZoomControls = true // 启用内置缩放机制
+                    settings!!.displayZoomControls = false // 不显示缩放控件
+                    settings!!.useWideViewPort = true // 启用触摸缩放
+                    settings!!.loadWithOverviewMode = true //概览模式加载
+                    settings!!.textZoom = 85
                     // 可选夜间模式设置
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                         try {
-                            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, true);
-                        } catch (Exception e) {
-                            Log.error(TAG, "设置夜间模式失败: " + e.getMessage());
-                            Log.printStackTrace(TAG, e);
+                            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings!!, true)
+                        } catch (e: Exception) {
+                            Log.error(TAG, "设置夜间模式失败: " + e.message)
+                            Log.printStackTrace(TAG, e)
                         }
                     }
                 }
-                configureWebViewSettings(intent, settings);
-                uri = intent.getData();
+                configureWebViewSettings(intent, settings!!)
+                uri = intent.data
                 if (uri != null) {
 //                    mWebView.loadUrl(uri.toString());
-/// 日志实时显示 begin
-                    settings.setJavaScriptEnabled(true);
-                    settings.setDomStorageEnabled(true); // 可选
-                    mWebView.loadUrl("file:///android_asset/log_viewer.html");
-                    mWebView.setWebChromeClient(new WebChromeClient() {
+                    /** 日志实时显示 begin */
+                    settings!!.javaScriptEnabled = true
+                    settings!!.domStorageEnabled = true // 可选
+                    
+                    // 注册 JavaScript 接口，提供索引搜索能力
+                    mWebView!!.addJavascriptInterface(SearchBridge(), "SearchBridge")
+                    
+                    mWebView!!.loadUrl("file:///android_asset/log_viewer.html")
+                    mWebView!!.setWebChromeClient(object : WebChromeClient() {
                         @RequiresApi(api = Build.VERSION_CODES.O)
-                        @Override
-                        public void onProgressChanged(WebView view, int progress) {
-                            progressBar.setProgress(progress);
+                        override fun onProgressChanged(view: WebView?, progress: Int) {
+                            progressBar!!.progress = progress
                             if (progress < 100) {
-                                setBaseSubtitle("Loading...");
-                                progressBar.setVisibility(View.VISIBLE);
+                                baseSubtitle = "Loading..."
+                                progressBar!!.visibility = View.VISIBLE
                             } else {
-                                setBaseSubtitle(mWebView.getTitle());
-                                progressBar.setVisibility(View.GONE);
+                                baseSubtitle = mWebView!!.getTitle()
+                                progressBar!!.visibility = View.GONE
 
-                                // ★★ 页面已就绪：在后台线程中读取文件并灌入 ★★
-                                if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
-                                    String path = uri.getPath();
+                                // ★★ 页面已就绪：使用 Flow 流式加载日志 ★★
+                                if (uri != null && "file".equals(uri!!.scheme, ignoreCase = true)) {
+                                    val path = uri!!.path
                                     if (path != null && path.endsWith(".log")) {
-                                        // 在后台线程中执行文件读取
-                                        new Thread(() -> {
-                                            try {
-                                                String all = readAllTextSafe(path); // 后台读取文件
-                                                String jsArg = toJsString(all);     // 转换为 JS 字符串
-                                                
-                                                // 切回主线程执行 WebView 操作
-                                                runOnUiThread(() -> {
-                                                    try {
-                                                        if (mWebView != null) {
-                                                            mWebView.evaluateJavascript("setFullText(" + jsArg + ")", null);
-                                                            
-                                                            // 启动增量监听
-                                                            ((MyWebView) mWebView).startWatchingIncremental(path);
-                                                        }
-                                                    } catch (Exception e) {
-                                                        Log.error(TAG, "WebView 操作失败: " + e.getMessage());
-                                                        Log.printStackTrace(TAG, e);
-                                                    }
-                                                });
-                                            } catch (Exception e) {
-                                                Log.error(TAG, "后台读取文件失败: " + e.getMessage());
-                                                Log.printStackTrace(TAG, e);
-                                                
-                                                // 即使文件读取失败，也要启动监听
-                                                runOnUiThread(() -> {
-                                                    try {
-                                                        if (mWebView != null) {
-                                                            ((MyWebView) mWebView).startWatchingIncremental(path);
-                                                        }
-                                                    } catch (Exception ex) {
-                                                        Log.error(TAG, "启动文件监听失败: " + ex.getMessage());
-                                                    }
-                                                });
-                                            }
-                                        }).start();
+                                        // 使用协程 + Flow 流式加载
+                                        loadLogWithFlow(path)
                                     }
                                 }
                             }
                         }
-                    });
-/// 日志实时显示 end
+                    })
+                    /** 日志实时显示 end */
                 }
-                canClear = intent.getBooleanExtra("canClear", false);
+                canClear = intent.getBooleanExtra("canClear", false)
             }
-        } catch (Exception e) {
-            Log.error(TAG, "WebView设置异常: " + e.getMessage());
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.error(TAG, "WebView设置异常: " + e.message)
+            Log.printStackTrace(TAG, e)
         }
     }
 
@@ -263,120 +208,111 @@ public class HtmlViewerActivity extends BaseActivity {
      * @param intent   传递的 Intent
      * @param settings WebView 的设置
      */
-    private void configureWebViewSettings(Intent intent, WebSettings settings) {
+    private fun configureWebViewSettings(intent: Intent, settings: WebSettings) {
         if (intent.getBooleanExtra("nextLine", true)) {
-            settings.setTextZoom(85);
-            settings.setUseWideViewPort(false);
+            settings.textZoom = 85
+            settings.useWideViewPort = false
         } else {
-            settings.setTextZoom(85);
-            settings.setUseWideViewPort(true);
+            settings.textZoom = 85
+            settings.useWideViewPort = true
         }
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // 创建菜单选项
-        menu.add(0, 1, 1, getString(R.string.export_file));
-        if (canClear) {
-            menu.add(0, 2, 2, getString(R.string.clear_file));
+        menu.add(0, 1, 1, getString(R.string.export_file))
+        if (canClear == true) {  // 修复：Boolean? 需要明确比较
+            menu.add(0, 2, 2, getString(R.string.clear_file))
         }
-        menu.add(0, 3, 3, getString(R.string.open_with_other_browser));
-        menu.add(0, 4, 4, getString(R.string.copy_the_url));
-        menu.add(0, 5, 5, getString(R.string.scroll_to_top));
-        menu.add(0, 6, 6, getString(R.string.scroll_to_bottom));
-        return super.onCreateOptionsMenu(menu);
+        menu.add(0, 3, 3, getString(R.string.open_with_other_browser))
+        menu.add(0, 4, 4, getString(R.string.copy_the_url))
+        menu.add(0, 5, 5, getString(R.string.scroll_to_top))
+        menu.add(0, 6, 6, getString(R.string.scroll_to_bottom))
+        return super.onCreateOptionsMenu(menu)
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case 1:
-                // 导出文件
-                exportFile();
-                break;
-            case 2:
-                // 清空文件
-                clearFile();
-                break;
-            case 3:
-                // 使用其他浏览器打开
-                openWithBrowser();
-                break;
-            case 4:
-                // 复制 URL 到剪贴板
-                copyUrlToClipboard();
-                break;
-            case 5:
-                // 滚动到顶部
-                mWebView.scrollTo(0, 0);
-                break;
-            case 6:
-                // 滚动到底部
-                mWebView.scrollToBottom();
-                break;
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            1 ->                 // 导出文件
+                exportFile()
+
+            2 ->                 // 清空文件
+                clearFile()
+
+            3 ->                 // 使用其他浏览器打开
+                openWithBrowser()
+
+            4 ->                 // 复制 URL 到剪贴板
+                copyUrlToClipboard()
+
+            5 ->                 // 滚动到顶部
+                mWebView!!.scrollTo(0, 0)
+
+            6 ->                 // 滚动到底部
+                mWebView!!.scrollToBottom()
         }
-        return true;
+        return true
     }
 
     /**
      * 导出当前文件
      */
-    private void exportFile() {
+    private fun exportFile() {
         try {
             if (uri != null) {
-                String path = uri.getPath();
-                Log.runtime(TAG, "URI path: " + path);
+                val path = uri!!.path
+                Log.runtime(TAG, "URI path: $path")
                 if (path != null) {
-                    File exportFile = Files.exportFile(new File(path),true);
+                    val exportFile = Files.exportFile(File(path), true)
                     if (exportFile != null && exportFile.exists()) {
-                        ToastUtil.showToast(getString(R.string.file_exported) + exportFile.getPath());
+                        ToastUtil.showToast(getString(R.string.file_exported) + exportFile.path)
                     } else {
-                        Log.runtime(TAG, "导出失败，exportFile 对象为 null 或不存在！");
+                        Log.runtime(TAG, "导出失败，exportFile 对象为 null 或不存在！")
                     }
                 } else {
-                    Log.runtime(TAG, "路径为 null！");
+                    Log.runtime(TAG, "路径为 null！")
                 }
             } else {
-                Log.runtime(TAG, "URI 为 null！");
+                Log.runtime(TAG, "URI 为 null！")
             }
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
         }
     }
 
     /**
      * 清空当前文件
      */
-    private void clearFile() {
+    private fun clearFile() {
         try {
             if (uri != null) {
-                String path = uri.getPath();
+                val path = uri!!.path
                 if (path != null) {
-                    File file = new File(path);
+                    val file = File(path)
                     if (Files.clearFile(file)) {
-                        ToastUtil.makeText(this, "文件已清空", Toast.LENGTH_SHORT).show();
-                        mWebView.reload();
+                        ToastUtil.makeText(this, "文件已清空", Toast.LENGTH_SHORT).show()
+                        mWebView!!.reload()
                     }
                 }
             }
-        } catch (Exception e) {
-            Log.printStackTrace(TAG, e);
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
         }
     }
 
     /**
      * 使用其他浏览器打开当前 URL
      */
-    private void openWithBrowser() {
+    private fun openWithBrowser() {
         if (uri != null) {
-            String scheme = uri.getScheme();
-            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
-                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-                startActivity(intent);
-            } else if ("file".equalsIgnoreCase(scheme)) {
-                ToastUtil.makeText(this, "该文件不支持用浏览器打开", Toast.LENGTH_SHORT).show();
+            val scheme = uri!!.scheme
+            if ("http".equals(scheme, ignoreCase = true) || "https".equals(scheme, ignoreCase = true)) {
+                val intent = Intent(Intent.ACTION_VIEW, uri)
+                startActivity(intent)
+            } else if ("file".equals(scheme, ignoreCase = true)) {
+                ToastUtil.makeText(this, "该文件不支持用浏览器打开", Toast.LENGTH_SHORT).show()
             } else {
-                ToastUtil.makeText(this, "不支持用浏览器打开", Toast.LENGTH_SHORT).show();
+                ToastUtil.makeText(this, "不支持用浏览器打开", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -384,47 +320,340 @@ public class HtmlViewerActivity extends BaseActivity {
     /**
      * 复制当前 WebView 的 URL 到剪贴板
      */
-    private void copyUrlToClipboard() {
-        ClipboardManager clipboardManager = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+    private fun copyUrlToClipboard() {
+        val clipboardManager = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager?
         if (clipboardManager != null) {
-            clipboardManager.setPrimaryClip(ClipData.newPlainText(null, mWebView.getUrl()));
-            ToastUtil.makeText(this, getString(R.string.copy_success), Toast.LENGTH_SHORT).show();
+            clipboardManager.setPrimaryClip(ClipData.newPlainText(null, mWebView!!.getUrl()))
+            ToastUtil.makeText(this, getString(R.string.copy_success), Toast.LENGTH_SHORT).show()
         }
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (mWebView instanceof MyWebView) {
-            ((MyWebView) mWebView).stopWatchingIncremental();
+    override fun onPause() {
+        super.onPause()
+        if (mWebView is MyWebView) {
+            (mWebView as MyWebView).stopWatchingIncremental()
         }
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mWebView instanceof MyWebView) {
-            ((MyWebView) mWebView).stopWatchingIncremental();
+    override fun onStop() {
+        super.onStop()
+        if (mWebView is MyWebView) {
+            (mWebView as MyWebView).stopWatchingIncremental()
         }
     }
 
-    @Override
-    protected void onDestroy() {
+    override fun onDestroy() {
         // 先停止文件监听，再做 WebView 清理，最后再 super
-        if (mWebView instanceof MyWebView) {
-            ((MyWebView) mWebView).stopWatchingIncremental();
+        if (mWebView is MyWebView) {
+            (mWebView as MyWebView).stopWatchingIncremental()
         }
         if (mWebView != null) {
             try {
-                mWebView.loadUrl("about:blank");
-                mWebView.stopLoading();
-                mWebView.setWebChromeClient(null);
-                mWebView.setWebViewClient(null);
-                mWebView.destroy();
-            } catch (Throwable ignore) {}
+                mWebView!!.loadUrl("about:blank")
+                mWebView!!.stopLoading()
+                // 注意：Kotlin 中 webChromeClient 和 webViewClient 不接受 null
+                // destroy() 会自动清理所有资源，无需手动置空
+                mWebView!!.destroy()
+            } catch (_: Throwable) {
+            }
         }
-        super.onDestroy();
+        super.onDestroy()
+    }
+
+    /**
+     * 使用 Flow 流式加载日志文件
+     * 优点：
+     * 1. 首次只加载500行，极速显示
+     * 2. 滚动加载更多，支持无限滚动
+     * 3. 内存占用低
+     * 4. 同步建立倒排索引，支持秒级搜索
+     */
+    private fun loadLogWithFlow(path: String) {
+        lifecycleScope.launch {
+            try {
+                // 清空旧索引和数据
+                searchIndex.clear()
+                currentLoadedCount = 0
+                
+                // 统计总行数和获取所有可用行
+                val (totalLines, lastLines) = withContext(Dispatchers.IO) {
+                    try {
+                        getLastLines(path, MAX_DISPLAY_LINES)
+                    } catch (e: Exception) {
+                        Log.error(TAG, "文件读取失败: ${e.message}")
+                        Log.printStackTrace(TAG, e)
+                        Pair(0, emptyList())
+                    }
+                }
+                
+                // 保存所有行供懒加载使用
+                allLogLines = lastLines
+
+                // 显示统计信息
+                val header = if (totalLines > MAX_DISPLAY_LINES) {
+                    val skippedLines = totalLines - MAX_DISPLAY_LINES
+                    """
+                        === 日志文件较大，加载最后 $MAX_DISPLAY_LINES 行 ===
+                        === 总计 $totalLines 行，已跳过前 $skippedLines 行 ===
+                        === ⚡ 末尾读取 + 智能懒加载技术 ===
+                        === 📱 自适应加载，往上滑动加载更多 ===
+                        
+                    """.trimIndent()
+                } else {
+                    """
+                        === 📄 总计 $totalLines 行日志 ===
+                        === 📱 智能加载，往上滑动自动加载更多 ===
+                        
+                    """.trimIndent()
+                }
+                
+                withContext(Dispatchers.Main) {
+                    mWebView?.evaluateJavascript(
+                        "setFullText(${toJsString(header)})",
+                        null
+                    )
+                }
+
+                // 后台构建倒排索引（全部行）
+                withContext(Dispatchers.IO) {
+                    buildSearchIndex(allLogLines)
+                }
+
+                // 🔥 预估初始加载量（根据屏幕高度自适应）
+                // 先通知前端计算屏幕参数，然后接收自适应行数
+                withContext(Dispatchers.Main) {
+                    mWebView?.evaluateJavascript(
+                        "if(typeof calculateInitialLoad === 'function') calculateInitialLoad()",
+                        null
+                    )
+                }
+                
+                // 等待前端计算完成（最多等200ms）
+                delay(200)
+                
+                // 使用前端计算的批次大小，如果还没算出来就用默认值
+                val initialLoadCount = if (dynamicBatchSize > LOAD_MORE_LINES) {
+                    dynamicBatchSize
+                } else {
+                    // 预估：假设行高14px，加载5屏数据
+                    val estimatedLines = (1000 / 14 * 5).coerceIn(300, 1000)
+                    estimatedLines
+                }
+                
+                val initialLines = allLogLines.takeLast(initialLoadCount)
+                currentLoadedCount = initialLines.size
+                
+                // 流式加载初始日志行（分批次）
+                loadLinesFlow(initialLines)
+                    .collect { batch ->
+                        // 在主线程更新 UI
+                        withContext(Dispatchers.Main) {
+                            mWebView?.evaluateJavascript(
+                                "appendLines(${toJsArray(batch)})",
+                                null
+                            )
+                        }
+                    }
+
+                // 通知前端初始加载完成
+                withContext(Dispatchers.Main) {
+                    val hasMore = currentLoadedCount < allLogLines.size
+                    mWebView?.evaluateJavascript(
+                        """
+                        if(typeof onInitialLoadComplete === 'function') {
+                            onInitialLoadComplete(${searchIndex.size}, $currentLoadedCount, ${allLogLines.size}, $hasMore);
+                        }
+                        """.trimIndent(),
+                        null
+                    )
+                }
+
+                // 启动增量监听
+                withContext(Dispatchers.Main) {
+                    mWebView?.startWatchingIncremental(path)
+                }
+
+            } catch (e: Exception) {
+                Log.error(TAG, "Flow 加载日志失败: ${e.message}")
+                Log.printStackTrace(TAG, e)
+
+                // 失败后仍启动监听
+                withContext(Dispatchers.Main) {
+                    mWebView?.startWatchingIncremental(path)
+                }
+            }
+        }
+    }
+
+    /**
+     * 创建流式加载的 Flow
+     * 每批次加载 BATCH_SIZE 行
+     */
+    private fun loadLinesFlow(lines: List<String>): Flow<List<String>> = flow {
+        val batches = lines.chunked(BATCH_SIZE)
+        for (batch in batches) {
+            emit(batch)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * 构建搜索索引（倒排索引）
+     * 原理：关键词 -> 行号列表
+     * 支持：中文、英文、数字
+     */
+    private fun buildSearchIndex(lines: List<String>) {
+        lines.forEachIndexed { index, line ->
+            // 提取关键词
+            val keywords = extractKeywords(line)
+            keywords.forEach { keyword ->
+                searchIndex.getOrPut(keyword) { mutableListOf() }.add(index)
+            }
+        }
+    }
+
+    /**
+     * 提取关键词（简化版分词）
+     * 支持中英文混合、数字
+     */
+    private fun extractKeywords(line: String): Set<String> {
+        val keywords = mutableSetOf<String>()
+        
+        // 1. 提取英文单词（2字符以上）
+        Regex("[a-zA-Z]{2,}").findAll(line).forEach {
+            keywords.add(it.value.lowercase())
+        }
+        
+        // 2. 提取中文词（1-6字）
+        Regex("[\\u4e00-\\u9fa5]{1,6}").findAll(line).forEach {
+            keywords.add(it.value)
+        }
+        
+        // 3. 提取数字（3位以上）
+        Regex("\\d{3,}").findAll(line).forEach {
+            keywords.add(it.value)
+        }
+        
+        return keywords
+    }
+
+    /**
+     * JavaScript 桥接类（供前端调用）
+     */
+    inner class SearchBridge {
+        /**
+         * 快速搜索（使用倒排索引）
+         * @return JSON 数组：包含关键词的行号列表
+         */
+        @android.webkit.JavascriptInterface
+        fun search(keyword: String): String {
+            if (keyword.isBlank()) return "[]"
+            
+            val lineNumbers = searchIndex[keyword.lowercase()] 
+                ?: searchIndex[keyword] 
+                ?: emptyList()
+            
+            return lineNumbers.joinToString(prefix = "[", postfix = "]")
+        }
+
     }
 
 
+    companion object {
+        private const val LOAD_MORE_LINES = 500     // 每次加载更多500行
+        private const val MAX_DISPLAY_LINES = 50000 // 最多显示50000行（支持大日志文件）
+        private const val BATCH_SIZE = 100          // 每批次100行
+        private val TAG: String = HtmlViewerActivity::class.java.getSimpleName()
+        private fun toJsString(s: String?): String {
+            if (s == null) return "''"
+            val sb = StringBuilder(s.length + 16)
+            sb.append('\'')
+            for (i in 0..<s.length) {
+                when (val c = s[i]) {
+                    '\'' -> sb.append('\\').append('\'')  // 修复：分开添加反斜杠和单引号
+                    '\\' -> sb.append("\\\\")
+                    '\n' -> sb.append("\\n")
+                    '\r' -> sb.append("\\r")
+                    '\t' -> sb.append("\\t")
+                    '\u000C' -> sb.append("\\f")  // form feed
+                    '\b' -> sb.append("\\b")
+                    else -> if (c.code < 0x20) {
+                        sb.append(String.format("\\u%04x", c.code))
+                    } else {
+                        sb.append(c)
+                    }
+                }
+            }
+            sb.append('\'')
+            return sb.toString()
+        }
+
+        /**
+         * 🚀 从文件末尾往前读取，获取最后 N 行（高性能版 - 完美支持中文和Emoji）
+         * 
+         * 原理：
+         * 1. 使用逐行读取，避免UTF-8多字节字符被截断
+         * 2. 优化：使用环形缓冲区只保留最后N行
+         * 3. 内存占用低，速度快
+         * 
+         * @return Pair(总行数, 最后N行的列表)
+         */
+        private fun getLastLines(path: String, maxLines: Int): Pair<Int, List<String>> {
+            val file = File(path)
+            if (!file.exists() || file.length() == 0L) {
+                return Pair(0, emptyList())
+            }
+
+            // 使用环形缓冲区保存最后N行
+            val buffer = ArrayDeque<String>(maxLines)
+            var totalLines = 0
+            
+            BufferedReader(
+                InputStreamReader(FileInputStream(file), StandardCharsets.UTF_8)
+            ).use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    totalLines++
+                    
+                    // 添加到缓冲区
+                    buffer.addLast(line!!)
+                    
+                    // 如果超过限制，移除最早的行
+                    if (buffer.size > maxLines) {
+                        buffer.removeFirst()
+                    }
+                }
+            }
+            
+            return Pair(totalLines, buffer.toList())
+        }
+
+        /**
+         * 将字符串列表转换为 JS 数组字符串
+         * 例如：["line1", "line2"] -> "['line1','line2']"
+         */
+        private fun toJsArray(lines: List<String>): String {
+            if (lines.isEmpty()) return "[]"
+            
+            val sb = StringBuilder()
+            sb.append('[')
+            for (i in lines.indices) {
+                if (i > 0) sb.append(',')
+                sb.append(toJsString(lines[i]))
+            }
+            sb.append(']')
+            return sb.toString()
+        }
+
+        @RequiresApi(api = Build.VERSION_CODES.O)
+        @Deprecated("已弃用，使用 Flow 流式加载替代")
+        private fun readAllTextSafe(path: String): String {
+            try {
+                val cs = StandardCharsets.UTF_8
+                val data = java.nio.file.Files.readAllBytes(File(path).toPath())
+                return String(data!!, cs)
+            } catch (_: Throwable) {
+                return ""
+            }
+        }
+    }
 }
