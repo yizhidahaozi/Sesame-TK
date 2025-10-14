@@ -7,6 +7,8 @@ import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
+import kotlin.random.Random
 
 /**
  * 能量雨功能 - Kotlin协程版本
@@ -17,11 +19,50 @@ object EnergyRainCoroutine {
     private const val TAG = "EnergyRain"
     
     /**
+     * 上次执行能量雨的时间戳
+     */
+    @Volatile
+    private var lastExecuteTime: Long = 0
+    
+    /**
+     * 随机延迟，增加随机性避免风控检测
+     * @param min 最小延迟（毫秒）
+     * @param max 最大延迟（毫秒）
+     */
+    private suspend fun randomDelay(min: Int, max: Int) {
+        val delayTime = Random.nextInt(min, max + 1).toLong()
+        delay(delayTime)
+    }
+    
+    /**
      * 执行能量雨功能
      */
     suspend fun execEnergyRain() {
         try {
+            // 时间段检查：避开风控时段（0-7点）
+            val calendar = Calendar.getInstance()
+            val hour = calendar.get(Calendar.HOUR_OF_DAY)
+            
+            if (hour in 0..7) {
+                Log.record(TAG, "⏰ 当前时段[$hour 点]为风控高危时段，建议8点后执行能量雨")
+                return
+            }
+            
+            // 执行频率检查：防止1小时内重复执行
+            val currentTime = System.currentTimeMillis()
+            val timeSinceLastExec = currentTime - lastExecuteTime
+            val cooldownMinutes = 60 // 冷却时间：60分钟
+            
+            if (timeSinceLastExec < cooldownMinutes * 60 * 1000) {
+                val remainingMinutes = (cooldownMinutes * 60 * 1000 - timeSinceLastExec) / 60000
+                Log.record(TAG, "⏱️ 能量雨冷却中，还需等待 $remainingMinutes 分钟")
+                return
+            }
+            
             energyRain()
+            
+            // 更新最后执行时间
+            lastExecuteTime = System.currentTimeMillis()
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
             Log.debug(TAG, "execEnergyRain 协程被取消")
@@ -38,53 +79,65 @@ object EnergyRainCoroutine {
     private suspend fun energyRain() {
         try {
             var joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
-            delay(300) // 替换 Thread.sleep(300)
+            randomDelay(300, 400) // 随机延迟 300-400ms
+            if (!ResChecker.checkRes(TAG, joEnergyRainHome)) {
+                Log.record(TAG, "查询能量雨状态失败")
+                return
+            }
+            var hasExecuted = false // 标记是否已执行过能量雨
+            // 1️⃣ 优先执行自己的能量雨
+            if (joEnergyRainHome.getBoolean("canPlayToday")) {
+                startEnergyRain()
+                hasExecuted = true
+                randomDelay(1000, 1200) // 随机延迟 1-1.2秒
+            }
             
-            if (ResChecker.checkRes(TAG, joEnergyRainHome)) {
-                if (joEnergyRainHome.getBoolean("canPlayToday")) {
-                    startEnergyRain()
-                }
-                
-                if (joEnergyRainHome.getBoolean("canGrantStatus")) {
-                    Log.record(TAG, "有送能量雨的机会")
-                    val joEnergyRainCanGrantList = JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList())
-                    
-                    val grantInfos = joEnergyRainCanGrantList.getJSONArray("grantInfos")
-                    val giveEnergyRainSet = AntForest.giveEnergyRainList!!.value
-                    var granted = false
-                    
-                    for (j in 0 until grantInfos.length()) {
-                        val grantInfo = grantInfos.getJSONObject(j)
-                        if (grantInfo.getBoolean("canGrantedStatus")) {
-                            val uid = grantInfo.getString("userId")
-                            if (giveEnergyRainSet.contains(uid)) {
-                                val rainJsonObj = JSONObject(AntForestRpcCall.grantEnergyRainChance(uid))
-                                Log.record(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
-                                
-                                if (ResChecker.checkRes(TAG, rainJsonObj)) {
-                                    Log.forest("赠送能量雨机会给🌧️[${UserMap.getMaskName(uid)}]#${UserMap.getMaskName(UserMap.currentUid)}")
-                                    delay(300) // 替换 Thread.sleep(300)
-                                    startEnergyRain()
-                                } else {
-                                    Log.record(TAG, "送能量雨失败")
-                                    Log.runtime(TAG, rainJsonObj.toString())
+            // 2️⃣ 检查是否可以赠送能量雨
+            if (joEnergyRainHome.getBoolean("canGrantStatus")) {
+                Log.record(TAG, "有送能量雨的机会")
+                val joEnergyRainCanGrantList = JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList())
+                val grantInfos = joEnergyRainCanGrantList.getJSONArray("grantInfos")
+                val giveEnergyRainSet = AntForest.giveEnergyRainList!!.value
+                var granted = false
+                for (j in 0 until grantInfos.length()) {
+                    val grantInfo = grantInfos.getJSONObject(j)
+                    if (grantInfo.getBoolean("canGrantedStatus")) {
+                        val uid = grantInfo.getString("userId")
+                        if (giveEnergyRainSet.contains(uid)) {
+                            val rainJsonObj = JSONObject(AntForestRpcCall.grantEnergyRainChance(uid))
+                            Log.record(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
+                            if (ResChecker.checkRes(TAG, rainJsonObj)) {
+                                Log.forest("赠送能量雨机会给🌧️[${UserMap.getMaskName(uid)}]#${UserMap.getMaskName(UserMap.currentUid)}")
+                                randomDelay(300, 400) // 随机延迟 300-400ms
+                                // 赠送成功后，检查是否还能再玩一次
+                                if (!hasExecuted) {
+                                    val recheckHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
+                                    if (ResChecker.checkRes(TAG, recheckHome) && recheckHome.getBoolean("canPlayToday")) {
+                                        startEnergyRain()
+                                        hasExecuted = true
+                                    }
                                 }
-                                granted = true
-                                break
+                            } else {
+                                Log.record(TAG, "送能量雨失败")
+                                Log.runtime(TAG, rainJsonObj.toString())
                             }
+                            granted = true
+                            break
                         }
                     }
-                    
-                    if (!granted) {
-                        Log.record(TAG, "今日已无可送能量雨好友")
-                    }
+                }
+                
+                if (!granted) {
+                    Log.record(TAG, "今日已无可送能量雨好友")
                 }
             }
             
-            // 重新获取状态
-            joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
-            if (ResChecker.checkRes(TAG, joEnergyRainHome) && joEnergyRainHome.getBoolean("canPlayToday")) {
-                startEnergyRain()
+            // 3️⃣ 最后检查：如果前面都没执行过，再次尝试
+            if (!hasExecuted) {
+                joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
+                if (ResChecker.checkRes(TAG, joEnergyRainHome) && joEnergyRainHome.getBoolean("canPlayToday")) {
+                    startEnergyRain()
+                }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
@@ -113,7 +166,7 @@ object EnergyRainCoroutine {
                     sum += bubbleEnergyList.getInt(i)
                 }
                 
-                delay(5000) // 等待5秒
+                randomDelay(5000, 5200) // 随机延迟 5-5.2秒，模拟真人玩游戏
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
                 
                 if (ResChecker.checkRes(TAG, resultJson)) {
@@ -121,7 +174,7 @@ object EnergyRainCoroutine {
                     Toast.show(s)
                     Log.forest(s)
                 }
-                delay(300)
+                randomDelay(300, 400) // 随机延迟 300-400ms
             } else {
                 Log.runtime(TAG, "startEnergyRain: $joStart")
             }
