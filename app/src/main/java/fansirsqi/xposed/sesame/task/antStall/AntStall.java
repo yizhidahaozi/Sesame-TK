@@ -888,12 +888,6 @@ public class AntStall extends ModelTask {
     // 进入下一村
     private void roadmap() {
         try {
-            // 检查今日是否已进入过新村
-            if (Status.hasFlagToday("stall::roadmap::entered")) {
-                Log.record(TAG, "今日已进入新村，跳过重复操作。");
-                return;
-            }
-            
             String s = AntStallRpcCall.roadmap();
             JSONObject jo = new JSONObject(s);
             if (!ResChecker.checkRes(TAG,jo)) {
@@ -909,10 +903,18 @@ public class AntStall extends ModelTask {
                 }
                 hasNewVillage = true;
                 String villageName = road.getString("villageName");
+                
+                // 检查今日是否已进入过这个村庄
+                String flagKey = "stall::roadmap::" + villageName;
+                if (Status.hasFlagToday(flagKey)) {
+                    Log.record(TAG, "今日已进入[" + villageName + "]，跳过重复打印。");
+                    continue;
+                }
+                
                 Log.farm("蚂蚁新村⛪[进入:" + villageName + "]成功");
                 
-                // 标记今日已进入新村，避免重复执行
-                Status.setFlagToday("stall::roadmap::entered");
+                // 标记今日已进入该村庄，避免重复打印
+                Status.setFlagToday(flagKey);
                 break; // 进入一个新村后退出循环
             }
             if (!hasNewVillage) {
