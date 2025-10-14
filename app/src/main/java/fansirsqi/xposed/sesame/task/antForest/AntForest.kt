@@ -4687,7 +4687,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.debug(TAG, "蹲点收取开始：用户[${userName}] userId[${userId}] fromTag[${fromTag}]")
             // 获取服务器时间
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
-            // 先检查保护罩和炸弹
+            // 判断是否是自己的账号
+            val isSelf = userId == UserMap.currentUid
+            
+            // 先检查保护罩和炸弹（仅对好友检查）
             val shieldEndTime = ForestUtil.getShieldEndTime(userHomeObj)
             val bombEndTime = ForestUtil.getBombCardEndTime(userHomeObj)
             val hasShield = shieldEndTime > serverTime
@@ -4695,6 +4698,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val hasProtection = hasShield || hasBomb
 
             Log.debug(TAG, "蹲点收取保护检查详情：")
+            Log.debug(TAG, "  是否是主号: $isSelf")
             Log.debug(TAG, "  服务器时间: $serverTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
                 Date(serverTime)
             )})")
@@ -4708,7 +4712,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.debug(TAG, "  是否有炸弹卡: $hasBomb")
             Log.debug(TAG, "  总体保护状态: $hasProtection")
 
-            if (hasProtection) {
+            // 只对好友账号进行保护检查，主号无视保护罩
+            if (!isSelf && hasProtection) {
                 // 调用原有的日志输出方法
                 checkUserShieldAndBomb(userHomeObj, userName, userId, serverTime)
                 return CollectResult(
@@ -4718,6 +4723,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     hasShield = hasShield,
                     hasBomb = hasBomb
                 )
+            }
+            
+            // 主号的保护罩不影响收取自己的能量
+            if (isSelf && hasProtection) {
+                Log.debug(TAG, "  ⭐ 主号有保护罩，但可以收取自己的能量")
             }
 
             // 先查询用户能量状态
