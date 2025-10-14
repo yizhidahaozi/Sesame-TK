@@ -518,7 +518,8 @@ class HtmlViewerActivity : BaseActivity() {
             // 提取关键词
             val keywords = extractKeywords(line)
             keywords.forEach { keyword ->
-                searchIndex.getOrPut(keyword) { mutableListOf() }.add(index)
+                val list = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
+                list.add(index)  // 明确添加索引值到列表
             }
         }
     }
@@ -535,9 +536,15 @@ class HtmlViewerActivity : BaseActivity() {
             keywords.add(it.value.lowercase())
         }
         
-        // 2. 提取中文词（1-6字）
-        Regex("[\\u4e00-\\u9fa5]{1,6}").findAll(line).forEach {
-            keywords.add(it.value)
+        // 2. 提取中文词（改进：提取所有2-4字的子串，避免贪婪匹配导致索引缺失）
+        Regex("[\\u4e00-\\u9fa5]+").findAll(line).forEach { match ->
+            val text = match.value
+            // 只提取2-4字的词（提高搜索精度，减少噪音）
+            for (len in 2..minOf(4, text.length)) {
+                for (i in 0..text.length - len) {
+                    keywords.add(text.substring(i, i + len))
+                }
+            }
         }
         
         // 3. 提取数字（3位以上）
@@ -565,6 +572,40 @@ class HtmlViewerActivity : BaseActivity() {
                 ?: emptyList()
             
             return lineNumbers.joinToString(prefix = "[", postfix = "]")
+        }
+
+        /**
+         * 搜索并返回匹配的行内容
+         * @param keyword 搜索关键词
+         * @return JSON 对象：包含匹配的行内容和统计信息
+         */
+        @android.webkit.JavascriptInterface
+        fun searchLines(keyword: String): String {
+            if (keyword.isBlank()) return """{"lines": [], "total": 0}"""
+            
+            try {
+                // 尝试使用索引快速查找
+                val lineNumbers = searchIndex[keyword.lowercase()] 
+                    ?: searchIndex[keyword] 
+                    ?: emptyList()
+                
+                if (lineNumbers.isNotEmpty()) {
+                    // 使用索引获取匹配的行
+                    val matchedLines = lineNumbers.mapNotNull { index ->
+                        allLogLines.getOrNull(index)
+                    }
+                    val linesJson = Companion.toJsArray(matchedLines)
+                    return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "index"}"""
+                }
+                
+                // 索引未找到，回退到全文搜索
+                val matchedLines = allLogLines.filter { it.contains(keyword, ignoreCase = false) }
+                val linesJson = Companion.toJsArray(matchedLines)
+                return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "fulltext"}"""
+            } catch (e: Exception) {
+                Log.printStackTrace(TAG, e)
+                return """{"lines": [], "total": 0, "error": "${e.message}"}"""
+            }
         }
 
         /**

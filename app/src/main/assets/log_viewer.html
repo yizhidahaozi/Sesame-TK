@@ -198,28 +198,31 @@
       statusEl.textContent = '正在筛选...';
       filterStatsEl.textContent = '';
 
-      // 尝试使用倒排索引快速搜索
-      if (window.SearchBridge) {
+      // 优先使用后端搜索（支持完整日志搜索）
+      if (window.SearchBridge && window.SearchBridge.searchLines) {
         try {
-          const lineNumbers = JSON.parse(window.SearchBridge.search(keyword));
+          const resultJson = window.SearchBridge.searchLines(keyword);
+          const result = JSON.parse(resultJson);
           
-          if (lineNumbers && lineNumbers.length > 0) {
-            // 使用索引快速定位
-            const lines = fullLogText.split('\n');
-            const filtered = lineNumbers.map(i => lines[i]).filter(l => l);
-            
-            logEl.textContent = filtered.join('\n');
+          if (result.lines && result.lines.length > 0) {
+            logEl.textContent = result.lines.join('\n');
             statusEl.textContent = '就绪';
-            filterStatsEl.textContent = '🔍 ' + filtered.length + ' 个结果';
+            const source = result.source === 'index' ? '索引' : '全文';
+            filterStatsEl.textContent = '🔍 ' + result.total + ' 个结果 (' + source + '搜索)';
             _scrollToBottom();
+            return;
+          } else if (result.total === 0) {
+            logEl.textContent = '';
+            statusEl.textContent = '就绪';
+            filterStatsEl.textContent = '🔍 未找到匹配结果';
             return;
           }
         } catch (e) {
-          console.warn('索引搜索失败，回退到普通搜索:', e);
+          console.warn('后端搜索失败，回退到前端搜索:', e);
         }
       }
 
-      // 回退到传统筛选方式
+      // 回退到传统前端筛选方式
       setTimeout(() => {
         const lines = fullLogText.split('\n');
         const filtered = [];
@@ -244,7 +247,7 @@
             // 完成筛选
             logEl.textContent = filtered.join('\n');
             statusEl.textContent = '就绪';
-            filterStatsEl.textContent = filtered.length + '/' + lines.length + ' 行';
+            filterStatsEl.textContent = filtered.length + '/' + lines.length + ' 行 (前端)';
             _scrollToBottom();
           }
         }
@@ -370,7 +373,19 @@
           // 在顶部插入新数据
           const newText = moreLines.join('\n') + '\n';
           fullLogText = newText + fullLogText;
-          logEl.textContent = newText + logEl.textContent;
+          
+          // 🔍 如果处于筛选状态，只显示匹配的行
+          if (currentFilter) {
+            const filteredLines = moreLines.filter(line => line.includes(currentFilter));
+            if (filteredLines.length > 0) {
+              const filteredText = filteredLines.join('\n') + '\n';
+              logEl.textContent = filteredText + logEl.textContent;
+            }
+            // 如果没有匹配的行，不添加任何内容到显示区域
+          } else {
+            // 正常模式：显示所有行
+            logEl.textContent = newText + logEl.textContent;
+          }
           
           // 恢复滚动位置（保持用户当前视图）
           const heightAfter = document.body.scrollHeight;
@@ -383,7 +398,8 @@
           hasMoreData = window.SearchBridge.hasMore();
           
           if (hasMoreData) {
-            statusEl.textContent = '已加载 ' + currentLoaded + '/' + totalAvailable + ' 行 (继续往上滑动)';
+            const displayText = currentFilter ? '(筛选中) 继续往上滑动' : '继续往上滑动';
+            statusEl.textContent = '已加载 ' + currentLoaded + '/' + totalAvailable + ' 行 (' + displayText + ')';
           } else {
             statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行';
             loadingIndicator.textContent = '✅ 已加载全部日志';
