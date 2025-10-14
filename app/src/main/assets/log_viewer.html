@@ -518,23 +518,6 @@
       }, 300);
     });
 
-    // 为防止一次性注入超大文本导致掉帧，可用以下节流版（可选）：
-    // window.appendLogBatched = (function() {
-    //   let buffer = '';
-    //   let scheduled = false;
-    //   return function(chunk) {
-    //     buffer += chunk || '';
-    //     if (!scheduled) {
-    //       scheduled = true;
-    //       requestAnimationFrame(() => {
-    //         logEl.textContent += buffer;
-    //         buffer = '';
-    //         scheduled = false;
-    //         _scrollToBottom();
-    //       });
-    //     }
-    //   }
-    // })();
 </script>
 </body>
 </html>
