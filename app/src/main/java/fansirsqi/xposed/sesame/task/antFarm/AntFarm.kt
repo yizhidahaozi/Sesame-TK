@@ -1788,6 +1788,9 @@ class AntFarm : ModelTask() {
                     task.optString("taskMode")
                     // 跳过已被屏蔽的任务
                     if (badTaskSet.contains(bizKey)) continue
+                    // 跳过今日已达上限的任务
+                    if (Status.hasFlagToday("farm::task::limit::$bizKey")) continue
+                    
                     if (TaskStatus.TODO.name == taskStatus) {
                         if (!badTaskSet.contains(bizKey)) {
                             if ("VIDEO_TASK" == bizKey) {
@@ -1817,9 +1820,17 @@ class AntFarm : ModelTask() {
                                 if (ResChecker.checkRes(TAG, taskDetailjo)) {
                                     Log.farm("庄园任务🧾[$title]")
                                 } else {
-                                    Log.error("庄园任务失败：$title\n$taskDetailjo")
-                                    badTaskSet.add(bizKey) // 避免重复失败
-                                    DataStore.put("badFarmTaskSet", badTaskSet)
+                                    val resultCode = taskDetailjo.optString("resultCode", "")
+                                    if (resultCode == "309") {
+                                        // 任务达到当日上限，标记今日不再执行
+                                        Status.setFlagToday("farm::task::limit::$bizKey")
+                                        Log.record(TAG, "庄园任务[$title]今日已达上限，跳过后续执行")
+                                    } else {
+                                        // 其他错误，永久屏蔽该任务
+                                        Log.error("庄园任务失败：$title\n$taskDetailjo")
+                                        badTaskSet.add(bizKey) // 避免重复失败
+                                        DataStore.put("badFarmTaskSet", badTaskSet)
+                                    }
                                 }
                             }
                         }
