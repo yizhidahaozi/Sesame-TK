@@ -508,20 +508,20 @@ class HtmlViewerActivity : BaseActivity() {
      */
     private fun buildSearchIndex(lines: List<String>) {
         try {
-            lines.forEachIndexed { index, line ->
+            lines.forEachIndexed { lineIndex, line ->
                 try {
                     // 提取关键词
                     val keywords = extractKeywords(line)
                     keywords.forEach { keyword ->
                         try {
-                            val list: MutableList<Int> = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
-                            list.add(index)  // 添加行号到列表
+                            val indexList: MutableList<Int> = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
+                            indexList.add(lineIndex)  // 添加行号到列表
                         } catch (e: Exception) {
-                            Log.error(TAG, "添加索引失败: keyword=$keyword, index=$index, ${e.message}")
+                            Log.error(TAG, "添加索引失败: keyword=$keyword, lineIndex=$lineIndex, ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
-                    Log.error(TAG, "处理第${index}行失败: line.length=${line.length}, ${e.message}")
+                    Log.error(TAG, "处理第${lineIndex}行失败: line.length=${line.length}, ${e.message}")
                 }
             }
         } catch (e: Exception) {
