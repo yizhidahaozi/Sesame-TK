@@ -35,7 +35,7 @@ object EcoLife {
             // 查询首页信息
             var jsonObject = JSONObject(AntForestRpcCall.ecolifeQueryHomePage())
             if (!jsonObject.optBoolean("success")) {
-                Log.runtime(TAG + ".ecoLife.queryHomePage", jsonObject.optString("resultDesc"))
+                Log.runtime("$TAG.ecoLife.queryHomePage", jsonObject.optString("resultDesc"))
                 return
             }
             var data = jsonObject.getJSONObject("data")

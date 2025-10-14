@@ -7,7 +7,6 @@ import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Calendar
 import kotlin.random.Random
 
 /**
@@ -39,15 +38,6 @@ object EnergyRainCoroutine {
      */
     suspend fun execEnergyRain() {
         try {
-            // 时间段检查：避开风控时段（0-7点）
-            val calendar = Calendar.getInstance()
-            val hour = calendar.get(Calendar.HOUR_OF_DAY)
-            
-            if (hour in 0..7) {
-                Log.record(TAG, "⏰ 当前时段[$hour 点]为风控高危时段，建议8点后执行能量雨")
-                return
-            }
-            
             // 执行频率检查：防止短时间内重复执行
             val currentTime = System.currentTimeMillis()
             val timeSinceLastExec = currentTime - lastExecuteTime

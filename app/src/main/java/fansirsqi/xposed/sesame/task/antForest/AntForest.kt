@@ -198,6 +198,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var bubbleBoostCard: ChoiceModelField? = null //加速卡
     private var youthPrivilege: BooleanModelField? = null //青春特权 森林道具
     private var ecoLife: BooleanModelField? = null
+    private var ecoLifeTime: StringModelField? = null // 绿色行动执行时间
     private var giveProp: BooleanModelField? = null
 
     private var robExpandCard: ChoiceModelField? = null //1.1倍能量卡
@@ -205,6 +206,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     private var cycleinterval: IntegerModelField? = null
     private var energyRainChance: BooleanModelField? = null
+    private var energyRainTime: StringModelField? = null // 能量雨执行时间
 
     /**
      * 能量炸弹卡
@@ -325,6 +327,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "能量雨 | 开关",
                 false
             ).also { energyRain = it })
+        modelFields.addField(
+            StringModelField(
+                "energyRainTime",
+                "能量雨 | 默认8点10分后执行",
+                "0810"
+            ).also { energyRainTime = it })
         modelFields.addField(
             SelectModelField(
                 "dontCollectList",
@@ -632,6 +640,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "绿色行动 | 开关",
                 false
             ).also { ecoLife = it })
+        modelFields.addField(
+            StringModelField(
+                "ecoLifeTime",
+                "绿色行动 | 默认8点后执行",
+                "0800"
+            ).also { ecoLifeTime = it })
         modelFields.addField(
             BooleanModelField(
                 "ecoLifeOpen",
@@ -986,8 +1000,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     tc.countDebug("森林任务")
                 }
                 if (ecoLife!!.value) {
-                    EcoLife.ecoLife()
-                    tc.countDebug("绿色行动")
+                    // 检查是否到达执行时间
+                    if (TaskTimeChecker.isTimeReached(ecoLifeTime?.value, "0800")) {
+                        EcoLife.ecoLife()
+                        tc.countDebug("绿色行动")
+                    } else {
+                        Log.record(TAG, "绿色行动未到执行时间，跳过")
+                    }
                 }
 
                 waterFriends()
@@ -1004,12 +1023,17 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
 
                 if (energyRain!!.value) {
-                    EnergyRainCoroutine.execEnergyRainCompat()
-                    if (energyRainChance!!.value) {
-                        useEnergyRainChanceCard()
-                        tc.countDebug("使用能量雨卡")
+                    // 检查是否到达执行时间
+                    if (TaskTimeChecker.isTimeReached(energyRainTime?.value, "0810")) {
+                        EnergyRainCoroutine.execEnergyRainCompat()
+                        if (energyRainChance!!.value) {
+                            useEnergyRainChanceCard()
+                            tc.countDebug("使用能量雨卡")
+                        }
+                        tc.countDebug("能量雨")
+                    } else {
+                        Log.record(TAG, "能量雨未到执行时间，跳过")
                     }
-                    tc.countDebug("能量雨")
                 }
 
                 if (forestMarket!!.value) {
@@ -4209,9 +4233,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
     }
 
+
     /**
      * 使用加速卡道具
-     * 功能：加速能量球成熟时间，让等待中的能量球提前成熟
+     * 功能：加速能量球成熟时间，让等待中的能量球提前成熟，并立即收取自己的能量
      */
     private fun useBubbleBoostCard(bag: JSONObject? = queryPropList()) {
         try {
@@ -4225,7 +4250,26 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
             }
             if (jo != null) {
-                usePropBag(jo)
+                val propName = jo.getJSONObject("propConfigVO").getString("propName")
+
+                // 使用加速卡
+                if (usePropBag(jo)) {
+                    Log.forest("使用加速卡🌪[$propName]")
+
+                    // 🚀 关键改动：加速卡立即生效，立即尝试收取自己能量两次
+                    Log.record(TAG, "🚀 加速卡使用成功，立即尝试收取自己能量...")
+
+                    // 第一次立即收取
+                    collectSelfEnergyImmediately("第一次收取")
+
+                    // 等待1秒后第二次收取
+                    GlobalThreadPools.sleepCompat(1000L)
+                    collectSelfEnergyImmediately("第二次收取")
+
+                    Log.record(TAG, "✅ 加速卡自收能量完成（尝试两次）")
+                }
+            } else {
+                Log.record(TAG, "背包中无可用加速卡")
             }
         } catch (th: Throwable) {
             Log.runtime(TAG, "useBubbleBoostCard err")
@@ -4233,6 +4277,33 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
     }
 
+    /**
+     * 立即收取自己能量（专用方法）
+     */
+    private fun collectSelfEnergyImmediately(tag: String = "立即收取") {
+        try {
+            val selfHomeObj = querySelfHome()
+            if (selfHomeObj != null) {
+                Log.record(TAG, "🎯 $tag：开始收取自己能量...")
+
+                // 使用快速收取模式，跳过道具检查
+                val availableBubbles: MutableList<Long> = ArrayList()
+                val serverTime = selfHomeObj.optLong("now", System.currentTimeMillis())
+                extractBubbleInfo(selfHomeObj, serverTime, availableBubbles, UserMap.currentUid)
+
+                if (availableBubbles.isNotEmpty()) {
+                    Log.record(TAG, "🎯 $tag：找到${availableBubbles.size}个可收能量球")
+                    collectVivaEnergy(UserMap.currentUid, selfHomeObj, availableBubbles, "加速卡$tag", skipPropCheck = true)
+                } else {
+                    Log.record(TAG, "🎯 $tag：无可收能量球")
+                }
+            } else {
+                Log.error(TAG, "❌ $tag：获取自己主页信息失败")
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "$tag 能量异常", e)
+        }
+    }
     /**
      * 使用1.1倍能量卡道具
      * 功能：增加能量收取倍数，收取好友能量时获得1.1倍效果
