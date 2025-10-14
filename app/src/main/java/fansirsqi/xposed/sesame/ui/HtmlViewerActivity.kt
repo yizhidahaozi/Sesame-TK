@@ -29,6 +29,7 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -378,7 +379,10 @@ class HtmlViewerActivity : BaseActivity() {
                 // 统计总行数和获取所有可用行
                 val (totalLines, lastLines) = withContext(Dispatchers.IO) {
                     try {
-                        getLastLines(path, MAX_DISPLAY_LINES)
+                        getLastLines(path)
+                    } catch (e: CancellationException) {
+                        // 协程取消，直接重新抛出
+                        throw e
                     } catch (e: Exception) {
                         Log.error(TAG, "文件读取失败: ${e.message}")
                         Log.printStackTrace(TAG, e)
@@ -388,6 +392,7 @@ class HtmlViewerActivity : BaseActivity() {
                 
                 // 保存所有行供懒加载使用
                 allLogLines = lastLines
+                // Log.record(TAG, "📂 日志文件加载成功: 总行数=$totalLines, 可用行数=${allLogLines.size}")
 
                 // 显示统计信息
                 val header = if (totalLines > MAX_DISPLAY_LINES) {
@@ -458,10 +463,13 @@ class HtmlViewerActivity : BaseActivity() {
                 // 通知前端初始加载完成
                 withContext(Dispatchers.Main) {
                     val hasMore = currentLoadedCount < allLogLines.size
+                    // Log.record(TAG, "📱 通知前端初始加载完成: 已加载=$currentLoadedCount, 总计=${allLogLines.size}, 还有更多=$hasMore")
                     mWebView?.evaluateJavascript(
                         """
                         if(typeof onInitialLoadComplete === 'function') {
                             onInitialLoadComplete(${searchIndex.size}, $currentLoadedCount, ${allLogLines.size}, $hasMore);
+                        } else {
+                            console.error('❌ onInitialLoadComplete 函数未定义');
                         }
                         """.trimIndent(),
                         null
@@ -473,6 +481,10 @@ class HtmlViewerActivity : BaseActivity() {
                     mWebView?.startWatchingIncremental(path)
                 }
 
+            } catch (e: CancellationException) {
+                // 协程取消是正常行为（通常发生在页面关闭时），不记录错误
+                Log.record(TAG, "日志加载已取消（页面已关闭）")
+                throw e  // 重新抛出，让协程框架正确处理
             } catch (e: Exception) {
                 Log.error(TAG, "Flow 加载日志失败: ${e.message}")
                 Log.printStackTrace(TAG, e)
@@ -555,13 +567,76 @@ class HtmlViewerActivity : BaseActivity() {
             return lineNumbers.joinToString(prefix = "[", postfix = "]")
         }
 
+        /**
+         * 获取索引统计信息
+         * @return JSON 对象：{keywords: 关键词数量, lines: 总行数}
+         */
+        @android.webkit.JavascriptInterface
+        fun getIndexStats(): String {
+            return """{"keywords": ${searchIndex.size}, "lines": ${allLogLines.size}}"""
+        }
+
+        /**
+         * 设置加载批次大小（由前端自适应计算传入）
+         */
+        @android.webkit.JavascriptInterface
+        fun setLoadBatchSize(size: Int) {
+            if (size > 0) {
+                dynamicBatchSize = size
+            }
+        }
+
+        /**
+         * 加载更多日志行
+         * @param count 请求加载的行数
+         * @return JSON 数组：新加载的日志行
+         */
+        @android.webkit.JavascriptInterface
+        fun loadMore(count: Int): String {
+            try {
+                // 计算还有多少行未加载
+                val remainingLines = allLogLines.size - currentLoadedCount
+                
+                if (remainingLines <= 0) {
+                    // 已经全部加载完
+                    // Log.record(TAG, "已加载全部日志，无更多数据")
+                    return "[]"
+                }
+                
+                // 计算实际加载的行数（不超过剩余行数）
+                val actualCount = minOf(count, remainingLines)
+                val startIndex = allLogLines.size - currentLoadedCount - actualCount
+                val endIndex = allLogLines.size - currentLoadedCount
+                
+                val moreLines = allLogLines.subList(startIndex, endIndex)
+                currentLoadedCount += moreLines.size
+                
+                // Log.record(TAG, "加载更多: ${moreLines.size} 行，已加载: $currentLoadedCount/${allLogLines.size}")
+                // 转换为 JSON 数组
+                return toJsArray(moreLines)
+            } catch (e: Exception) {
+                Log.error(TAG, "loadMore 异常: ${e.message}")
+                Log.printStackTrace(TAG, e)
+                return "[]"
+            }
+        }
+
+        /**
+         * 检查是否还有更多日志可加载
+         * @return true 如果还有更多日志
+         */
+        @android.webkit.JavascriptInterface
+        fun hasMore(): Boolean {
+            return currentLoadedCount < allLogLines.size
+        }
+
     }
 
 
     companion object {
         private const val LOAD_MORE_LINES = 500     // 每次加载更多500行
         private const val MAX_DISPLAY_LINES = 50000 // 最多显示50000行（支持大日志文件）
-        private const val BATCH_SIZE = 100          // 每批次100行
+        private const val BATCH_SIZE = 120          // 每批次100行
         private val TAG: String = HtmlViewerActivity::class.java.getSimpleName()
         private fun toJsString(s: String?): String {
             if (s == null) return "''"
@@ -597,14 +672,14 @@ class HtmlViewerActivity : BaseActivity() {
          * 
          * @return Pair(总行数, 最后N行的列表)
          */
-        private fun getLastLines(path: String, maxLines: Int): Pair<Int, List<String>> {
+        private fun getLastLines(path: String): Pair<Int, List<String>> {
             val file = File(path)
             if (!file.exists() || file.length() == 0L) {
                 return Pair(0, emptyList())
             }
 
-            // 使用环形缓冲区保存最后N行
-            val buffer = ArrayDeque<String>(maxLines)
+            // 使用环形缓冲区保存最后 MAX_DISPLAY_LINES 行
+            val buffer = ArrayDeque<String>(MAX_DISPLAY_LINES)
             var totalLines = 0
             
             BufferedReader(
@@ -618,7 +693,7 @@ class HtmlViewerActivity : BaseActivity() {
                     buffer.addLast(line!!)
                     
                     // 如果超过限制，移除最早的行
-                    if (buffer.size > maxLines) {
+                    if (buffer.size > MAX_DISPLAY_LINES) {
                         buffer.removeFirst()
                     }
                 }
@@ -628,32 +703,49 @@ class HtmlViewerActivity : BaseActivity() {
         }
 
         /**
-         * 将字符串列表转换为 JS 数组字符串
-         * 例如：["line1", "line2"] -> "['line1','line2']"
+         * 将字符串转换为标准 JSON 字符串（双引号）
+         * 用于 JSON.parse() 解析
+         */
+        private fun toJsonString(s: String?): String {
+            if (s == null) return "\"\""
+            val sb = StringBuilder(s.length + 16)
+            sb.append('"')
+            for (i in 0..<s.length) {
+                when (val c = s[i]) {
+                    '"' -> sb.append("\\\"")  // JSON 中转义双引号
+                    '\\' -> sb.append("\\\\")
+                    '\n' -> sb.append("\\n")
+                    '\r' -> sb.append("\\r")
+                    '\t' -> sb.append("\\t")
+                    '\u000C' -> sb.append("\\f")  // form feed
+                    '\b' -> sb.append("\\b")
+                    else -> if (c.code < 0x20) {
+                        sb.append(String.format("\\u%04x", c.code))
+                    } else {
+                        sb.append(c)
+                    }
+                }
+            }
+            sb.append('"')
+            return sb.toString()
+        }
+
+        /**
+         * 将字符串列表转换为标准 JSON 数组字符串
+         * 例如：["line1", "line2"] -> '["line1","line2"]'
+         * 注意：返回的是符合 JSON 标准的格式（使用双引号）
          */
         private fun toJsArray(lines: List<String>): String {
             if (lines.isEmpty()) return "[]"
-            
             val sb = StringBuilder()
             sb.append('[')
             for (i in lines.indices) {
                 if (i > 0) sb.append(',')
-                sb.append(toJsString(lines[i]))
+                sb.append(toJsonString(lines[i]))  // 使用 JSON 格式的字符串
             }
             sb.append(']')
             return sb.toString()
         }
 
-        @RequiresApi(api = Build.VERSION_CODES.O)
-        @Deprecated("已弃用，使用 Flow 流式加载替代")
-        private fun readAllTextSafe(path: String): String {
-            try {
-                val cs = StandardCharsets.UTF_8
-                val data = java.nio.file.Files.readAllBytes(File(path).toPath())
-                return String(data!!, cs)
-            } catch (_: Throwable) {
-                return ""
-            }
-        }
     }
 }

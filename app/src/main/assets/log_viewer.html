@@ -130,7 +130,7 @@
         logEl.textContent = fullLogText;
         statusEl.textContent = '已加载 ' + (fullLogText ? fullLogText.length : 0) + ' 字节';
       }
-      _scrollToBottom();
+      // 注意：不自动滚动，由 onInitialLoadComplete 统一处理
     }
 
     // 供原生调用：增量追加
@@ -172,7 +172,7 @@
         logEl.textContent = text + (text && !text.endsWith('\n') ? '\n' : '') + lines.join('\n');
         statusEl.textContent = '已加载 ' + lines.length + ' 行';
       }
-      _scrollToBottom();
+      // 注意：初始加载时不自动滚动，避免干扰用户操作
     }
 
     // 清空显示（不影响原文件，仅清 UI）
@@ -331,11 +331,22 @@
       } else {
         statusEl.textContent = '已加载全部 ' + total + ' 行';
       }
+      
+      // 初始加载完成后，自动滚动到底部（查看最新日志）
+      setTimeout(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      }, 100);
     }
 
     // 🔥 加载更多数据
     function loadMoreData() {
-      if (isLoading || !hasMoreData || !window.SearchBridge) {
+      if (isLoading || !hasMoreData) {
+        return;
+      }
+      
+      if (!window.SearchBridge) {
+        console.error('❌ SearchBridge 未初始化');
+        statusEl.textContent = '加载失败: 接口未就绪';
         return;
       }
       
@@ -345,7 +356,11 @@
       
       try {
         // 调用原生方法加载更多（使用自适应行数）
-        const moreLines = JSON.parse(window.SearchBridge.loadMore(loadLinesPerBatch));
+        console.log('🔄 请求加载更多:', loadLinesPerBatch, '行');
+        const jsonResult = window.SearchBridge.loadMore(loadLinesPerBatch);
+        console.log('📦 原生返回结果:', jsonResult);
+        
+        const moreLines = JSON.parse(jsonResult);
         
         if (moreLines && moreLines.length > 0) {
           // 记录当前滚动位置
@@ -379,10 +394,12 @@
           hasMoreData = false;
           statusEl.textContent = '没有更多日志';
           loadingIndicator.textContent = '✅ 已加载全部';
+          console.log('✅ 已加载全部日志');
         }
       } catch (e) {
-        console.error('加载更多失败:', e);
-        statusEl.textContent = '加载失败';
+        console.error('❌ 加载更多失败:', e);
+        console.error('错误堆栈:', e.stack);
+        statusEl.textContent = '加载失败: ' + e.message;
         loadingIndicator.textContent = '❌ 加载失败';
       } finally {
         isLoading = false;

@@ -49,6 +49,7 @@ object EcoLife {
             }
 
             if (AntForest.Companion.ecoLifeOption!!.value.contains("plate")) {
+                // 光盘行动
                 photoGuangPan(dayPoint)
             }
 
@@ -157,13 +158,13 @@ object EcoLife {
                 }
             val allPhotos: MutableList<MutableMap<String?, String?>> =
                 DataStore.getOrCreate("plate", typeRef)
-            Log.runtime(TAG + " [DEBUG] guangPanPhoto 数据内容: " + allPhotos)
+            Log.runtime("$TAG [DEBUG] guangPanPhoto 数据内容: $allPhotos")
             // 查询今日任务状态
             var str = AntForestRpcCall.ecolifeQueryDish(source, dayPoint)
             var jo = JSONObject(str)
             // 如果请求失败，则记录错误信息并返回
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.runtime(TAG + ".photoGuangPan.ecolifeQueryDish", jo.optString("resultDesc"))
+                Log.runtime("$TAG.photoGuangPan.ecolifeQueryDish", jo.optString("resultDesc"))
                 return
             }
             var photo: MutableMap<String?, String?>? = HashMap<String?, String?>()
