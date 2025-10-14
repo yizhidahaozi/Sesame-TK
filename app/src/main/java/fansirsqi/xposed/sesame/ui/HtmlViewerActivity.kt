@@ -419,31 +419,8 @@ class HtmlViewerActivity : BaseActivity() {
                     )
                 }
 
-                // 后台构建倒排索引（全部行）
-                withContext(Dispatchers.IO) {
-                    buildSearchIndex(allLogLines)
-                }
-
-                // 🔥 预估初始加载量（根据屏幕高度自适应）
-                // 先通知前端计算屏幕参数，然后接收自适应行数
-                withContext(Dispatchers.Main) {
-                    mWebView?.evaluateJavascript(
-                        "if(typeof calculateInitialLoad === 'function') calculateInitialLoad()",
-                        null
-                    )
-                }
-                
-                // 等待前端计算完成（最多等200ms）
-                delay(200)
-                
-                // 使用前端计算的批次大小，如果还没算出来就用默认值
-                val initialLoadCount = if (dynamicBatchSize > LOAD_MORE_LINES) {
-                    dynamicBatchSize
-                } else {
-                    // 预估：假设行高14px，加载5屏数据
-                    val estimatedLines = (1000 / 14 * 5).coerceIn(300, 1000)
-                    estimatedLines
-                }
+                // 🚀 快速初始加载：只加载最后200行（约2-3屏）
+                val initialLoadCount = 200.coerceAtMost(allLogLines.size)
                 
                 val initialLines = allLogLines.takeLast(initialLoadCount)
                 currentLoadedCount = initialLines.size
@@ -460,14 +437,13 @@ class HtmlViewerActivity : BaseActivity() {
                         }
                     }
 
-                // 通知前端初始加载完成
+                // 通知前端初始加载完成（索引还未构建，传0）
                 withContext(Dispatchers.Main) {
                     val hasMore = currentLoadedCount < allLogLines.size
-                    // Log.record(TAG, "📱 通知前端初始加载完成: 已加载=$currentLoadedCount, 总计=${allLogLines.size}, 还有更多=$hasMore")
                     mWebView?.evaluateJavascript(
                         """
                         if(typeof onInitialLoadComplete === 'function') {
-                            onInitialLoadComplete(${searchIndex.size}, $currentLoadedCount, ${allLogLines.size}, $hasMore);
+                            onInitialLoadComplete(0, $currentLoadedCount, ${allLogLines.size}, $hasMore);
                         } else {
                             console.error('❌ onInitialLoadComplete 函数未定义');
                         }
@@ -479,6 +455,23 @@ class HtmlViewerActivity : BaseActivity() {
                 // 启动增量监听
                 withContext(Dispatchers.Main) {
                     mWebView?.startWatchingIncremental(path)
+                }
+
+                // 🔥 后台异步构建索引（不阻塞UI，用户可以先查看日志）
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        buildSearchIndex(allLogLines)
+                        // 索引构建完成后通知前端
+                        withContext(Dispatchers.Main) {
+                            mWebView?.evaluateJavascript(
+                                "if(typeof onIndexBuilt === 'function') onIndexBuilt(${searchIndex.size})",
+                                null
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.error(TAG, "索引构建失败: ${e.message}")
+                        Log.printStackTrace(TAG, e)
+                    }
                 }
 
             } catch (e: CancellationException) {
@@ -514,13 +507,26 @@ class HtmlViewerActivity : BaseActivity() {
      * 支持：中文、英文、数字
      */
     private fun buildSearchIndex(lines: List<String>) {
-        lines.forEachIndexed { index, line ->
-            // 提取关键词
-            val keywords = extractKeywords(line)
-            keywords.forEach { keyword ->
-                val list = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
-                list.add(index)  // 明确添加索引值到列表
+        try {
+            lines.forEachIndexed { index, line ->
+                try {
+                    // 提取关键词
+                    val keywords = extractKeywords(line)
+                    keywords.forEach { keyword ->
+                        try {
+                            val list: MutableList<Int> = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
+                            list.add(index)  // 添加行号到列表
+                        } catch (e: Exception) {
+                            Log.error(TAG, "添加索引失败: keyword=$keyword, index=$index, ${e.message}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.error(TAG, "处理第${index}行失败: line.length=${line.length}, ${e.message}")
+                }
             }
+        } catch (e: Exception) {
+            Log.error(TAG, "索引构建异常: lines.size=${lines.size}, ${e.message}")
+            Log.printStackTrace(TAG, e)
         }
     }
 
@@ -531,25 +537,42 @@ class HtmlViewerActivity : BaseActivity() {
     private fun extractKeywords(line: String): Set<String> {
         val keywords = mutableSetOf<String>()
         
-        // 1. 提取英文单词（2字符以上）
-        Regex("[a-zA-Z]{2,}").findAll(line).forEach {
-            keywords.add(it.value.lowercase())
-        }
-        
-        // 2. 提取中文词（改进：提取所有2-4字的子串，避免贪婪匹配导致索引缺失）
-        Regex("[\\u4e00-\\u9fa5]+").findAll(line).forEach { match ->
-            val text = match.value
-            // 只提取2-4字的词（提高搜索精度，减少噪音）
-            for (len in 2..minOf(4, text.length)) {
-                for (i in 0..text.length - len) {
-                    keywords.add(text.substring(i, i + len))
+        try {
+            // 1. 提取英文单词（2字符以上）
+            Regex("[a-zA-Z]{2,}").findAll(line).forEach {
+                keywords.add(it.value.lowercase())
+            }
+            
+            // 2. 提取中文词（改进：提取所有2-4字的子串，避免贪婪匹配导致索引缺失）
+            Regex("[\\u4e00-\\u9fa5]+").findAll(line).forEach { match ->
+                val text = match.value
+                if (text.isEmpty()) return@forEach
+                
+                // 只提取2-4字的词（提高搜索精度，减少噪音）
+                val maxLen = minOf(4, text.length)
+                for (len in 2..maxLen) {
+                    val maxStartIndex = text.length - len
+                    if (maxStartIndex < 0) continue
+                    
+                    for (i in 0..maxStartIndex) {
+                        try {
+                            val endIndex = i + len
+                            if (endIndex <= text.length) {
+                                keywords.add(text.substring(i, endIndex))
+                            }
+                        } catch (e: StringIndexOutOfBoundsException) {
+                            Log.error(TAG, "substring 错误: text.length=${text.length}, i=$i, len=$len, endIndex=${i+len}")
+                        }
+                    }
                 }
             }
-        }
-        
-        // 3. 提取数字（3位以上）
-        Regex("\\d{3,}").findAll(line).forEach {
-            keywords.add(it.value)
+            
+            // 3. 提取数字（3位以上）
+            Regex("\\d{3,}").findAll(line).forEach {
+                keywords.add(it.value)
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "提取关键词失败: line.length=${line.length}, ${e.message}")
         }
         
         return keywords
@@ -676,8 +699,8 @@ class HtmlViewerActivity : BaseActivity() {
 
     companion object {
         private const val LOAD_MORE_LINES = 500     // 每次加载更多500行
-        private const val MAX_DISPLAY_LINES = 50000 // 最多显示50000行（支持大日志文件）
-        private const val BATCH_SIZE = 120          // 每批次100行
+        private const val MAX_DISPLAY_LINES = 200000 // 最多显示200000行（支持大日志文件）
+        private const val BATCH_SIZE = 50           // 每批次50行（减少单次渲染压力）
         private val TAG: String = HtmlViewerActivity::class.java.getSimpleName()
         private fun toJsString(s: String?): String {
             if (s == null) return "''"

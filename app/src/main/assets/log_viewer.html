@@ -58,8 +58,9 @@
         #log {
           white-space: pre-wrap;      /* 自动换行，保留换行符 */
           word-break: break-word;
-          padding: 5px 5px 5px 5px;
-          font-size: 10px;
+          padding: 8px 8px 8px 8px;
+          font-size: 11px;
+          line-height: 1.6;           /* 行间距更舒适 */
         }
         button, label {
           color: var(--fg);
@@ -115,6 +116,18 @@
     let lineHeight = 0;     // 平均每行高度（自动计算）
     let visibleLines = 0;   // 可视区域可显示的行数
     let loadLinesPerBatch = 500; // 每批次加载行数（自适应）
+    
+    // 🔧 懒加载常量配置
+    const ESTIMATED_LINE_HEIGHT = 18;  // 预估行高（px）= 11px字体 × 1.6行高
+  
+    const SCROLL_THRESHOLD = 300;      // 触发加载的距离顶部阈值（px）
+    const SCREEN_MULTIPLIER = 5;       // 加载屏数倍数（5屏数据）
+
+    const MIN_LOAD_LINES = 350;        // 最小加载行数
+
+    const DEBOUNCE_SCROLL = 150;       // 滚动防抖延迟（ms）
+    const DEBOUNCE_FILTER = 500;       // 筛选防抖延迟（ms）
+ 
 
     function _scrollToBottom() {
       if (!autoScrollEl.checked) return;
@@ -262,12 +275,8 @@
       const toolbarHeight = document.getElementById('toolbar')?.offsetHeight || 150;
       const availableHeight = viewportHeight - toolbarHeight - 50;
       
-      // 预估行高（一般是 12-16px）
-      const estimatedLineHeight = 14;
-      const estimatedVisibleLines = Math.ceil(availableHeight / estimatedLineHeight);
-      
-      // 预加载 5 屏数据（确保不会太快到顶）
-      const initialLoadCount = Math.max(estimatedVisibleLines * 5, 300);
+      const estimatedVisibleLines = Math.ceil(availableHeight / ESTIMATED_LINE_HEIGHT);
+      const initialLoadCount = Math.max(estimatedVisibleLines * SCREEN_MULTIPLIER, MIN_LOAD_LINES);
       
       console.log('📱 预计算初始加载:');
       console.log('  - 屏幕高度:', viewportHeight, 'px');
@@ -296,11 +305,11 @@
           // 计算可视区域高度
           const viewportHeight = window.innerHeight;
           const toolbarHeight = document.getElementById('toolbar').offsetHeight;
-          const availableHeight = viewportHeight - toolbarHeight - 50; // 减去工具栏和边距
+          const availableHeight = viewportHeight - toolbarHeight - 50;
           
-          // 计算可视行数（加载3-5屏的数据）
+          // 计算可视行数（加载指定屏数的数据）
           visibleLines = Math.ceil(availableHeight / lineHeight);
-          loadLinesPerBatch = Math.max(visibleLines * 5, 300); // 至少300行，5屏数据
+          loadLinesPerBatch = Math.max(visibleLines * SCREEN_MULTIPLIER, MIN_LOAD_LINES);
           
           console.log('📐 精确计算:');
           console.log('  - 实际行高:', lineHeight.toFixed(1), 'px');
@@ -319,7 +328,6 @@
     // 初始加载完成回调（由原生端调用）
     function onInitialLoadComplete(keywordCount, loaded, total, hasMore) {
       console.log('📑 初始加载完成:', loaded, '/', total, '行');
-      console.log('🔍 索引就绪:', keywordCount, '个关键词');
       
       currentLoaded = loaded;
       totalAvailable = total;
@@ -335,10 +343,27 @@
         statusEl.textContent = '已加载全部 ' + total + ' 行';
       }
       
+      // 如果索引还未构建，显示提示
+      if (keywordCount === 0) {
+        statusEl.textContent += ' | ⏳ 索引构建中...';
+      }
+      
       // 初始加载完成后，自动滚动到底部（查看最新日志）
       setTimeout(() => {
         window.scrollTo(0, document.body.scrollHeight);
       }, 100);
+    }
+
+    // 索引构建完成回调（由原生端调用）
+    function onIndexBuilt(keywordCount) {
+      console.log('🔍 索引构建完成:', keywordCount, '个关键词');
+      
+      // 更新状态显示
+      if (hasMoreData) {
+        statusEl.textContent = '已加载 ' + currentLoaded + '/' + totalAvailable + ' 行 (往上滑动加载更多) | 🔍 ' + keywordCount + ' 个关键词';
+      } else {
+        statusEl.textContent = '已加载全部 ' + totalAvailable + ' 行 | 🔍 ' + keywordCount + ' 个关键词';
+      }
     }
 
     // 🔥 加载更多数据
@@ -440,12 +465,11 @@
       scrollDebounceTimer = setTimeout(() => {
         // 检测是否滚动到顶部（或接近顶部）
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        const threshold = 300; // 距离顶部300px时触发
         
-        if (scrollTop < threshold && hasMoreData && !isLoading) {
+        if (scrollTop < SCROLL_THRESHOLD && hasMoreData && !isLoading) {
           loadMoreData();
         }
-      }, 100);
+      }, DEBOUNCE_SCROLL);
     });
 
     // 清除筛选
@@ -473,10 +497,10 @@
         return;
       }
       
-      // 防抖：300ms 后执行筛选（避免频繁触发）
+      // 防抖：延迟后执行筛选（避免频繁触发）
       filterDebounceTimer = setTimeout(() => {
         applyFilter(keyword);
-      }, 300);
+      }, DEBOUNCE_FILTER);
     });
 
     // 📱 监听窗口大小变化（屏幕旋转、窗口调整）
