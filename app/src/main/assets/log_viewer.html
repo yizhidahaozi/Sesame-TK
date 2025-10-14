@@ -117,16 +117,27 @@
     let visibleLines = 0;   // 可视区域可显示的行数
     let loadLinesPerBatch = 500; // 每批次加载行数（自适应）
     
+    // 后台预加载相关
+    let isPreloading = false;   // 是否正在后台预加载
+    let preloadTimer = null;    // 预加载定时器
+    let preloadStartTime = 0;   // 预加载开始时间
+    let wasPreloading = false;  // 是否曾被暂停（用于恢复）
+    let resumeTimer = null;     // 恢复预加载定时器
+    
     // 🔧 懒加载常量配置
     const ESTIMATED_LINE_HEIGHT = 18;  // 预估行高（px）= 11px字体 × 1.6行高
   
     const SCROLL_THRESHOLD = 300;      // 触发加载的距离顶部阈值（px）
     const SCREEN_MULTIPLIER = 5;       // 加载屏数倍数（5屏数据）
 
-    const MIN_LOAD_LINES = 350;        // 最小加载行数
+    const MIN_LOAD_LINES = 200;        // 最小加载行数
 
     const DEBOUNCE_SCROLL = 150;       // 滚动防抖延迟（ms）
     const DEBOUNCE_FILTER = 500;       // 筛选防抖延迟（ms）
+    
+    const PRELOAD_DELAY = 10000;       // 预加载延迟（ms）：初始加载完10秒后开始
+    const PRELOAD_BATCH = 500;         // 预加载批次大小（行）
+    const PRELOAD_INTERVAL = 500;      // 预加载间隔（ms）：每批间隔0.5秒
  
 
     function _scrollToBottom() {
@@ -149,6 +160,18 @@
     // 供原生调用：增量追加
     function appendLog(chunk) {
       if (!chunk) return;
+      
+      // 🛑 暂停后台预加载（避免与追加冲突）
+      if (isPreloading) {
+        if (preloadTimer) {
+          clearTimeout(preloadTimer);
+          preloadTimer = null;
+        }
+        wasPreloading = true;  // 标记曾被暂停
+        isPreloading = false;
+        console.log('⏸️ 暂停预加载（新日志追加中）');
+      }
+      
       fullLogText += chunk;
       if (currentFilter) {
         // 筛选模式下：只追加包含关键字的行
@@ -163,11 +186,25 @@
         statusEl.textContent = '追加 ' + chunk.length + ' 字节';
       }
       _scrollToBottom();
+      
+      // 🔄 追加完成后，延迟恢复预加载（2秒无新追加则恢复）
+      scheduleResumePreload();
     }
 
     // 供原生调用：批量追加行（Flow 流式加载专用）
     function appendLines(lines) {
       if (!lines || lines.length === 0) return;
+      
+      // 🛑 暂停后台预加载（避免与追加冲突）
+      if (isPreloading) {
+        if (preloadTimer) {
+          clearTimeout(preloadTimer);
+          preloadTimer = null;
+        }
+        wasPreloading = true;  // 标记曾被暂停
+        isPreloading = false;
+        console.log('⏸️ 暂停预加载（批量追加中）');
+      }
       
       const chunk = lines.join('\n') + '\n';
       fullLogText += chunk;
@@ -186,6 +223,9 @@
         statusEl.textContent = '已加载 ' + lines.length + ' 行';
       }
       // 注意：初始加载时不自动滚动，避免干扰用户操作
+      
+      // 🔄 批量追加完成后，延迟恢复预加载
+      scheduleResumePreload();
     }
 
     // 清空显示（不影响原文件，仅清 UI）
@@ -352,6 +392,14 @@
       setTimeout(() => {
         window.scrollTo(0, document.body.scrollHeight);
       }, 100);
+      
+      // 🔥 如果还有更多数据，10秒后启动后台预加载
+      if (hasMore) {
+        console.log('⏰ 将在', PRELOAD_DELAY/1000, '秒后开始后台预加载');
+        preloadTimer = setTimeout(() => {
+          startBackgroundPreload();
+        }, PRELOAD_DELAY);
+      }
     }
 
     // 索引构建完成回调（由原生端调用）
@@ -368,7 +416,68 @@
 
     // 🔥 加载更多数据
     function loadMoreData() {
-      if (isLoading || !hasMoreData) {
+      if (isLoading) {
+        return;
+      }
+      
+      // 🔥 检查是否从 fullLogText 加载（预加载完成但 DOM 未完全更新）
+      // 使用字符长度判断更准确
+      const fullTextLength = fullLogText.length;
+      const displayedTextLength = logEl.textContent.length;
+      
+      if (fullTextLength > displayedTextLength && fullTextLength > 0) {
+        // 从 fullLogText 加载未显示的部分
+        isLoading = true;
+        loadingIndicator.style.display = 'block';
+        statusEl.textContent = '正在加载更多...';
+        
+        try {
+          const fullLogLines = fullLogText.split('\n').filter(line => line !== '');
+          const displayedLines = logEl.textContent.split('\n').filter(line => line !== '');
+          const notDisplayedCount = fullLogLines.length - displayedLines.length;
+          
+          if (notDisplayedCount > 0) {
+            const loadCount = Math.min(loadLinesPerBatch, notDisplayedCount);
+            const startIndex = fullLogLines.length - displayedLines.length - loadCount;
+            const endIndex = fullLogLines.length - displayedLines.length;
+            const moreLines = fullLogLines.slice(startIndex, endIndex);
+            
+            if (moreLines.length > 0) {
+              const scrollBefore = window.scrollY;
+              const heightBefore = document.body.scrollHeight;
+              
+              const newText = moreLines.join('\n') + '\n';
+              logEl.textContent = newText + logEl.textContent;
+              
+              const heightAfter = document.body.scrollHeight;
+              const heightDiff = heightAfter - heightBefore;
+              window.scrollTo(0, scrollBefore + heightDiff);
+              
+              const hasMore = notDisplayedCount > loadCount;
+              if (hasMore) {
+                statusEl.textContent = '已加载 (还有更多，继续往上滑动)';
+              } else {
+                statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行';
+              }
+              
+              console.log('📄 从内存加载更多:', moreLines.length, '行，剩余:', notDisplayedCount - loadCount);
+            }
+          }
+        } catch (e) {
+          console.error('❌ 从内存加载失败:', e);
+          console.error('错误堆栈:', e.stack);
+          statusEl.textContent = '加载失败: ' + e.message;
+        } finally {
+          isLoading = false;
+          setTimeout(() => {
+            loadingIndicator.style.display = 'none';
+          }, 500);
+        }
+        return;
+      }
+      
+      // 否则从后端加载
+      if (!hasMoreData) {
         return;
       }
       
@@ -467,10 +576,112 @@
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
         
         if (scrollTop < SCROLL_THRESHOLD && hasMoreData && !isLoading) {
+          // 如果用户主动滚动到顶部，暂停后台预加载，改为立即加载
+          if (preloadTimer) {
+            clearTimeout(preloadTimer);
+            preloadTimer = null;
+          }
+          isPreloading = false;
+          
           loadMoreData();
         }
       }, DEBOUNCE_SCROLL);
     });
+
+    // 🔄 计划恢复预加载（追加停止2秒后）
+    function scheduleResumePreload() {
+      // 清除之前的恢复定时器
+      if (resumeTimer) {
+        clearTimeout(resumeTimer);
+        resumeTimer = null;
+      }
+      
+      // 只有曾被暂停且还有数据时才恢复
+      if (!wasPreloading || !hasMoreData) {
+        return;
+      }
+      
+      // 2秒无新追加则恢复预加载
+      resumeTimer = setTimeout(() => {
+        if (wasPreloading && !isPreloading && hasMoreData) {
+          console.log('▶️ 恢复后台预加载...');
+          wasPreloading = false;
+          startBackgroundPreload();
+        }
+      }, 3000);
+    }
+
+    // 🚀 启动后台预加载
+    function startBackgroundPreload() {
+      if (isPreloading || !hasMoreData) {
+        return;
+      }
+      
+      console.log('🔄 开始后台预加载剩余日志...');
+      preloadStartTime = Date.now(); // 记录开始时间
+      isPreloading = true;
+      wasPreloading = false;  // 清除暂停标记
+      backgroundPreloadNext();
+    }
+    
+    // 📦 后台预加载下一批
+    function backgroundPreloadNext() {
+      if (!hasMoreData || isLoading) {
+        if (!hasMoreData) {
+          // 计算耗时
+          const loadTime = ((Date.now() - preloadStartTime) / 1000).toFixed(1);
+          console.log('✅ 后台预加载完成，耗时:', loadTime, '秒');
+          isPreloading = false;
+          statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行 (用时' + loadTime + '秒)';
+        }
+        return;
+      }
+      
+      try {
+        const jsonResult = window.SearchBridge.loadMore(PRELOAD_BATCH);
+        const moreLines = JSON.parse(jsonResult);
+        
+        if (moreLines && moreLines.length > 0) {
+          // 🚀 只更新数据，不更新 DOM（性能优化）
+          const newText = moreLines.join('\n') + '\n';
+          fullLogText = newText + fullLogText;
+          // ❌ 移除 DOM 更新：logEl.textContent = newText + logEl.textContent;
+          
+          currentLoaded += moreLines.length;
+          hasMoreData = window.SearchBridge.hasMore();
+          
+          // 更新状态：显示已加载行数和已用时间
+          const elapsedTime = ((Date.now() - preloadStartTime) / 1000).toFixed(1);
+          const remaining = totalAvailable - currentLoaded;
+          const percent = Math.floor((currentLoaded / totalAvailable) * 100);
+          statusEl.textContent = '已加载 ' + currentLoaded + '/' + totalAvailable + ' 行 (' + percent + '%) | 后台加载中 (' + elapsedTime + '秒)';
+          
+          console.log('📦 后台预加载: +' + moreLines.length + ' 行 (' + currentLoaded + '/' + totalAvailable + ')');
+          
+          // 继续下一批（间隔加载）
+          if (hasMoreData) {
+            preloadTimer = setTimeout(() => {
+              backgroundPreloadNext();
+            }, PRELOAD_INTERVAL);
+          } else {
+            // 计算耗时
+            const loadTime = ((Date.now() - preloadStartTime) / 1000).toFixed(1);
+            isPreloading = false;
+            statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行 (用时' + loadTime + '秒)';
+            console.log('✅ 所有日志已加载完成，耗时:', loadTime, '秒');
+          }
+        } else {
+          hasMoreData = false;
+          isPreloading = false;
+          // 计算耗时
+          const loadTime = ((Date.now() - preloadStartTime) / 1000).toFixed(1);
+          statusEl.textContent = '已加载全部 ' + currentLoaded + ' 行 (用时' + loadTime + '秒)';
+        }
+      } catch (e) {
+        console.error('❌ 后台预加载失败:', e);
+        isPreloading = false;
+      }
+    }
 
     // 清除筛选
     function clearFilter() {
@@ -480,6 +691,50 @@
       statusEl.textContent = '就绪';
       filterStatsEl.textContent = '';
       _scrollToBottom();
+    }
+
+    // 🚀 加载全部并跳到顶部（供后端调用）
+    function loadAllAndScrollToTop() {
+      console.log('🔝 请求跳到顶部...');
+      
+      // 1. 检查是否所有数据都已显示
+      const fullTextLength = fullLogText.length;
+      const displayedTextLength = logEl.textContent.length;
+      
+      if (fullTextLength > displayedTextLength && fullTextLength > 0) {
+        // 有未显示的数据，先全部加载到 DOM
+        console.log('📦 加载剩余数据到 DOM...');
+        statusEl.textContent = '正在加载全部日志...';
+        
+        try {
+          const fullLogLines = fullLogText.split('\n').filter(line => line !== '');
+          const displayedLines = logEl.textContent.split('\n').filter(line => line !== '');
+          const notDisplayedCount = fullLogLines.length - displayedLines.length;
+          
+          if (notDisplayedCount > 0) {
+            // 一次性加载所有未显示的行
+            const startIndex = 0;
+            const endIndex = fullLogLines.length - displayedLines.length;
+            const moreLines = fullLogLines.slice(startIndex, endIndex);
+            
+            if (moreLines.length > 0) {
+              const newText = moreLines.join('\n') + '\n';
+              logEl.textContent = newText + logEl.textContent;
+              
+              console.log('✅ 已加载全部数据:', moreLines.length, '行');
+              statusEl.textContent = '已加载全部 ' + fullLogLines.length + ' 行';
+            }
+          }
+        } catch (e) {
+          console.error('❌ 加载全部数据失败:', e);
+        }
+      }
+      
+      // 2. 滚动到顶部
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        console.log('✅ 已滚动到第一行');
+      }, 100);
     }
 
     // 🔥 实时筛选：输入时自动筛选（带防抖优化）

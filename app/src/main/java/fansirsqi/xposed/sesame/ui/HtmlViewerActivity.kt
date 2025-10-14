@@ -246,8 +246,17 @@ class HtmlViewerActivity : BaseActivity() {
             4 ->                 // 复制 URL 到剪贴板
                 copyUrlToClipboard()
 
-            5 ->                 // 滚动到顶部
-                mWebView!!.scrollTo(0, 0)
+            5 ->                 // 滚动到顶部（先加载全部数据）
+                mWebView!!.evaluateJavascript(
+                    """
+                    if (typeof loadAllAndScrollToTop === 'function') {
+                        loadAllAndScrollToTop();
+                    } else {
+                        window.scrollTo(0, 0);
+                    }
+                    """.trimIndent(),
+                    null
+                )
 
             6 ->                 // 滚动到底部
                 mWebView!!.scrollToBottom()
@@ -468,6 +477,8 @@ class HtmlViewerActivity : BaseActivity() {
                                 null
                             )
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.error(TAG, "索引构建失败: ${e.message}")
                         Log.printStackTrace(TAG, e)
@@ -514,10 +525,15 @@ class HtmlViewerActivity : BaseActivity() {
                     val keywords = extractKeywords(line)
                     keywords.forEach { keyword ->
                         try {
-                            val indexList: MutableList<Int> = searchIndex.getOrPut(keyword) { mutableListOf<Int>() }
-                            indexList.add(lineIndex)  // 添加行号到列表
+                            // 🔥 使用 compute 方法，线程安全且避免重载歧义
+                            searchIndex.compute(keyword) { _, existingList ->
+                                val list = existingList ?: ArrayList<Int>()
+                                list.add(lineIndex)
+                                list
+                            }
                         } catch (e: Exception) {
-                            Log.error(TAG, "添加索引失败: keyword=$keyword, lineIndex=$lineIndex, ${e.message}")
+//                            Log.error(TAG, "添加索引失败: keyword=$keyword, lineIndex=$lineIndex, ${e.message}")
+//                            Log.printStackTrace(TAG, e)
                         }
                     }
                 } catch (e: Exception) {
@@ -579,7 +595,7 @@ class HtmlViewerActivity : BaseActivity() {
     }
 
     /**
-     * JavaScript 桥接类（供前端调用）
+     * JavaScript 桥接类（供前端调用） 不要删除
      */
     inner class SearchBridge {
         /**
