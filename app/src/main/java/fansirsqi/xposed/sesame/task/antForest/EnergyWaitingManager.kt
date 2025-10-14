@@ -637,34 +637,47 @@ object EnergyWaitingManager {
                     Log.record(TAG, "❌ 蹲点收取[${task.getUserTypeTag()}${task.userName}]失败：${result.message}")
 
                     // 根据失败原因决定是否重试
-                    if (result.hasShield || result.hasBomb) {
-                        Log.record(TAG, "  → 检测到保护罩/炸弹卡")
-                        waitingTasks.remove(task.taskId)
-                        EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
-                    } else {
-                        // 可重试的错误，主动触发重试
-                        if (task.retryCount < task.maxRetries) {
-                            val retryTask = task.withRetry()
-                            waitingTasks[task.taskId] = retryTask
-
-                            // 根据错误类型决定重试延迟
-                            val retryDelay = when {
-                                result.message.contains("网络") -> 5000L // 5秒
-                                result.message.contains("频繁") -> 10000L // 10秒
-                                else -> 5000L // 默认5秒
-                            }
-
-                            Log.record(TAG, "  → ${retryDelay/1000}秒后重试(${retryTask.retryCount}/${task.maxRetries})")
-
-                            managerScope.launch {
-                                delay(retryDelay)
-                                if (waitingTasks.containsKey(task.taskId)) {
-                                    startPreciseWaitingCoroutine(retryTask)
-                                }
-                            }
-                        } else {
-                            Log.record(TAG, "  → 已达最大重试次数")
+                    when {
+                        result.hasShield || result.hasBomb -> {
+                            Log.record(TAG, "  → 检测到保护罩/炸弹卡")
                             waitingTasks.remove(task.taskId)
+                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
+                        }
+                        result.message.contains("用户无可收取的能量球") -> {
+                            Log.record(TAG, "  → 能量球已不存在，移除任务")
+                            waitingTasks.remove(task.taskId)
+                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
+                        }
+                        result.message.contains("无法查询用户能量信息") -> {
+                            Log.record(TAG, "  → 用户能量信息查询失败，移除任务")
+                            waitingTasks.remove(task.taskId)
+                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
+                        }
+                        else -> {
+                            // 可重试的错误，主动触发重试
+                            if (task.retryCount < task.maxRetries) {
+                                val retryTask = task.withRetry()
+                                waitingTasks[task.taskId] = retryTask
+
+                                // 根据错误类型决定重试延迟
+                                val retryDelay = when {
+                                    result.message.contains("网络") -> 5000L // 5秒
+                                    result.message.contains("频繁") -> 10000L // 10秒
+                                    else -> 5000L // 默认5秒
+                                }
+
+                                Log.record(TAG, "  → ${retryDelay/1000}秒后重试(${retryTask.retryCount}/${task.maxRetries})")
+
+                                managerScope.launch {
+                                    delay(retryDelay)
+                                    if (waitingTasks.containsKey(task.taskId)) {
+                                        startPreciseWaitingCoroutine(retryTask)
+                                    }
+                                }
+                            } else {
+                                Log.record(TAG, "  → 已达最大重试次数")
+                                waitingTasks.remove(task.taskId)
+                            }
                         }
                     }
                 }
