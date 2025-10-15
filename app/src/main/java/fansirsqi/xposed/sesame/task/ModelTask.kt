@@ -237,6 +237,9 @@ abstract class ModelTask : Model() {
                     addRunCents()
                     setStatusTextExec(getName())
                     executeMultiRoundTask(mode, rounds)
+                } catch (e: CancellationException) {
+                    // 协程取消属于正常控制流程（如停止任务/切换用户），不视为错误
+                    Log.runtime(TAG, "任务被取消: ${getName()}")
                 } catch (e: Exception) {
                     Log.printStackTrace("任务执行异常: ${getName()}", e)
                 } finally {
@@ -267,6 +270,8 @@ abstract class ModelTask : Model() {
         }
         
         val endTime = System.currentTimeMillis()
+        // 完成统计，补充结束时间
+        stats.complete()
         Log.record(TAG, "任务 ${getName()} 完成，总耗时: ${endTime - startTime}ms")
         Log.record(TAG, stats.summary)
     }
@@ -279,6 +284,10 @@ abstract class ModelTask : Model() {
         try {
             run()
             stats.recordTaskEnd("${getName()}-Round$round", true)
+        } catch (e: CancellationException) {
+            // 本轮被取消，记录为跳过而非失败
+            stats.recordSkipped("${getName()}-Round$round")
+            Log.runtime(TAG, "任务本轮被取消: ${getName()}-Round$round")
         } catch (e: Exception) {
             stats.recordTaskEnd("${getName()}-Round$round", false)
             throw e
