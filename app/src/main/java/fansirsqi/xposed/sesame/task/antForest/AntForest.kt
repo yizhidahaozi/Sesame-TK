@@ -3365,9 +3365,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             return true
         }
         val remain = bombEnd - nowMillis
-        // 如果剩余时间小于阈值且当前总时长未超过最大有效期，则需要续用
+        // 如果剩余时间小于阈值且续写后总时长未超过最大有效期，则需要续用
+        // 续写后结束时间 = bombEnd + 1天，续写后总时长 = 续写后结束时间 - 现在时间
+        val renewDuration = TimeFormatter.ONE_DAY_MS // 每次续写增加1天
+        val afterRenewRemain = remain + renewDuration // 续写后的剩余时间
         val needRenew =
-            remain <= bombRenewThreshold && (bombEnd - nowMillis + remain) <= maxBombDuration
+            remain <= bombRenewThreshold && afterRenewRemain <= maxBombDuration
 
         val remainTimeStr = TimeFormatter.formatRemainingTime(remain)
         val thresholdTimeStr = TimeFormatter.formatRemainingTime(bombRenewThreshold)
@@ -3391,9 +3394,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 详细调试信息
         Log.runtime(
             TAG, String.format(
-                "[炸弹卡] 详细对比: %dms ≤ %dms = %s, 总时长检查: %dms ≤ %dms",
+                "[炸弹卡] 详细对比: 剩余时间=%dms ≤ 阈值=%dms = %s, 续写后时长=%dms ≤ 最大时长=%dms = %s",
                 remain, bombRenewThreshold, (remain <= bombRenewThreshold),
-                (bombEnd - nowMillis + remain), maxBombDuration
+                afterRenewRemain, maxBombDuration, (afterRenewRemain <= maxBombDuration)
             )
         )
 

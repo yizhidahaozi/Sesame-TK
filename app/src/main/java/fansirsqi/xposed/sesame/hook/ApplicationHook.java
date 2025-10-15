@@ -5,10 +5,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
+import android.content.*;
 import android.content.pm.PackageInfo;
 import android.os.Build;
 import android.os.Handler;
@@ -17,6 +14,7 @@ import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
 
+import fansirsqi.xposed.sesame.hook.keepalive.AlipayComponentHelper;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
@@ -89,6 +87,9 @@ public class ApplicationHook {
 
     @SuppressLint("StaticFieldLeak")
     static Context appContext = null;
+    
+    @SuppressLint("StaticFieldLeak")
+    private static AlipayComponentHelper alipayComponentHelper;
 
     @JvmStatic
     public static Context getAppContext() {
@@ -302,6 +303,12 @@ public class ApplicationHook {
                     alarmManager.setAppContext(appContext);
                     // 初始化闹钟调度器
                     alarmManager.initializeAlarmScheduler(appContext);
+
+                    // 初始化支付宝组件帮助类（用于任务执行前唤醒）
+                    alipayComponentHelper = new AlipayComponentHelper(appContext);
+                    alipayComponentHelper.setupKeepAlive();
+                    Log.runtime(TAG, "✅ 已初始化支付宝组件帮助类");
+
                     PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                     Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
                     loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
@@ -537,11 +544,10 @@ public class ApplicationHook {
                     if (mainHandler != null) {
                         mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
                     }
-                    return;
                 } else {
                     Log.error(TAG, "AlarmScheduler初始化超时，放弃设置定时唤醒");
-                    return;
                 }
+                return;
             }
 
             List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
@@ -691,7 +697,6 @@ public class ApplicationHook {
 //                    Notify.setStatusTextDisabled();
 //                    return false;
 //                }
-
                 try {
                     PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
                     wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
@@ -726,7 +731,6 @@ public class ApplicationHook {
                 Status.load(userId);
                 DataStore.INSTANCE.init(Files.CONFIG_DIR);
                 updateDay(userId);
-
                 String successMsg = "芝麻粒-TK 加载成功✨";
                 Log.record(successMsg);
                 Toast.show(successMsg);
@@ -792,7 +796,21 @@ public class ApplicationHook {
     }
 
     static void execHandler() {
-        mainTask.startTask(false);
+        // 任务执行前唤醒支付宝进程，确保RPC调用正常
+        if (alipayComponentHelper != null) {
+            try {
+                // 【唤醒方式选择】
+                
+                // 方式1: 完整唤醒（启动所有4个服务，包括日志同步、计步统计等）
+                alipayComponentHelper.wakeupAlipay();
+                
+                // 方式2: 精简唤醒（仅流量监控，跳过日志同步和计步统计）⭐ 推荐
+                alipayComponentHelper.wakeupAlipayLite();
+            } catch (Exception e) {
+                Log.runtime(TAG, "唤醒支付宝进程失败: " + e.getMessage());
+            }
+        }
+        mainTask.startTask(false);// 非强制执行，避免重复排队
     }
 
     /**
