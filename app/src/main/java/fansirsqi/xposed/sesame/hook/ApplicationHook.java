@@ -31,6 +31,7 @@ import java.lang.reflect.InvocationTargetException;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.General;
@@ -158,10 +159,6 @@ public class ApplicationHook {
     public static volatile long nextExecutionTime = 0;
     private static final long MAX_INACTIVE_TIME = 3600000; // 最大不活动时间：1小时
 
-    private static XposedModuleInterface.PackageLoadedParam modelLoadPackageParam;
-
-    private static XposedModuleInterface.PackageLoadedParam appLloadPackageParam;
-
     static {
         dayCalendar = Calendar.getInstance();
         dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
@@ -255,252 +252,260 @@ public class ApplicationHook {
         }
     }
 
-    public void loadModelPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
-        if (General.MODULE_PACKAGE_NAME.equals(lpparam.getPackageName())) {
-            try {
-                Class<?> applicationClass = lpparam.getClassLoader().loadClass("android.app.Application");
-                XposedHelpers.findAndHookMethod(applicationClass, "onCreate", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(XC_MethodHook.MethodHookParam param) {
-                        moduleContext = (Context) param.thisObject;
-                        // 可以在这里调用其他需要 Context 的 Hook 方法
-                        HookUtil.INSTANCE.hookActive(lpparam);
-                    }
-                });
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-            }
-        }
+    /**
+     * ✅ 原有新版入口：LibXposed / LSPosed ≥ 1.9 使用
+     */
+    public void loadPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
+        Log.runtime(TAG, "xposed start loadPackage: " + lpparam.getPackageName());
+        if (!General.PACKAGE_NAME.equals(lpparam.getPackageName())) return;
+        classLoader = lpparam.getClassLoader();
+        handleHookLogic(classLoader, lpparam.getPackageName(), lpparam.getApplicationInfo().sourceDir, null);
     }
 
-    public void loadPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
-        if (General.PACKAGE_NAME.equals(lpparam.getPackageName())) {
-            try {
-                if (hooked) return;
-                appLloadPackageParam = lpparam;
-                classLoader = appLloadPackageParam.getClassLoader();
-                // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
-                try {
-                    @SuppressLint("PrivateApi") Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
-                    deoptimizeMethod(loadedApkClass);
-                } catch (Throwable t) {
-                    Log.runtime(TAG, "deoptimize makeApplicationInner err:");
-                    Log.printStackTrace(TAG, t);
-                }
-                XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        mainHandler = new Handler(Looper.getMainLooper());
-                        appContext = (Context) param.args[0];
+    /**
+     * ✅ 新增旧版兼容入口：传统 Xposed / EdXposed / LSPosed < 1.9 使用
+     */
+    public void loadPackageCompat(XC_LoadPackage.LoadPackageParam lpparam) {
+        Log.runtime(TAG, "xp82 start loadPackageCompat: " + lpparam.packageName);
+        XposedBridge.log(TAG + "|Hook in  " + lpparam.packageName + " in process ${lpparam.processName}");
+        if (!General.PACKAGE_NAME.equals(lpparam.packageName)) return;
+        classLoader = lpparam.classLoader;
+        // 注意：旧版没有 ApplicationInfo.sourceDir，需要自己从 appInfo 获取
+        String apkPath = lpparam.appInfo != null ? lpparam.appInfo.sourceDir : null;
+        handleHookLogic(classLoader, lpparam.packageName, apkPath, lpparam);
+    }
 
-                        registerBroadcastReceiver(appContext);
-                        // 设置AlarmSchedulerManager依赖项
-                        alarmManager.setMainHandler(mainHandler);
-                        alarmManager.setAppContext(appContext);
-                        // 初始化闹钟调度器
-                        alarmManager.initializeAlarmScheduler(appContext);
-                        PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(appContext.getPackageName(), 0);
-                        assert pInfo.versionName != null;
-                        alipayVersion = new AlipayVersion(pInfo.versionName);
-                        Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
-                        loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
-                        loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
-                        HookUtil.INSTANCE.fuckAccounLimit(lpparam);
-                        if (BuildConfig.DEBUG) {
-                            try {
-                                Log.runtime(TAG, "start service for debug rpc");
-                                httpServer = new ModuleHttpServer(8080, "ET3vB^#td87sQqKaY*eMUJXP");
-                                httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
-                            } catch (IOException e) {
-                                Log.printStackTrace(e);
-                            }
-                        } else {
-                            Log.runtime(TAG, "need not start service for debug rpc");
-                        }
-                        super.afterHookedMethod(param);
-                    }
-                });
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-            }
 
+    @SuppressLint("PrivateApi")
+    private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
+        XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
+        if (hooked) return;
+        hooked = true;
+        try {
+            // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
             try {
-                XposedHelpers.findAndHookMethod("com.alipay.mobile.quinox.LauncherActivity", classLoader, "onResume",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                Log.runtime(TAG, "hook onResume after start");
-                                String targetUid = getUserId();
-                                Log.runtime(TAG, "onResume targetUid: " + targetUid);
-                                if (targetUid == null) {
-                                    Log.record(TAG, "onResume:用户未登录");
-                                    Toast.show("用户未登录");
-                                    return;
-                                }
-                                if (!init) {
-                                    if (initHandler(true)) {
-                                        init = true;
-                                    }
-                                    Log.runtime(TAG, "initHandler success");
-                                    return;
-                                }
-                                String currentUid = UserMap.getCurrentUid();
-                                Log.runtime(TAG, "onResume currentUid: " + currentUid);
-                                if (!targetUid.equals(currentUid)) {
-                                    if (currentUid != null) {
-                                        initHandler(true);  // 重新初始化
-                                        lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
-                                        TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                        adapter.run(); // 立即执行任务
-                                        Log.record(TAG, "用户已切换");
-                                        Toast.show("用户已切换");
-                                        return;
-                                    }
-//                                    HookUtil.INSTANCE.hookUser(appLloadPackageParam);
-                                }
-                                if (offline) {
-                                    offline = false;
-                                    execHandler();
-                                    ((Activity) param.thisObject).finish();
-                                    Log.runtime(TAG, "Activity reLogin");
-                                }
-                                // 如果所有特殊情况都未命中，执行一次常规任务检查
-                                execHandler();
-                                Log.runtime(TAG, "hook onResume after end");
-                            }
-                        });
-                Log.runtime(TAG, "hook login successfully");
+                Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
+                deoptimizeMethod(loadedApkClass);
             } catch (Throwable t) {
-                Log.runtime(TAG, "hook login err");
+                Log.runtime(TAG, "deoptimize makeApplicationInner err:");
                 Log.printStackTrace(TAG, t);
             }
-            try {
-                XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onCreate",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                Service appService = (Service) param.thisObject;
-                                if (!General.CURRENT_USING_SERVICE.equals(appService.getClass().getCanonicalName())) {
-                                    return;
-                                }
+            XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    mainHandler = new Handler(Looper.getMainLooper());
+                    appContext = (Context) param.args[0];
 
-                                Log.runtime(TAG, "Service onCreate");
-                                appContext = appService.getApplicationContext();
-                                boolean isok = Detector.INSTANCE.isLegitimateEnvironment(appContext);
-                                if (isok) {
-                                    Detector.INSTANCE.dangerous(appContext);
-                                    return;
-                                }
-                                String apkPath = lpparam.getApplicationInfo().sourceDir;
-                                try (DexKitBridge ignored = DexKitBridge.create(apkPath)) {
-                                    // Other use cases
-                                    Log.runtime(TAG, "hook dexkit successfully");
-                                }
-                                service = appService;
-                                mainTask = BaseTask.newInstance("MAIN_TASK", () -> {
-                                    try {
-                                        boolean isAlarmTriggered = alarmTriggeredFlag;
-                                        if (isAlarmTriggered) {
-                                            alarmTriggeredFlag = false; // Consume the flag
-                                        }
+                    registerBroadcastReceiver(appContext);
+                    // 设置AlarmSchedulerManager依赖项
+                    alarmManager.setMainHandler(mainHandler);
+                    alarmManager.setAppContext(appContext);
+                    // 初始化闹钟调度器
+                    alarmManager.initializeAlarmScheduler(appContext);
+                    PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
+                    Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
+                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
+                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
+                    boolean b = pInfo.versionName != null;
+                    if (b) {
+                        if (pInfo.versionName.equals("10.7.26.8100")) {
+                            HookUtil.INSTANCE.fuckAccounLimit(classLoader);
+                        }
+                        Log.runtime(TAG, alipayVersion.getVersionString() + "Not support fuck");
+                    }
 
-                                        if (!init) {
-                                            Log.record(TAG, "️🐣跳过执行-未初始化");
-                                            return;
-                                        }
-                                        if (!Config.isLoaded()) {
-                                            Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
-                                            return;
-                                        }
+                    if (BuildConfig.DEBUG) {
+                        try {
+                            Log.runtime(TAG, "start service for debug rpc");
+                            httpServer = new ModuleHttpServer(8080, "ET3vB^#td87sQqKaY*eMUJXP");
+                            httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
+                        } catch (IOException e) {
+                            Log.printStackTrace(e);
+                        }
+                    } else {
+                        Log.runtime(TAG, "need not start service for debug rpc");
+                    }
+                    super.afterHookedMethod(param);
+                }
+            });
+        } catch (Exception e) {
+            Log.printStackTrace(e);
+        }
 
-                                        if (isAlarmTriggered) {
-                                            Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
-                                        } else {
-                                            if (lastExecTime == 0) {
-                                                Log.record(TAG, "▶️ 首次手动触发，开始运行");
-                                            } else {
-                                                if (BaseModel.getManualTriggerAutoSchedule().getValue()) {
-                                                    Log.record(TAG, "手动APP触发，已开启");
-                                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                                    adapter.run();
-                                                }
-                                                Log.record(TAG, "手动APP触发，已关闭");
-
-                                                return;
-                                            }
-                                        }
-
-                                        long currentTime = System.currentTimeMillis();
-                                        // 获取最小执行间隔（2秒）
-                                        final long MIN_EXEC_INTERVAL = 2000;
-                                        // 计算距离上次执行的时间间隔
-                                        long timeSinceLastExec = currentTime - lastExecTime;
-
-                                        if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
-                                            Log.record(TAG, "⚠️ 闹钟触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
-                                            alarmManager.scheduleDelayedExecutionWithRetry(
-                                                    BaseModel.getCheckInterval().getValue(), "跳过执行后的重新调度");
-                                            return;
-                                        }
-
-                                        String currentUid = UserMap.getCurrentUid();
-                                        String targetUid = HookUtil.INSTANCE.getUserId(appLloadPackageParam.getClassLoader());
-                                        if (targetUid == null || !targetUid.equals(currentUid)) {
-                                            Log.record(TAG, "用户切换或为空，重新登录");
-                                            reLogin();
-                                            return;
-                                        }
-                                        lastExecTime = currentTime; // 更新最后执行时间
-                                        // 方式1：直接使用数组转换
-                                        TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                        adapter.run();
-                                        scheduleNextExecution(lastExecTime);
-                                    } catch (Exception e) {
-                                        Log.record(TAG, "❌执行异常");
-                                        Log.printStackTrace(TAG, e);
-                                    } finally {
-                                        AlarmScheduler.releaseWakeLock();
-                                    }
-                                });
-                                dayCalendar = Calendar.getInstance();
+        try {
+            XposedHelpers.findAndHookMethod("com.alipay.mobile.quinox.LauncherActivity", classLoader, "onResume",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            Log.runtime(TAG, "hook onResume after start");
+                            String targetUid = getUserId();
+                            Log.runtime(TAG, "onResume targetUid: " + targetUid);
+                            if (targetUid == null) {
+                                Log.record(TAG, "onResume:用户未登录");
+                                Toast.show("用户未登录");
+                                return;
+                            }
+                            if (!init) {
                                 if (initHandler(true)) {
                                     init = true;
                                 }
+                                Log.runtime(TAG, "initHandler success");
+                                return;
+                            }
+                            String currentUid = UserMap.getCurrentUid();
+                            Log.runtime(TAG, "onResume currentUid: " + currentUid);
+                            if (!targetUid.equals(currentUid)) {
+                                if (currentUid != null) {
+                                    initHandler(true);  // 重新初始化
+                                    lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
+                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                    adapter.run(); // 立即执行任务
+                                    Log.record(TAG, "用户已切换");
+                                    Toast.show("用户已切换");
+                                    return;
+                                }
+                                HookUtil.INSTANCE.hookUser(classLoader);
+                            }
+                            if (offline) {
+                                offline = false;
+                                execHandler();
+                                ((Activity) param.thisObject).finish();
+                                Log.runtime(TAG, "Activity reLogin");
+                            }
+                            // 如果所有特殊情况都未命中，执行一次常规任务检查
+                            execHandler();
+                            Log.runtime(TAG, "hook onResume after end");
+                        }
+                    });
+            Log.runtime(TAG, "hook login successfully");
+        } catch (Throwable t) {
+            Log.runtime(TAG, "hook login err");
+            Log.printStackTrace(TAG, t);
+        }
+        try {
+            XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onCreate",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            Service appService = (Service) param.thisObject;
+                            if (!General.CURRENT_USING_SERVICE.equals(appService.getClass().getCanonicalName())) {
+                                return;
+                            }
+
+                            Log.runtime(TAG, "Service onCreate");
+                            appContext = appService.getApplicationContext();
+                            boolean isok = Detector.INSTANCE.isLegitimateEnvironment(appContext);
+                            if (isok) {
+                                Detector.INSTANCE.dangerous(appContext);
+                                return;
+                            }
+                            try (DexKitBridge ignored = DexKitBridge.create(apkPath)) {
+                                // Other use cases
+                                Log.runtime(TAG, "hook dexkit successfully");
+                            }
+                            service = appService;
+                            mainTask = BaseTask.newInstance("MAIN_TASK", () -> {
+                                try {
+                                    boolean isAlarmTriggered = alarmTriggeredFlag;
+                                    if (isAlarmTriggered) {
+                                        alarmTriggeredFlag = false; // Consume the flag
+                                    }
+
+                                    if (!init) {
+                                        Log.record(TAG, "️🐣跳过执行-未初始化");
+                                        return;
+                                    }
+                                    if (!Config.isLoaded()) {
+                                        Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
+                                        return;
+                                    }
+
+                                    if (isAlarmTriggered) {
+                                        Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
+                                    } else {
+                                        if (lastExecTime == 0) {
+                                            Log.record(TAG, "▶️ 首次手动触发，开始运行");
+                                        } else {
+                                            if (BaseModel.getManualTriggerAutoSchedule().getValue()) {
+                                                Log.record(TAG, "手动APP触发，已开启");
+                                                TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                                adapter.run();
+                                            }
+                                            Log.record(TAG, "手动APP触发，已关闭");
+
+                                            return;
+                                        }
+                                    }
+
+                                    long currentTime = System.currentTimeMillis();
+                                    // 获取最小执行间隔（2秒）
+                                    final long MIN_EXEC_INTERVAL = 2000;
+                                    // 计算距离上次执行的时间间隔
+                                    long timeSinceLastExec = currentTime - lastExecTime;
+
+                                    if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
+                                        Log.record(TAG, "⚠️ 闹钟触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
+                                        alarmManager.scheduleDelayedExecutionWithRetry(
+                                                BaseModel.getCheckInterval().getValue(), "跳过执行后的重新调度");
+                                        return;
+                                    }
+
+                                    String currentUid = UserMap.getCurrentUid();
+                                    String targetUid = HookUtil.INSTANCE.getUserId(classLoader);
+                                    if (targetUid == null || !targetUid.equals(currentUid)) {
+                                        Log.record(TAG, "用户切换或为空，重新登录");
+                                        reLogin();
+                                        return;
+                                    }
+                                    lastExecTime = currentTime; // 更新最后执行时间
+                                    // 方式1：直接使用数组转换
+                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+                                    adapter.run();
+                                    scheduleNextExecution(lastExecTime);
+                                } catch (Exception e) {
+                                    Log.record(TAG, "❌执行异常");
+                                    Log.printStackTrace(TAG, e);
+                                } finally {
+                                    AlarmScheduler.releaseWakeLock();
+                                }
+                            });
+                            dayCalendar = Calendar.getInstance();
+                            if (initHandler(true)) {
+                                init = true;
                             }
                         }
+                    }
 
-                );
-                Log.runtime(TAG, "hook service onCreate successfully");
-            } catch (Throwable t) {
-                Log.runtime(TAG, "hook service onCreate err");
-                Log.printStackTrace(TAG, t);
-            }
-
-            try {
-                XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onDestroy",
-                        new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                Service service = (Service) param.thisObject;
-                                if (!General.CURRENT_USING_SERVICE.equals(service.getClass().getCanonicalName()))
-                                    return;
-                                Log.record(TAG, "支付宝前台服务被销毁");
-                                Notify.updateStatusText("支付宝前台服务被销毁");
-                                destroyHandler(true);
-                                httpServer.stop();
-                                restartByBroadcast();
-                            }
-                        });
-            } catch (Throwable t) {
-                Log.runtime(TAG, "hook service onDestroy err");
-                Log.printStackTrace(TAG, t);
-            }
-
-            HookUtil.INSTANCE.hookOtherService(lpparam);
-
-            hooked = true;
-            Log.runtime(TAG, "load success: " + lpparam.getPackageName());
+            );
+            Log.runtime(TAG, "hook service onCreate successfully");
+        } catch (Throwable t) {
+            Log.runtime(TAG, "hook service onCreate err");
+            Log.printStackTrace(TAG, t);
         }
+
+        try {
+            XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onDestroy",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            Service service = (Service) param.thisObject;
+                            if (!General.CURRENT_USING_SERVICE.equals(service.getClass().getCanonicalName()))
+                                return;
+                            Log.record(TAG, "支付宝前台服务被销毁");
+                            Notify.updateStatusText("支付宝前台服务被销毁");
+                            destroyHandler(true);
+                            httpServer.stop();
+                            restartByBroadcast();
+                        }
+                    });
+        } catch (Throwable t) {
+            Log.runtime(TAG, "hook service onDestroy err");
+            Log.printStackTrace(TAG, t);
+        }
+
+        HookUtil.INSTANCE.hookOtherService(classLoader);
+
+        hooked = true;
     }
 
     /**
@@ -617,14 +622,14 @@ public class ApplicationHook {
             }
 
             if (force) {
-                String userId = HookUtil.INSTANCE.getUserId(appLloadPackageParam.getClassLoader());
+                String userId = HookUtil.INSTANCE.getUserId(classLoader);
                 if (userId == null) {
                     Log.record(TAG, "initHandler: 用户未登录");
                     Toast.show("用户未登录");
                     return false;
                 }
 
-                HookUtil.INSTANCE.hookUser(appLloadPackageParam);
+                HookUtil.INSTANCE.hookUser(classLoader);
                 String startMsg = "芝麻粒-TK 开始初始化...";
                 Log.record(TAG, startMsg);
                 Log.record(TAG, "⚙️模块版本：" + modelVersion);
@@ -652,7 +657,7 @@ public class ApplicationHook {
                 }
 
                 // 后台运行权限检查
-                if (BaseModel.getBatteryPerm().getValue() && !init && !PermissionUtil.checkBatteryPermissions()) {
+                if (!init && !PermissionUtil.checkBatteryPermissions()) {
                     Log.record(TAG, "支付宝无始终在后台运行权限");
                     mainHandler.postDelayed(
                             () -> {
@@ -665,29 +670,27 @@ public class ApplicationHook {
 
                 Notify.start(service);
 
-                BaseModel baseModel = Model.getModel(BaseModel.class);
-                if (baseModel == null) {
-                    Log.error(TAG, "BaseModel 未找到 初始化失败");
-                    Notify.setStatusTextDisabled();
-                    return false;
-                }
+//                BaseModel baseModel = Model.getModel(BaseModel.class);
+//                if (baseModel == null) {
+//                    Log.error(TAG, "BaseModel 未找到 初始化失败");
+//                    Notify.setStatusTextDisabled();
+//                    return false;
+//                }
+//
+//                if (!baseModel.getEnableField().getValue()) {
+//                    Log.record(TAG, "❌ 芝麻粒已禁用");
+//                    Toast.show("❌ 芝麻粒已禁用");
+//                    Notify.setStatusTextDisabled();
+//                    return false;
+//                }
 
-                if (!baseModel.getEnableField().getValue()) {
-                    Log.record(TAG, "❌ 芝麻粒已禁用");
-                    Toast.show("❌ 芝麻粒已禁用");
-                    Notify.setStatusTextDisabled();
-                    return false;
-                }
-
-                if (BaseModel.getStayAwake().getValue()) {
-                    try {
-                        PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
-                        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
-                        wakeLock.acquire(10 * 60 * 1000L); // 10分钟
-                    } catch (Throwable t) {
-                        Log.record(TAG, "唤醒锁申请失败:");
-                        Log.printStackTrace(t);
-                    }
+                try {
+                    PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
+                    wakeLock.acquire(10 * 60 * 1000L); // 10分钟
+                } catch (Throwable t) {
+                    Log.record(TAG, "唤醒锁申请失败:");
+                    Log.printStackTrace(t);
                 }
 
                 setWakenAtTimeAlarm();
@@ -704,11 +707,11 @@ public class ApplicationHook {
 
                 if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
                     HookUtil.INSTANCE.hookRpcBridgeExtension(
-                            appLloadPackageParam,
+                            classLoader,
                             BaseModel.getSendHookData().getValue(),
                             BaseModel.getSendHookDataUrl().getValue()
                     );
-                    HookUtil.INSTANCE.hookDefaultBridgeCallback(appLloadPackageParam);
+                    HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
                 }
 
                 Model.bootAllModel(classLoader);
