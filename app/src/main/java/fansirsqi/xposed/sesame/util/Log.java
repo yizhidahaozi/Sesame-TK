@@ -24,7 +24,7 @@ public class Log {
     private static final Logger OTHER_LOGGER;
     private static final Logger ERROR_LOGGER;
     private static final Logger CAPTURE_LOGGER;
-    
+
     // 错误去重机制：记录错误特征和出现次数
     private static final Map<String, AtomicInteger> errorCountMap = new ConcurrentHashMap<>();
     private static final int MAX_DUPLICATE_ERRORS = 3; // 最多打印3次相同错误
@@ -59,7 +59,7 @@ public class Log {
 
     public static void runtime(String msg) {
         system(msg);
-        if (BaseModel.getRuntimeLog().getValue()) {
+        if (BaseModel.getRuntimeLog().getValue() || BuildConfig.DEBUG) {
             RUNTIME_LOGGER.info(TAG + "{}", msg);
         }
     }
@@ -134,36 +134,36 @@ public class Log {
 
     /**
      * 检查是否应该打印此错误（去重机制）
-     * 
+     *
      * @param th 异常对象
      * @return true=应该打印，false=已重复太多次
      */
     private static boolean shouldPrintError(Throwable th) {
         if (th == null) return true;
-        
+
         // 提取错误特征（类名+消息的前50个字符）
-        String errorSignature = th.getClass().getSimpleName() + ":" + 
-            (th.getMessage() != null ? th.getMessage().substring(0, Math.min(50, th.getMessage().length())) : "null");
-        
+        String errorSignature = th.getClass().getSimpleName() + ":" +
+                (th.getMessage() != null ? th.getMessage().substring(0, Math.min(50, th.getMessage().length())) : "null");
+
         // 特殊处理：JSON解析空字符串错误
         if (th.getMessage() != null && th.getMessage().contains("End of input at character 0")) {
             errorSignature = "JSONException:EmptyResponse";
         }
-        
+
         AtomicInteger count = errorCountMap.computeIfAbsent(errorSignature, k -> new AtomicInteger(0));
         int currentCount = count.incrementAndGet();
-        
+
         // 如果是第3次，记录一个汇总信息
         if (currentCount == MAX_DUPLICATE_ERRORS) {
             runtime("⚠️ 错误【" + errorSignature + "】已出现" + currentCount + "次，后续将不再打印详细堆栈");
             return false;
         }
-        
+
         // 超过最大次数后不再打印
         if (currentCount > MAX_DUPLICATE_ERRORS) {
             return false;
         }
-        
+
         return true;
     }
 
@@ -202,7 +202,7 @@ public class Log {
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
     }
-    
+
     /**
      * 清除错误计数缓存（可在任务重新开始时调用）
      */
@@ -211,7 +211,7 @@ public class Log {
     }
 
     public static void printStack(String TAG) {
-        String stackTrace = "stack: " + android.util.Log.getStackTraceString(new Exception("获取当前堆栈" + TAG+ ":"));
+        String stackTrace = "stack: " + android.util.Log.getStackTraceString(new Exception("获取当前堆栈" + TAG + ":"));
         system(stackTrace);
     }
 
