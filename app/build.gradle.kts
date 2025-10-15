@@ -1,4 +1,3 @@
-
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -207,7 +206,7 @@ dependencies {
 
     // JSON 序列化
     implementation(libs.kotlinx.serialization.json) // Kotlin JSON 序列化库
-    
+
     // Kotlin 协程依赖 - 异步编程
     implementation(libs.kotlinx.coroutines.core)     // 协程核心库
     implementation(libs.kotlinx.coroutines.android)  // Android 协程支持
@@ -235,11 +234,10 @@ dependencies {
 
     // 仅编译时依赖 - Xposed 相关
     compileOnly(files("libs/api-82.jar"))          // Xposed API 82
-    compileOnly(files("libs/api-100.aar"))         // Xposed API 100
-    implementation(files("libs/interface-100.aar"))
-    implementation(files("libs/service-100-1.0.0.aar"))  // Xposed 服务库
-//    implementation(libs.libxposed.service)        // LSPosed 服务库（已注释）
-//    implementation(files("libs/framework.jar"))   // Android Framework（已注释）
+    compileOnly(files("libs/api-100.aar"))         // Xposed API 100 https://github.com/libxposed/api
+    implementation (files("libs/interface-100.aar")) // Xposed 模块接口 https://github.com/libxposed/api
+    implementation(files("libs/service-100-1.0.0.aar"))  // https://github.com/libxposed/service
+//    compileOnly(files("libs/helper-100.aar"))        // https://github.com/libxposed/helper
 
     // 代码生成和工具库
     compileOnly(libs.lombok)                       // Lombok 注解处理器（编译时）
@@ -247,12 +245,12 @@ dependencies {
     implementation(libs.okhttp)                    // OkHttp 网络请求库
     implementation(libs.dexkit)                    // DEX 文件分析工具
     implementation(libs.jackson.kotlin)            // Jackson Kotlin 支持
-    implementation(libs.mmkv)       // 腾讯 MMKV 高性能键值存储
+    implementation(libs.mmkv)                      // 腾讯 MMKV 高性能键值存储
 
     // 核心库脱糖和系统 API 访问
-    coreLibraryDesugaring(libs.desugar)                                    // Java 8+ API 脱糖支持
+    coreLibraryDesugaring(libs.desugar)            // Java 8+ API 脱糖支持
 
-    implementation(libs.hiddenapibypass)        // 隐藏 API 访问绕过
+    implementation(libs.hiddenapibypass)           // 隐藏 API 访问绕过
 
     // Normal 构建变体专用依赖 - Jackson JSON 处理库
     add("normalImplementation", libs.jackson.core)         // Jackson 核心库
