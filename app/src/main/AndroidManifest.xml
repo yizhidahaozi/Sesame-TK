@@ -12,16 +12,13 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
-        android:allowBackup="true"
+        android:name=".SesameApplication"
         android:description="@string/xposed_description"
-        android:enableOnBackInvokedCallback="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:requestLegacyExternalStorage="true"
-        android:roundIcon="@drawable/ic_launcher"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true"
-        tools:targetApi="33">
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
@@ -30,7 +27,7 @@
             android:value="@string/xposed_description" />
         <meta-data
             android:name="xposedminversion"
-            android:value="93" />
+            android:value="54" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scopes" />
@@ -54,11 +51,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
-        <!-- ✅ 新增 MMKV 测试页面 -->
-        <activity
-            android:name="fansirsqi.xposed.sesame.newui.SettingDemo"
-            android:exported="true"
-            android:label="MMKV测试页面" />
+
 
         <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
