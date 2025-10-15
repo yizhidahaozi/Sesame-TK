@@ -8,7 +8,17 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify.setStatusTextExec
 import fansirsqi.xposed.sesame.util.Notify.updateNextExecText
 import fansirsqi.xposed.sesame.util.StringUtil
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import lombok.Setter
@@ -214,24 +224,19 @@ abstract class ModelTask : Model() {
                     Log.runtime(TAG, "任务 ${getName()} 正在运行，跳过启动")
                     return@withLock
                 }
-                
                 if (isRunning && force) {
                     Log.runtime(TAG, "强制重启任务 ${getName()}")
                     stopTask()
                 }
-                
                 if (!isEnable || check() != true) {
                     Log.runtime(TAG, "任务 ${getName()} 不满足执行条件")
                     return@withLock
                 }
-                
                 try {
                     isRunning = true
                     addRunCents()
                     setStatusTextExec(getName())
-                    
                     executeMultiRoundTask(mode, rounds)
-                    
                 } catch (e: Exception) {
                     Log.printStackTrace("任务执行异常: ${getName()}", e)
                 } finally {
