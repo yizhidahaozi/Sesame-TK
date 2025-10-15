@@ -317,9 +317,14 @@ public class ApplicationHook {
                     if (BuildConfig.DEBUG) {
                         try {
                             Log.runtime(TAG, "start service for debug rpc");
-                            httpServer = new ModuleHttpServer(8080, "ET3vB^#td87sQqKaY*eMUJXP");
-                            httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
-                        } catch (IOException e) {
+                            // 使用管理器，仅主进程启动并防重复
+                            fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.startIfNeeded(
+                                    8080,
+                                    "ET3vB^#td87sQqKaY*eMUJXP",
+                                    XposedEnv.processName,
+                                    General.PACKAGE_NAME
+                            );
+                        } catch (Throwable e) {
                             Log.printStackTrace(e);
                         }
                     } else {
@@ -494,7 +499,10 @@ public class ApplicationHook {
                             Log.record(TAG, "支付宝前台服务被销毁");
                             Notify.updateStatusText("支付宝前台服务被销毁");
                             destroyHandler(true);
-                            httpServer.stop();
+                            try {
+                                fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.stopIfRunning();
+                            } catch (Throwable ignore) {
+                            }
                             restartByBroadcast();
                         }
                     });
