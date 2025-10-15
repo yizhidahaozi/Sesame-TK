@@ -32,6 +32,7 @@ import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.TaskStatus
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familyClaimRewardList
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
+import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -188,7 +189,13 @@ class AntFarm : ModelTask() {
     private var donationCount: ChoiceModelField? = null
 
     /**
-     * 收取饲料奖励
+     * 饲料任务
+     */
+    private var doFarmTask: BooleanModelField? = null // 做饲料任务
+    private var doFarmTaskTime: StringModelField? = null // 饲料任务执行时间
+    
+    /**
+     * 收取饲料奖励（无时间限制）
      */
     private var receiveFarmTaskAward: BooleanModelField? = null
     private var useAccelerateTool: BooleanModelField? = null
@@ -209,6 +216,7 @@ class AntFarm : ModelTask() {
     private var diaryTietie: BooleanModelField? = null
     private var collectChickenDiary: ChoiceModelField? = null
     private var enableChouchoule: BooleanModelField? = null
+    private var enableChouchouleTime: StringModelField? = null // 抽抽乐执行时间
     private var listOrnaments: BooleanModelField? = null
     private var hireAnimal: BooleanModelField? = null
     private var hireAnimalType: ChoiceModelField? = null
@@ -419,10 +427,24 @@ class AntFarm : ModelTask() {
             ).also { useNewEggCard = it })
         modelFields.addField(
             BooleanModelField(
+                "doFarmTask",
+                "做饲料任务",
+                false
+            ).also { doFarmTask = it })
+        modelFields.addField(
+            StringModelField(
+                "doFarmTaskTime",
+                "饲料任务执行时间 | 默认8:30后执行",
+                "0830"
+            ).also { doFarmTaskTime = it })
+        
+        modelFields.addField(
+            BooleanModelField(
                 "receiveFarmTaskAward",
                 "收取饲料奖励",
                 false
             ).also { receiveFarmTaskAward = it })
+
         modelFields.addField(
             BooleanModelField(
                 "receiveFarmToolReward",
@@ -461,6 +483,12 @@ class AntFarm : ModelTask() {
                 "开启小鸡抽抽乐",
                 false
             ).also { enableChouchoule = it })
+        modelFields.addField(
+            StringModelField(
+                "enableChouchouleTime",
+                "小鸡抽抽乐执行时间 | 默认9:00后执行",
+                "0900"
+            ).also { enableChouchouleTime = it })
         modelFields.addField(
             BooleanModelField(
                 "listOrnaments",
@@ -619,9 +647,20 @@ class AntFarm : ModelTask() {
                 handleDonation(donationCount!!.value)
                 tc.countDebug("每日捐蛋")
             }
+
+            // 做饲料任务
+            if (doFarmTask!!.value) {
+                // 检查是否到达执行时间
+                if (TaskTimeChecker.isTimeReached(doFarmTaskTime?.value, "0830")) {
+                    doFarmTasks()
+                    tc.countDebug("饲料任务")
+                } else {
+                    Log.record(TAG, "饲料任务未到执行时间，跳过")
+                }
+            }
+            
+            // 收取饲料奖励（无时间限制）
             if (receiveFarmTaskAward!!.value) {
-                doFarmTasks()
-                tc.countDebug("饲料任务")
                 receiveFarmAwards()
                 tc.countDebug("收取饲料奖励")
             }
@@ -651,10 +690,17 @@ class AntFarm : ModelTask() {
 
             // 抽抽乐
             if (enableChouchoule!!.value) {
-                val ccl = ChouChouLe()
-                ccl.chouchoule()
-                tc.countDebug("抽抽乐")
+                // 检查是否到达执行时间
+                if (TaskTimeChecker.isTimeReached(enableChouchouleTime?.value, "0900")) {
+                    val ccl = ChouChouLe()
+                    ccl.chouchoule()
+                    tc.countDebug("抽抽乐")
+                } else {
+                    Log.record(TAG, "抽抽乐未到执行时间，跳过")
+                }
             }
+
+
 
             // 雇佣小鸡
             if (hireAnimal!!.value) {
