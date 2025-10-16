@@ -453,6 +453,9 @@ class AlarmScheduler(private val context: Context) {
             val stateJson = state.toString()
             DataStore.put("execution_state", stateJson)
            // Log.record(TAG, "已保存执行状态: $stateJson")
+        } catch (e: IllegalStateException) {
+            // DataStore 未初始化，这是正常的，在应用启动早期可能会发生
+            Log.debug(TAG, "DataStore 尚未初始化，执行状态仅保存在内存中")
         } catch (e: Exception) {
             Log.error(TAG, "保存执行状态失败: " + e.message)
         }

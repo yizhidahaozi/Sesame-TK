@@ -27,6 +27,12 @@ object DataStore {
             if (!exists()) createNewFile()
         }
         loadFromDisk()
+        
+        // 初始化完成后，如果内存中有数据（可能是初始化前保存的），立即写入磁盘
+        if (data.isNotEmpty()) {
+            saveToDisk()
+        }
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startWatcherNio() else startWatcher()
     }
 
@@ -96,6 +102,7 @@ object DataStore {
     }
 
     private fun loadFromDisk() {
+        if (!::storageFile.isInitialized) return
         if (storageFile.length() == 0L) return
         lock.write {
             try {
@@ -114,6 +121,10 @@ object DataStore {
     }
 
     private fun saveToDisk() {
+        if (!::storageFile.isInitialized) {
+            // DataStore 尚未初始化，跳过保存（仅保存在内存中）
+            return
+        }
         val tempFile = File(storageFile.parentFile, storageFile.name + ".tmp")
         try {
             tempFile.writeText(mapper.writer(prettyPrinter).writeValueAsString(data))
