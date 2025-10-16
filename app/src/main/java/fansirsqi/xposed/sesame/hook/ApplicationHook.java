@@ -15,10 +15,10 @@ import android.os.PowerManager;
 import androidx.annotation.NonNull;
 
 import fansirsqi.xposed.sesame.hook.keepalive.AlipayComponentHelper;
+import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,7 +59,6 @@ import fansirsqi.xposed.sesame.util.PermissionUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
-import fi.iki.elonen.NanoHTTPD;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModuleInterface;
 import kotlin.jvm.JvmStatic;
@@ -75,6 +74,7 @@ public class ApplicationHook {
      * 获取闹钟调度器实例 - 供外部访问
      */
     // 统一的闹钟调度器
+    @Setter
     @SuppressLint("StaticFieldLeak")
     private static AlarmScheduler alarmScheduler;
 
@@ -115,45 +115,29 @@ public class ApplicationHook {
     @Getter
     static volatile boolean offline = false;
     private static volatile boolean alarmTriggeredFlag = false;
+    @Getter
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
-
-    public static AtomicInteger getReLoginCount() {
-        return reLoginCount;
-    }
 
     @SuppressLint("StaticFieldLeak")
     static Service service;
+    @Getter
     static Handler mainHandler;
     /**
      * -- GETTER --
      * 获取主任务实例 - 供AlarmScheduler使用
      */
+    @Getter
     static BaseTask mainTask;
-
-    public static Handler getMainHandler() {
-        return mainHandler;
-    }
-
-    public static BaseTask getMainTask() {
-        return mainTask;
-    }
 
     static volatile RpcBridge rpcBridge;
     private static final Object rpcBridgeLock = new Object();
+    @Getter
     private static RpcVersion rpcVersion;
-
-    public static RpcVersion getRpcVersion() {
-        return rpcVersion;
-    }
 
     private static PowerManager.WakeLock wakeLock;
 
     public static void setOffline(boolean offline) {
         ApplicationHook.offline = offline;
-    }
-
-    public static void setAlarmScheduler(AlarmScheduler scheduler) {
-        alarmScheduler = scheduler;
     }
 
     private static volatile long lastExecTime = 0; // 添加为类成员变量
@@ -228,8 +212,7 @@ public class ApplicationHook {
             }
 
             // 使用统一的闹钟调度器
-            long l = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
-            nextExecutionTime = l;
+            nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
             alarmManager.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
@@ -1059,9 +1042,7 @@ public class ApplicationHook {
                             // 处理闹钟相关的广播
                             if (alarmManager.isAlarmSchedulerAvailable()) {
                                 int requestCode = intent.getIntExtra("request_code", -1);
-                                Thread alarmThread = new Thread(() -> {
-                                    alarmManager.handleAlarmTrigger(requestCode);
-                                });
+                                Thread alarmThread = new Thread(() -> alarmManager.handleAlarmTrigger(requestCode));
                                 alarmThread.setName("AlarmTriggered_" + requestCode);
                                 alarmThread.start();
                                 Log.record(TAG, "闹钟广播触发，创建处理线程: " + alarmThread.getName());

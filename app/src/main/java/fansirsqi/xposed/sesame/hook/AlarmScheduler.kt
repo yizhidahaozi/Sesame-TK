@@ -49,6 +49,15 @@ class AlarmScheduler(private val context: Context) {
     
     // 存储备份任务的Job，用于取消
     private val backupJobs = ConcurrentHashMap<String, Job>()
+    
+    // 存储备份闹钟的请求码，用于追踪和取消
+    private val backupAlarmRequestCodes = ConcurrentHashMap.newKeySet<Int>()
+    
+    // 调度计数器（用于定期诊断）
+    private var scheduleCount = 0
+    
+    // 标记是否正在执行任务（用于优雅关闭）
+    private val isExecutingTask = AtomicBoolean(false)
 
     /**
      * 闹钟相关常量
@@ -150,27 +159,19 @@ class AlarmScheduler(private val context: Context) {
             val alarmManager = this.alarmManager ?: return false
             // 取消旧闹钟（如果存在）
             cancelOldAlarm(requestCode)
+            
             // 获取临时唤醒锁
             WakeLockManager(context, Constants.WAKE_LOCK_SETUP_TIMEOUT).use {
-                // 根据Android版本和权限选择合适的闹钟类型
-                // 1. 使用setAlarmClock以获得最高优先级
+                // 使用 setAlarmClock 以获得最高优先级（只设置一次，避免重复）
                 val alarmClockInfo = AlarmManager.AlarmClockInfo(
-                    triggerAtMillis,  // 创建一个用于显示闹钟设置界面的PendingIntent
+                    triggerAtMillis,
                     PendingIntent.getActivity(context, 0, Intent(), PendingIntent.FLAG_IMMUTABLE)
                 )
                 alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-                // 2. 同时设置一个备用的精确闹钟
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                // 3. 获取PowerManager.WakeLock
-                val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                val wakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "Sesame:AlarmWakeLock:$requestCode"
-                )
-                wakeLock.acquire(5000) // 持有5秒钟以确保闹钟设置成功
+                
                 Log.record(
                     TAG,
-                    "已设置多重保护闹钟: ID=$requestCode, 预定时间=${TimeUtil.getTimeStr(triggerAtMillis)}"
+                    "✅ 已设置闹钟: ID=$requestCode, 预定时间=${TimeUtil.getTimeStr(triggerAtMillis)}"
                 )
                 // 保存闹钟引用
                 scheduledAlarms[requestCode] = pendingIntent
@@ -188,6 +189,10 @@ class AlarmScheduler(private val context: Context) {
      */
     private fun scheduleAlarmWithBackup(exactTimeMillis: Long, intent: Intent, requestCode: Int, delayMillis: Long) {
         try {
+            // 先清理所有旧的备份任务和闹钟，防止泄漏
+            // graceful = true：如果有任务正在执行，等待其完成
+            cleanupAllBackups(graceful = true)
+            
             // 创建主闹钟
             val pendingIntent = PendingIntent.getBroadcast(
                 context, requestCode, intent,
@@ -208,6 +213,12 @@ class AlarmScheduler(private val context: Context) {
                             "，时间：" + TimeUtil.getCommonDate(exactTimeMillis) +
                             "，延迟：" + delayMillis / 1000 + "秒"
                 )
+                
+                // 定期输出诊断信息（每10次设置输出一次）
+                scheduleCount++
+                if (scheduleCount % 10 == 0) {
+                    Log.debug(TAG, diagnoseMemoryAndResources())
+                }
             }
         } catch (e: Exception) {
             Log.error(TAG, "设置闹钟备份失败：" + e.message)
@@ -288,6 +299,8 @@ class AlarmScheduler(private val context: Context) {
                 )
                 it.setAlarmClock(backupAlarmInfo, backupPendingIntent)
                 scheduledAlarms[backupRequestCode] = backupPendingIntent
+                // 追踪备份闹钟请求码
+                backupAlarmRequestCodes.add(backupRequestCode)
                 Log.runtime(
                     TAG,
                     "已设置备份闹钟: ID=$backupRequestCode, 预定时间=${TimeUtil.getTimeStr(backupTriggerTime)} (+${Constants.BACKUP_ALARM_DELAY / 1000}秒)"
@@ -363,6 +376,61 @@ class AlarmScheduler(private val context: Context) {
             scheduledAlarms.remove(requestCode)
         }
     }
+    
+    /**
+     * 清理所有备份任务和闹钟
+     * 防止闹钟泄漏，在设置新闹钟前调用
+     * 
+     * @param graceful 是否优雅关闭（等待正在执行的任务完成）
+     */
+    private fun cleanupAllBackups(graceful: Boolean = false) {
+        try {
+            // 1. 智能清理协程任务
+            val cancelledJobs = backupJobs.values.count { it.isActive }
+            
+            // 优雅关闭：只在确实有任务正在执行时才等待
+            if (graceful && isExecutingTask.get()) {
+                Log.debug(TAG, "⏳ 检测到正在执行的任务，等待完成...")
+                var waitTime = 0L
+                val maxWaitTime = 2000L  // 最多等待2秒（备份任务通常很快）
+                
+                while (isExecutingTask.get() && waitTime < maxWaitTime) {
+                    Thread.sleep(50)  // 更频繁检查，快速响应
+                    waitTime += 50
+                }
+                
+                if (isExecutingTask.get()) {
+                    Log.debug(TAG, "⚠️ 等待${waitTime}ms后超时，强制取消")
+                } else {
+                    Log.debug(TAG, "✅ 任务已完成（耗时${waitTime}ms）")
+                }
+            }
+            
+            // 取消所有备份任务（delay等待中的会被立即取消，这是安全的）
+            backupJobs.values.forEach { job ->
+                if (job.isActive) {
+                    job.cancel("设置新闹钟，清理旧备份")
+                }
+            }
+            backupJobs.clear()
+            
+            // 2. 取消所有备份闹钟
+            val cancelledAlarms = backupAlarmRequestCodes.size
+            backupAlarmRequestCodes.forEach { requestCode ->
+                scheduledAlarms[requestCode]?.let { pendingIntent ->
+                    alarmManager?.cancel(pendingIntent)
+                    scheduledAlarms.remove(requestCode)
+                }
+            }
+            backupAlarmRequestCodes.clear()
+            
+            if (cancelledJobs > 0 || cancelledAlarms > 0) {
+                Log.debug(TAG, "🧹 清理备份：取消${cancelledJobs}个协程任务，${cancelledAlarms}个备份闹钟")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "清理备份失败: ${e.message}")
+        }
+    }
 
     /**
      * 获取AlarmManager实例
@@ -382,6 +450,9 @@ class AlarmScheduler(private val context: Context) {
     private suspend fun executeBackupTaskSuspend() = withContext(Dispatchers.Main) {
         executionMutex.withLock {
             try {
+                // 标记开始执行
+                isExecutingTask.set(true)
+                
                 // 通过反射调用ApplicationHook的方法，避免循环依赖
                 val appHookClass = Class.forName("fansirsqi.xposed.sesame.hook.ApplicationHook")
                 val getTaskMethod = appHookClass.getDeclaredMethod("getMainTask")
@@ -404,6 +475,9 @@ class AlarmScheduler(private val context: Context) {
                 Log.record(TAG, "协程备份任务触发完成")
             } catch (e: Exception) {
                 Log.error(TAG, "执行协程备份任务失败: " + e.message)
+            } finally {
+                // 标记执行结束
+                isExecutingTask.set(false)
             }
         }
     }
@@ -519,29 +593,146 @@ class AlarmScheduler(private val context: Context) {
     }
 
     /**
-     * 获取协程状态信息
+     * 内存和资源诊断
+     * 用于排查性能问题和资源泄漏
      */
-    fun getCoroutineStatus(): String {
+    fun diagnoseMemoryAndResources(): String {
         return try {
+            val runtime = Runtime.getRuntime()
+            val totalMemory = runtime.totalMemory() / 1024 / 1024  // MB
+            val freeMemory = runtime.freeMemory() / 1024 / 1024    // MB
+            val usedMemory = totalMemory - freeMemory               // MB
+            val maxMemory = runtime.maxMemory() / 1024 / 1024      // MB
+            val memoryUsagePercent = (usedMemory * 100.0 / maxMemory).toInt()
+            
+            // 闹钟状态
+            val totalAlarms = scheduledAlarms.size
+            val backupAlarms = backupAlarmRequestCodes.size
+            val mainAlarms = totalAlarms - backupAlarms
+            
+            // 协程状态
             val activeJobs = backupJobs.values.count { it.isActive }
             val completedJobs = backupJobs.values.count { it.isCompleted }
             val cancelledJobs = backupJobs.values.count { it.isCancelled }
-            val scopeActive = alarmScope.isActive
-            "协程状态: 作用域=${if (scopeActive) "活跃" else "非活跃"}, " +
-            "活跃任务=$activeJobs, 完成任务=$completedJobs, 取消任务=$cancelledJobs"
+            val totalJobs = backupJobs.size
+            
+            // 判断健康状态
+            val alarmHealth = when {
+                totalAlarms > 100 -> "🔴 严重泄漏"
+                totalAlarms > 50 -> "⚠️ 警告"
+                totalAlarms > 10 -> "⚠️ 注意"
+                else -> "🟢 正常"
+            }
+            
+            val memoryHealth = when {
+                memoryUsagePercent > 85 -> "🔴 严重"
+                memoryUsagePercent > 70 -> "⚠️ 警告"
+                memoryUsagePercent > 50 -> "⚠️ 注意"
+                else -> "🟢 正常"
+            }
+            
+            """
+            |═══════════════════════════════════
+            |📊 AlarmScheduler 资源诊断报告
+            |═══════════════════════════════════
+            |【内存状态】$memoryHealth
+            |  使用内存: ${usedMemory}MB / ${maxMemory}MB (${memoryUsagePercent}%)
+            |  剩余内存: ${freeMemory}MB
+            |  总分配: ${totalMemory}MB
+            |
+            |【闹钟状态】$alarmHealth
+            |  主闹钟: $mainAlarms 个
+            |  备份闹钟: $backupAlarms 个
+            |  总计: $totalAlarms 个
+            |  ${if (totalAlarms > 10) "⚠️ 闹钟数量偏多，可能存在泄漏！" else "✅ 闹钟数量正常"}
+            |
+            |【协程状态】
+            |  活跃任务: $activeJobs 个
+            |  完成任务: $completedJobs 个
+            |  取消任务: $cancelledJobs 个
+            |  总任务数: $totalJobs 个
+            |  作用域: ${if (alarmScope.isActive) "✅ 活跃" else "❌ 非活跃"}
+            |
+            |【其他状态】
+            |  待执行标记: ${if (isTaskExecutionPending.get()) "⏳ 是" else "✅ 否"}
+            |  正在执行任务: ${if (isExecutingTask.get()) "⚠️ 是" else "✅ 否"}
+            |  WakeLock持有: ${if (wakeLock?.isHeld == true) "⚠️ 是" else "✅ 否"}
+            |
+            |【建议】
+            |${getDiagnosticAdvice(totalAlarms, memoryUsagePercent, activeJobs)}
+            |═══════════════════════════════════
+            """.trimMargin()
         } catch (e: Exception) {
-            "协程状态获取失败: ${e.message}"
+            "诊断失败: ${e.message}"
         }
     }
     
     /**
-     * 清理协程资源
+     * 根据诊断结果给出建议
      */
-    fun cleanup() {
+    private fun getDiagnosticAdvice(alarms: Int, memoryPercent: Int, activeJobs: Int): String {
+        val advice = mutableListOf<String>()
+        
+        if (alarms > 100) {
+            advice.add("  🔴 闹钟严重泄漏！建议立即重启应用")
+        } else if (alarms > 50) {
+            advice.add("  ⚠️ 闹钟数量过多，建议调用 cleanup() 清理")
+        }
+        
+        if (memoryPercent > 85) {
+            advice.add("  🔴 内存严重不足！可能即将 OOM")
+        } else if (memoryPercent > 70) {
+            advice.add("  ⚠️ 内存压力较大，建议释放资源")
+        }
+        
+        if (activeJobs > 10) {
+            advice.add("  ⚠️ 活跃协程过多，可能影响性能")
+        }
+        
+        if (advice.isEmpty()) {
+            advice.add("  ✅ 系统运行正常，无异常")
+        }
+        
+        return advice.joinToString("\n")
+    }
+    
+    /**
+     * 清理协程资源和所有闹钟
+     * 
+     * @param graceful 是否优雅关闭（等待正在执行的任务完成），默认 true
+     * @param timeoutMillis 优雅关闭超时时间（毫秒），默认 5秒
+     */
+    fun cleanup(graceful: Boolean = true, timeoutMillis: Long = 5000L) {
         try {
             val totalJobs = backupJobs.size
+            val totalAlarms = scheduledAlarms.size
             
-            // 取消所有备份任务
+            Log.record(TAG, "🧹 开始清理 AlarmScheduler 资源 (优雅模式: $graceful)...")
+            
+            // 1. 优雅关闭协程任务
+            if (graceful) {
+                val activeJobs = backupJobs.values.filter { it.isActive }
+                if (activeJobs.isNotEmpty()) {
+                    Log.debug(TAG, "⏳ 等待 ${activeJobs.size} 个活跃任务完成（最多 ${timeoutMillis/1000} 秒）...")
+                    // 使用 runBlocking 等待任务完成
+                    runBlocking {
+                        withTimeoutOrNull(timeoutMillis) {
+                            // 等待所有活跃任务完成
+                            activeJobs.forEach { job ->
+                                try {
+                                    job.join()
+                                } catch (e: Exception) {
+                                    // 任务被取消或其他异常，继续下一个
+                                }
+                            }
+                        } ?: run {
+                            Log.debug(TAG, "⚠️ 等待超时，强制取消剩余任务")
+                        }
+                    }
+                }
+            }
+            
+            // 2. 取消所有备份任务（清理残余）
             backupJobs.values.forEach { job ->
                 if (job.isActive) {
                     job.cancel("AlarmScheduler cleanup")
@@ -549,12 +740,22 @@ class AlarmScheduler(private val context: Context) {
             }
             backupJobs.clear()
             
-            // 取消协程作用域
+            // 3. 取消所有闹钟（包括主闹钟和备份闹钟）
+            scheduledAlarms.forEach { (requestCode, pendingIntent) ->
+                try {
+                    alarmManager?.cancel(pendingIntent)
+                } catch (e: Exception) {
+                    Log.debug(TAG, "取消闹钟${requestCode}失败: ${e.message}")
+                }
+            }
+            scheduledAlarms.clear()
+            backupAlarmRequestCodes.clear()
+            // 4. 取消协程作用域
             alarmScope.cancel("AlarmScheduler cleanup")
-            
-            Log.record(TAG, "AlarmScheduler协程资源已清理 (清理了${totalJobs}个备份任务)")
+            Log.record(TAG, "✅ AlarmScheduler资源已清理：${totalJobs}个协程任务，${totalAlarms}个闹钟")
         } catch (e: Exception) {
-            Log.error(TAG, "清理AlarmScheduler协程资源失败: " + e.message)
+            Log.error(TAG, "清理AlarmScheduler资源失败: " + e.message)
+            Log.printStackTrace(e)
         }
     }
 

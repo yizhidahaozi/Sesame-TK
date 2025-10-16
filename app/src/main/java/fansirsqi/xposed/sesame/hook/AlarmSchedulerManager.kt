@@ -30,11 +30,7 @@ class AlarmSchedulerManager {
     // 计算属性，替代 getStatus() 方法
     val status: String
         get() = alarmScheduler?.let { 
-            try {
-                "AlarmScheduler: 已初始化, ${it.getCoroutineStatus()}"
-            } catch (e: Exception) {
-                "AlarmScheduler: 状态获取失败 - ${e.message}"
-            }
+            "AlarmScheduler: 已初始化"
         } ?: "AlarmScheduler: 未初始化"
 
     /**
@@ -63,9 +59,7 @@ class AlarmSchedulerManager {
             }
 
             // 创建新实例
-            alarmScheduler = AlarmScheduler(context).also {
-                ApplicationHook.setAlarmScheduler(it)
-            }
+            alarmScheduler = AlarmScheduler(context)
             appContext = context
 
             Log.record(ALARM_TAG, "✅ AlarmScheduler初始化成功")
@@ -83,8 +77,7 @@ class AlarmSchedulerManager {
     fun cleanupAlarmScheduler() {
         alarmScheduler?.let { scheduler ->
             try {
-                val status = scheduler.getCoroutineStatus()
-                Log.record(ALARM_TAG, "🧹 开始清理AlarmScheduler: $status")
+                Log.record(ALARM_TAG, "🧹 开始清理AlarmScheduler")
                 scheduler.cleanup()
                 Log.record(ALARM_TAG, "✅ AlarmScheduler清理完成")
             } catch (e: Exception) {
@@ -92,7 +85,6 @@ class AlarmSchedulerManager {
                 Log.printStackTrace(ALARM_TAG, e)
             } finally {
                 alarmScheduler = null
-                ApplicationHook.setAlarmScheduler(null)
             }
         }
     }

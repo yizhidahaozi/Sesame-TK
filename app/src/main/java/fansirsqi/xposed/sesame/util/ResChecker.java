@@ -43,19 +43,15 @@ public class ResChecker {
                     memo.contains("小鸡在睡觉") ||
                     memo.contains("无法操作") ||
                     memo.contains("手速太快") ||
-                    memo.contains("有人抢在你前面") ||
+                    memo.contains("有人抢在你") ||
                     memo.contains("饲料槽已满") ||
                     memo.contains("当日达到上限") ||
                     memo.contains("适可而止") ||
+                    memo.contains("不支持rpc完成的任务") ||
                     memo.contains("庄园的小鸡太多了") ||
-                    "I07".equals(resultCode)
-
-
-
-
-            ) {
-                return false; // 返回false，但不打印错误日志
-            }
+                    "I07".equals(resultCode)) {
+                 return false; // 返回false，但不打印错误日志
+             }
             // 获取调用栈信息以确定错误来源
             StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
             String callerInfo = getString(stackTrace);
