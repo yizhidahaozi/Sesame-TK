@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,13 +76,27 @@ data class WaitingTaskPersistData(
  */
 object EnergyWaitingPersistence {
     private const val TAG = "EnergyWaitingPersistence"
-    private const val DATASTORE_KEY = "energy_waiting_tasks"
     
     // 任务最大保存时间（8小时，超过此时间的任务视为过期）
     private const val MAX_TASK_AGE_MS = 8 * 60 * 60 * 1000L
     
     // 协程作用域
     private val persistenceScope = CoroutineScope(Dispatchers.IO)
+    
+    /**
+     * 获取当前账号的 DataStore 存储键
+     * 每个账号使用独立的键，避免多账号切换时数据混淆
+     * 
+     * @return 包含当前用户 uid 的存储键，如果 uid 为空则使用默认键
+     */
+    private fun getDataStoreKey(): String {
+        val currentUid = UserMap.currentUid
+        return if (currentUid.isNullOrEmpty()) {
+            "energy_waiting_tasks_default"
+        } else {
+            "energy_waiting_tasks_$currentUid"
+        }
+    }
     
     /**
      * 保存蹲点任务到 DataStore（异步）
@@ -95,9 +110,10 @@ object EnergyWaitingPersistence {
                     WaitingTaskPersistData.fromWaitingTask(task)
                 }
                 
-                DataStore.put(DATASTORE_KEY, persistDataList)
+                val dataStoreKey = getDataStoreKey()
+                DataStore.put(dataStoreKey, persistDataList)
                 
-                Log.debug(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储")
+                Log.debug(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储 (key: $dataStoreKey)")
             } catch (e: Exception) {
                 Log.error(TAG, "保存蹲点任务失败: ${e.message}")
                 Log.printStackTrace(TAG, e)
@@ -112,11 +128,12 @@ object EnergyWaitingPersistence {
      */
     fun loadTasks(): List<EnergyWaitingManager.WaitingTask> {
         return try {
+            val dataStoreKey = getDataStoreKey()
             val typeRef = object : TypeReference<List<WaitingTaskPersistData>>() {}
-            val persistDataList = DataStore.getOrCreate(DATASTORE_KEY, typeRef)
+            val persistDataList = DataStore.getOrCreate(dataStoreKey, typeRef)
             
             if (persistDataList.isEmpty()) {
-                Log.debug(TAG, "持久化存储中无蹲点任务")
+                Log.debug(TAG, "持久化存储中无蹲点任务 (key: $dataStoreKey)")
                 return emptyList()
             }
             
@@ -160,8 +177,9 @@ object EnergyWaitingPersistence {
      */
     fun clearTasks() {
         try {
-            DataStore.put(DATASTORE_KEY, emptyList<WaitingTaskPersistData>())
-            Log.debug(TAG, "清空持久化存储")
+            val dataStoreKey = getDataStoreKey()
+            DataStore.put(dataStoreKey, emptyList<WaitingTaskPersistData>())
+            Log.debug(TAG, "清空持久化存储 (key: $dataStoreKey)")
         } catch (e: Exception) {
             Log.error(TAG, "清空持久化存储失败: ${e.message}")
         }
