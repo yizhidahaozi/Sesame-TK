@@ -3047,16 +3047,35 @@ class AntFarm : ModelTask() {
             if (animalCount >= 3) {
                 return
             }
-            Log.farm("雇佣小鸡👷[当前可雇佣小鸡数量:" + (3 - animalCount) + "只]")
+            val needHireCount = 3 - animalCount
+            Log.farm("雇佣小鸡👷[当前可雇佣小鸡数量:${needHireCount}只]")
+            
+            // 前置检查：饲料是否足够
             if (foodStock < 50) {
-                Log.record(TAG, "饲料不足，暂不雇佣")
+                Log.record(TAG, "❌ 雇佣失败：饲料不足（当前${foodStock}g，至少需要50g）")
                 return
             }
+            
+            // 前置检查：是否配置了雇佣好友列表
             val hireAnimalSet = hireAnimalList!!.value
+            if (hireAnimalSet.isEmpty()) {
+                Log.record(TAG, "❌ 雇佣失败：未配置雇佣好友列表")
+                Toast.show(
+                    "⚠️ 雇佣小鸡配置错误\n" +
+                    "已开启「雇佣小鸡」但未配置好友列表\n" +
+                    "请在「雇佣小鸡 | 好友列表」中勾选好友"
+                )
+                return
+            }
+            
             var hasNext: Boolean
             var pageStartSum = 0
             var s: String?
             var jo: JSONObject?
+            var checkedCount = 0  // 检查过的好友数量
+            var availableCount = 0  // 可雇佣状态的好友数量
+            val initialAnimalCount = animalCount  // 记录初始数量
+            
             do {
                 s = AntFarmRpcCall.rankingList(pageStartSum)
                 jo = JSONObject(s)
@@ -3075,8 +3094,11 @@ class AntFarm : ModelTask() {
                         if (!isHireAnimal || userId == UserMap.currentUid) {
                             continue
                         }
+                        
+                        checkedCount++
                         val actionTypeListStr = joo.getJSONArray("actionTypeList").toString()
                         if (actionTypeListStr.contains("can_hire_action")) {
+                            availableCount++
                             try {
                                 if (hireAnimalAction(userId)) {
                                     animalCount++
@@ -3084,7 +3106,7 @@ class AntFarm : ModelTask() {
                                 }
                             } catch (e: Exception) {
                                 if (e.message == "FARM_FULL") {
-                                    Log.record("庄园小鸡已满，停止雇佣")
+                                    Log.record(TAG, "庄园小鸡已满，停止雇佣")
                                     animalCount = 3  // 标记庄园已满，避免下次循环继续尝试
                                     break  // 跳出for循环
                                 }
@@ -3098,8 +3120,27 @@ class AntFarm : ModelTask() {
                     break
                 }
             } while (hasNext && animalCount < 3)
+            
+            // 详细的结果报告
+            val hiredCount = animalCount - initialAnimalCount
             if (animalCount < 3) {
-                Log.farm("雇佣小鸡失败，没有足够的小鸡可以雇佣")
+                val stillNeed = 3 - animalCount
+                Log.record(TAG, "雇佣小鸡结果统计：")
+                Log.record(TAG, "  • 成功雇佣：${hiredCount}只")
+                Log.record(TAG, "  • 还需雇佣：${stillNeed}只")
+                Log.record(TAG, "  • 已检查好友：${checkedCount}人")
+                Log.record(TAG, "  • 可雇佣状态：${availableCount}人")
+                
+                if (availableCount == 0) {
+                    Log.record(TAG, "❌ 失败原因：好友列表中没有可雇佣的小鸡")
+                    Log.record(TAG, "   建议：等待好友的小鸡回家或添加更多好友")
+                } else if (hiredCount < availableCount) {
+                    Log.record(TAG, "⚠️ 部分雇佣失败：好友的小鸡可能不在家")
+                } else {
+                    Log.record(TAG, "❌ 失败原因：可雇佣的小鸡数量不足")
+                }
+            } else if (hiredCount > 0) {
+                Log.record(TAG, "✅ 雇佣成功：共雇佣${hiredCount}只小鸡")
             }
         } catch (t: Throwable) {
             // 如果是庄园已满的情况，不记录为错误
