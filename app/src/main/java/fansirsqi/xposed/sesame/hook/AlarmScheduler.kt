@@ -214,9 +214,9 @@ class AlarmScheduler(private val context: Context) {
                             "，延迟：" + delayMillis / 1000 + "秒"
                 )
                 
-                // 定期输出诊断信息（每10次设置输出一次）
+                // 定期输出诊断信息（每3次设置输出一次）
                 scheduleCount++
-                if (scheduleCount % 10 == 0) {
+                if (scheduleCount % 3 == 0) {
                     Log.debug(TAG, diagnoseMemoryAndResources())
                 }
             }

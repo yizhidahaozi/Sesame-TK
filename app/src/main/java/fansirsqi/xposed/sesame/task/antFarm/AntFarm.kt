@@ -12,6 +12,7 @@ import fansirsqi.xposed.sesame.entity.AlipayUser
 import fansirsqi.xposed.sesame.entity.MapperEntity
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.farmFamilyOption
 import fansirsqi.xposed.sesame.entity.ParadiseCoinBenefit
+import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit.addIntervalLimit
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -1166,9 +1167,41 @@ class AntFarm : ModelTask() {
                     val taskId = "FA|$ownerFarmId"
                     if (!hasChildTask(taskId)) {
                         addChildTask(ChildModelTask(taskId, "FA", Runnable {
-                            // 蹲点投喂前先同步状态，检查小鸡是否还在睡觉
-                            syncAnimalStatus(ownerFarmId)
-                            feedAnimal(ownerFarmId)
+                            try {
+                                Log.record(TAG, "🔔 蹲点投喂任务触发")
+                                
+                                // 1️⃣ 同步最新状态
+                                syncAnimalStatus(ownerFarmId)
+                                
+                                // 2️⃣ 检查小鸡状态（可能在睡觉或已经被喂过了）
+                                if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
+                                    Log.record(TAG, "🍚 检测到小鸡饥饿，开始投喂")
+                                    
+                                    // 3️⃣ 执行喂食
+                                    if (feedAnimal(ownerFarmId)) {
+                                        Log.record(TAG, "✅ 投喂成功，刷新庄园状态")
+                                        
+                                        // 4️⃣ 重新进入庄园，获取最新状态
+                                        enterFarm()
+                                        
+                                        // 5️⃣ 关键：重新执行喂养逻辑，计算并创建下一次蹲点
+                                        kotlinx.coroutines.runBlocking {
+                                            handleAutoFeedAnimal()
+                                        }
+                                        
+                                        Log.record(TAG, "🔄 下一次蹲点任务已创建")
+                                    } else {
+                                        Log.record(TAG, "⚠️ 投喂失败，可能饲料不足")
+                                    }
+                                } else if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                                    Log.record(TAG, "💤 小鸡正在睡觉，跳过本次投喂")
+                                } else if (AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
+                                    Log.record(TAG, "😋 小鸡正在吃饭，可能已被其他逻辑喂食")
+                                }
+                            } catch (e: Exception) {
+                                Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
+                                Log.printStackTrace(TAG, e)
+                            }
                         }, nextFeedTime))
                         Log.record(
                             TAG,
@@ -1177,11 +1210,21 @@ class AntFarm : ModelTask() {
                             ) + "]执行"
                         )
                     } else {
-                        // 更新时间即可
+                        // 更新已存在的任务
                         addChildTask(ChildModelTask(taskId, "FA", Runnable {
-                            // 蹲点投喂前先同步状态，检查小鸡是否还在睡觉
-                            syncAnimalStatus(ownerFarmId)
-                            feedAnimal(ownerFarmId)
+                            try {
+                                syncAnimalStatus(ownerFarmId)
+                                if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
+                                    if (feedAnimal(ownerFarmId)) {
+                                        enterFarm()
+                                        kotlinx.coroutines.runBlocking {
+                                            handleAutoFeedAnimal()
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.printStackTrace(TAG, e)
+                            }
                         }, nextFeedTime))
                     }
                 }
@@ -2185,9 +2228,26 @@ class AntFarm : ModelTask() {
             val feedFriendAnimalMap: Map<String?, Int?> = feedFriendAnimalList!!.value
             for (entry in feedFriendAnimalMap.entries) {
                 val userId: String = entry.key!!
-                if (userId == UserMap.currentUid)  //跳过自己
-                    continue
-                if (!Status.canFeedFriendToday(userId, entry.value!!)) continue
+                val maxDailyCount: Int = entry.value!!
+                
+                // 智能冲突避免：如果是自己的账号
+                if (userId == UserMap.currentUid) {
+                    if (feedAnimal!!.value) {
+                        // 已开启"自动喂小鸡" → 优先使用蹲点机制（更精准），跳过好友列表喂食
+                        Toast.show(
+                            "⚠️ 配置冲突提醒\n" +
+                            "已开启「自动喂小鸡」，将使用蹲点机制（精准时间）\n" +
+                            "好友列表中的自己（配置${maxDailyCount}次）已被忽略\n" +
+                            "建议：无需在好友列表中添加自己"
+                        )
+                        continue
+                    } else {
+                        // 未开启"自动喂小鸡" → 使用好友列表机制（尊重次数限制）
+                        // 继续执行后续逻辑
+                    }
+                }
+                
+                if (!Status.canFeedFriendToday(userId, maxDailyCount)) continue
                 val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
                 delay(3 * 1000L) //延迟3秒
                 if (ResChecker.checkRes(TAG, jo)) {
