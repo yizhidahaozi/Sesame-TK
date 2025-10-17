@@ -5,138 +5,119 @@ import android.os.Handler
 import fansirsqi.xposed.sesame.util.Log
 
 /**
- * AlarmScheduler管理器 - 封装所有AlarmScheduler相关操作
- * 提供统一的接口和错误处理机制
- *
+ * 纯协程调度器管理器 - 无闹钟版本
+ * 
+ * ⚠️ 重要变更：已移除所有 AlarmManager 依赖
+ * 
  * 主要功能：
- * 1. AlarmScheduler的生命周期管理
+ * 1. CoroutineScheduler的生命周期管理
  * 2. 统一的错误处理和重试机制
  * 3. 自动故障恢复
  * 4. 详细的日志记录
+ * 
+ * 限制：
+ * - 息屏时可能被系统挂起
+ * - 进程被杀后无法自动恢复
+ * - Doze 模式下会被冻结
  */
 class AlarmSchedulerManager {
-    
-    // 使用 Kotlin 属性语法，自动生成 getter/setter
-    var alarmScheduler: AlarmScheduler? = null
+
+    // 使用纯协程调度器
+    var coroutineScheduler: CoroutineScheduler? = null
         private set
-    
+
     var appContext: Context? = null
     var mainHandler: Handler? = null
-    
+
     // 计算属性，替代 isAlarmSchedulerAvailable() 方法
     val isAlarmSchedulerAvailable: Boolean
-        get() = alarmScheduler != null
-    
+        get() = coroutineScheduler != null
+
     // 计算属性，替代 getStatus() 方法
     val status: String
-        get() = alarmScheduler?.let { 
-            "AlarmScheduler: 已初始化"
-        } ?: "AlarmScheduler: 未初始化"
+        get() = coroutineScheduler?.let {
+            "协程调度器: 已初始化 (无闹钟模式)"
+        } ?: "协程调度器: 未初始化"
 
     /**
-     * 设置依赖项 - 使用 Kotlin 的简洁语法
+     * 设置依赖项 - 兼容旧接口（已移除 AlarmScheduler 参数）
      */
-    fun setDependencies(alarmScheduler: AlarmScheduler?, appContext: Context?, mainHandler: Handler?) {
-        this.alarmScheduler = alarmScheduler
+    @Deprecated("直接使用 setAppContext 和 setMainHandler", level = DeprecationLevel.WARNING)
+    fun setDependencies(appContext: Context?, mainHandler: Handler?) {
         this.appContext = appContext
         this.mainHandler = mainHandler
     }
 
     /**
-     * 安全地初始化AlarmScheduler
+     * 安全地初始化协程调度器
      */
     fun initializeAlarmScheduler(context: Context?): Boolean {
         context ?: run {
-            Log.error(ALARM_TAG, "初始化AlarmScheduler失败: Context为null")
+            Log.error(SCHEDULER_TAG, "初始化协程调度器失败: Context为null")
             return false
         }
 
         return try {
             // 清理旧实例
-            alarmScheduler?.let {
-                Log.record(ALARM_TAG, "AlarmScheduler已存在，先清理旧实例")
+            coroutineScheduler?.let {
+                Log.record(SCHEDULER_TAG, "协程调度器已存在，先清理旧实例")
                 cleanupAlarmScheduler()
             }
 
             // 创建新实例
-            alarmScheduler = AlarmScheduler(context)
+            coroutineScheduler = CoroutineScheduler(context)
             appContext = context
 
-            Log.record(ALARM_TAG, "✅ AlarmScheduler初始化成功")
+            Log.record(SCHEDULER_TAG, "✅ 协程调度器初始化成功 (无闹钟模式)")
             true
         } catch (e: Exception) {
-            Log.error(ALARM_TAG, "❌ AlarmScheduler初始化失败: ${e.message}")
-            Log.printStackTrace(ALARM_TAG, e)
+            Log.error(SCHEDULER_TAG, "❌ 协程调度器初始化失败: ${e.message}")
+            Log.printStackTrace(SCHEDULER_TAG, e)
             false
         }
     }
 
     /**
-     * 安全地清理AlarmScheduler
+     * 安全地清理协程调度器
      */
     fun cleanupAlarmScheduler() {
-        alarmScheduler?.let { scheduler ->
+        coroutineScheduler?.let { scheduler ->
             try {
-                Log.record(ALARM_TAG, "🧹 开始清理AlarmScheduler")
+                Log.record(SCHEDULER_TAG, "🧹 开始清理协程调度器")
                 scheduler.cleanup()
-                Log.record(ALARM_TAG, "✅ AlarmScheduler清理完成")
+                Log.record(SCHEDULER_TAG, "✅ 协程调度器清理完成")
             } catch (e: Exception) {
-                Log.error(ALARM_TAG, "❌ 清理AlarmScheduler失败: ${e.message}")
-                Log.printStackTrace(ALARM_TAG, e)
+                Log.error(SCHEDULER_TAG, "❌ 清理协程调度器失败: ${e.message}")
+                Log.printStackTrace(SCHEDULER_TAG, e)
             } finally {
-                alarmScheduler = null
+                coroutineScheduler = null
             }
         }
     }
 
     /**
-     * 安全地调度精确执行
+     * 安全地调度精确执行（无闹钟版本，直接转换为延迟执行）
+     * 
+     * @param delayMillis 延迟毫秒数
+     * @param exactTimeMillis 精确时间戳（无闹钟版本不使用，保留参数仅为兼容性）
      */
-    fun scheduleExactExecution(delayMillis: Long, exactTimeMillis: Long) {
-        executeWithAlarmScheduler("调度精确执行") { scheduler ->
-            scheduler.scheduleExactExecution(delayMillis, exactTimeMillis)
-            Log.record(ALARM_TAG, "⏰ 精确执行调度成功: 延迟${delayMillis}ms")
-        }
+    @Deprecated("参数 exactTimeMillis 未使用，建议直接调用 scheduleDelayedExecution", ReplaceWith("scheduleDelayedExecution(delayMillis)"))
+    fun scheduleExactExecution(delayMillis: Long, @Suppress("UNUSED_PARAMETER") exactTimeMillis: Long) {
+        scheduleDelayedExecution(delayMillis)
     }
 
     /**
      * 安全地调度延迟执行
      */
     fun scheduleDelayedExecution(delayMillis: Long): Boolean {
-        return executeWithAlarmScheduler("调度延迟执行") { scheduler ->
+        return executeWithScheduler { scheduler ->
             scheduler.scheduleDelayedExecution(delayMillis)
-            Log.record(ALARM_TAG, "⏰ 延迟执行调度成功: 延迟${delayMillis}ms")
+            Log.record(SCHEDULER_TAG, "⏰ 延迟执行调度成功: 延迟${delayMillis}ms (协程模式)")
             true
         } ?: false
     }
 
-    /**
-     * 安全地调度唤醒闹钟
-     */
-    fun scheduleWakeupAlarm(triggerAtMillis: Long, requestCode: Int, isMainAlarm: Boolean): Boolean {
-        return executeWithAlarmScheduler("调度唤醒闹钟") { scheduler ->
-            val success = scheduler.scheduleWakeupAlarm(triggerAtMillis, requestCode, isMainAlarm)
-            val alarmType = if (isMainAlarm) "主闹钟" else "自定义闹钟"
-            
-            if (success) {
-                Log.record(ALARM_TAG, "⏰ ${alarmType}设置成功: ID=$requestCode")
-            } else {
-                Log.runtime(ALARM_TAG, "⚠️ 闹钟设置返回false: ID=$requestCode")
-            }
-            success
-        } ?: false
-    }
-
-    /**
-     * 处理闹钟触发
-     */
-    fun handleAlarmTrigger(requestCode: Int) {
-        executeWithAlarmScheduler("处理闹钟触发") { scheduler ->
-            scheduler.handleAlarmTrigger()
-            scheduler.consumeAlarm(requestCode)
-            Log.record(ALARM_TAG, "✅ 闹钟触发处理完成: ID=$requestCode")
-        }
-    }
+    // ⚠️ 已彻底移除闹钟相关方法（scheduleWakeupAlarm, handleAlarmTrigger）
 
     /**
      * 带重试机制的延迟执行调度
@@ -144,37 +125,38 @@ class AlarmSchedulerManager {
     fun scheduleDelayedExecutionWithRetry(delayMillis: Long, operation: String) {
         scheduleDelayedExecutionWithRetry(delayMillis, operation, 0)
     }
+    
 
     /**
-     * 核心辅助方法：安全执行 AlarmScheduler 操作
+     * 核心辅助方法：安全执行协程调度器操作
      */
-    private inline fun <T> executeWithAlarmScheduler(operation: String, action: (AlarmScheduler) -> T): T? {
-        // 检查并确保 AlarmScheduler 可用
-        if (!ensureAlarmSchedulerAvailable(operation)) {
+    private inline fun <T> executeWithScheduler(action: (CoroutineScheduler) -> T): T? {
+        // 检查并确保协程调度器可用
+        if (!ensureSchedulerAvailable()) {
             return null
         }
-        
+
         return try {
-            alarmScheduler?.let(action)
+            coroutineScheduler?.let(action)
         } catch (e: Exception) {
-            Log.error(ALARM_TAG, "❌ ${operation}失败: ${e.message}")
-            Log.printStackTrace(ALARM_TAG, e)
+            Log.error(SCHEDULER_TAG, "❌ 调度操作失败: ${e.message}")
+            Log.printStackTrace(SCHEDULER_TAG, e)
             null
         }
     }
-    
+
     /**
-     * 确保 AlarmScheduler 可用，如果不可用则尝试重新初始化
+     * 确保协程调度器可用，如果不可用则尝试重新初始化
      */
-    private fun ensureAlarmSchedulerAvailable(operation: String): Boolean {
+    private fun ensureSchedulerAvailable(): Boolean {
         if (isAlarmSchedulerAvailable) return true
-        
-        Log.runtime(ALARM_TAG, "⚠️ $operation: AlarmScheduler不可用，尝试重新初始化")
-        
+
+        Log.runtime(SCHEDULER_TAG, "⚠️ 协程调度器不可用，尝试重新初始化")
+
         return if (appContext != null && initializeAlarmScheduler(appContext)) {
             true // 重新初始化成功
         } else {
-            Log.error(ALARM_TAG, "❌ $operation: AlarmScheduler重新初始化失败")
+            Log.error(SCHEDULER_TAG, "❌ 协程调度器重新初始化失败")
             false // 重新初始化失败
         }
     }
@@ -187,22 +169,22 @@ class AlarmSchedulerManager {
 
         if (retryCount < MAX_RETRY_COUNT && mainHandler != null) {
             val retryDelay = RETRY_DELAY_BASE * (retryCount + 1)
-            Log.runtime(ALARM_TAG, "⏳ ${operation}失败，${retryDelay}ms后重试 (第${retryCount + 1}次)")
+            Log.runtime(SCHEDULER_TAG, "⏳ ${operation}失败，${retryDelay}ms后重试 (第${retryCount + 1}次)")
 
             mainHandler?.postDelayed({
-                // 重试前尝试重新初始化AlarmScheduler
+                // 重试前尝试重新初始化协程调度器
                 if (!isAlarmSchedulerAvailable) {
                     initializeAlarmScheduler(appContext)
                 }
                 scheduleDelayedExecutionWithRetry(delayMillis, operation, retryCount + 1)
             }, retryDelay)
         } else {
-            Log.error(ALARM_TAG, "❌ ${operation}重试超过最大次数，操作失败")
+            Log.error(SCHEDULER_TAG, "❌ ${operation}重试超过最大次数，操作失败")
         }
     }
 
     companion object {
-        private const val ALARM_TAG = "AlarmManager"
+        private const val SCHEDULER_TAG = "CoroutineScheduler"
         private const val MAX_RETRY_COUNT = 3
         private const val RETRY_DELAY_BASE = 2000L // 2秒基础延迟
     }
