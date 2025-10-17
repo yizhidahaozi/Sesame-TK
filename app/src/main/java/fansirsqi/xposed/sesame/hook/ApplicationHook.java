@@ -3,7 +3,6 @@ package fansirsqi.xposed.sesame.hook;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.*;
 import android.content.pm.PackageInfo;
@@ -11,9 +10,9 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
-
 import androidx.annotation.NonNull;
 import fansirsqi.xposed.sesame.hook.keepalive.AlipayComponentHelper;
+import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 import java.io.File;
 import java.util.Calendar;
@@ -61,17 +60,20 @@ import io.github.libxposed.api.XposedModuleInterface;
 import kotlin.jvm.JvmStatic;
 import lombok.Getter;
 
-public class ApplicationHook implements TaskExecutor {
+public class ApplicationHook {
     static final String TAG = ApplicationHook.class.getSimpleName();
     public XposedInterface xposedInterface = null;
+    @Getter
+    @Setter
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
+    
+
     /**
      * AlarmScheduler管理器 - 统一管理所有闹钟相关功能
      * 通过此管理器访问所有闹钟调度功能，避免直接引用 AlarmScheduler
      */
     private static final AlarmSchedulerManager alarmManager = new AlarmSchedulerManager();
-
 
     @Getter
     private static ClassLoader classLoader = null;
@@ -88,9 +90,6 @@ public class ApplicationHook implements TaskExecutor {
         return appContext;
     }
 
-    @SuppressLint("StaticFieldLeak")
-    static Context moduleContext = null;
-
     @Getter
     static AlipayVersion alipayVersion = new AlipayVersion("");
 
@@ -101,7 +100,6 @@ public class ApplicationHook implements TaskExecutor {
         return hooked;
     }
 
-
     private static volatile boolean init = false;
     static volatile Calendar dayCalendar;
     @Getter
@@ -109,6 +107,8 @@ public class ApplicationHook implements TaskExecutor {
     private static volatile boolean alarmTriggeredFlag = false;
     @Getter
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
+
+
 
     @SuppressLint("StaticFieldLeak")
     static Service service;
@@ -276,7 +276,6 @@ public class ApplicationHook implements TaskExecutor {
                     // 设置AlarmSchedulerManager依赖项
                     alarmManager.setMainHandler(mainHandler);
                     alarmManager.setAppContext(appContext);
-                    alarmManager.setTaskExecutor(createTaskExecutor());
                     // 初始化闹钟调度器
                     alarmManager.initializeAlarmScheduler(appContext);
 
@@ -454,8 +453,7 @@ public class ApplicationHook implements TaskExecutor {
                                     Log.record(TAG, "❌执行异常");
                                     Log.printStackTrace(TAG, e);
                                 } finally {
-                                    // 通过 AlarmSchedulerManager 释放唤醒锁
-                                    alarmManager.releaseWakeLock();
+                                    AlarmScheduler.releaseWakeLock();
                                 }
                             });
                             dayCalendar = Calendar.getInstance();
@@ -533,7 +531,7 @@ public class ApplicationHook implements TaskExecutor {
                 return;
             }
 
-            // 清理旧的唤醒闹钟
+            // 清理旧唤醒闹钟
             unsetWakenAtTimeAlarm();
 
             // 设置0点唤醒
@@ -724,14 +722,7 @@ public class ApplicationHook implements TaskExecutor {
         }
     }
 
-    private static boolean isCrossedMidnight(long currentTime) {
-        Calendar lastExecCalendar = Calendar.getInstance();
-        lastExecCalendar.setTimeInMillis(lastExecTime);
-        Calendar currentCalendar = Calendar.getInstance();
-        currentCalendar.setTimeInMillis(currentTime);
-        return lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
-                lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
-    }
+
 
     /**
      * 销毁处理程序
@@ -870,57 +861,6 @@ public class ApplicationHook implements TaskExecutor {
         }
     }
 
-    // ========== TaskExecutor 接口实现 ==========
-    
-    /**
-     * 创建 TaskExecutor 实例（静态工厂方法）
-     * 用于依赖注入到 AlarmScheduler
-     */
-    private static TaskExecutor createTaskExecutor() {
-        return new TaskExecutor() {
-            @Override
-            public boolean isTaskRunning() {
-                if (mainTask == null) {
-                    return false;
-                }
-                Thread taskThread = mainTask.getThread();
-                return taskThread != null && taskThread.isAlive();
-            }
-
-            @Override
-            public void restartTask() {
-                restartByBroadcast();
-            }
-        };
-    }
-    
-    /**
-     * 检查主任务是否正在运行（实例方法 - 已废弃）
-     * @return true 如果任务正在运行，false 否则
-     * @deprecated 请使用通过 createTaskExecutor() 创建的实例
-     */
-    @Deprecated
-    @Override
-    public boolean isTaskRunning() {
-        if (mainTask == null) {
-            return false;
-        }
-        Thread taskThread = mainTask.getThread();
-        return taskThread != null && taskThread.isAlive();
-    }
-
-    /**
-     * 通过广播重启任务（实例方法 - 已废弃）
-     * @deprecated 请使用通过 createTaskExecutor() 创建的实例
-     */
-    @Deprecated
-    @Override
-    public void restartTask() {
-        restartByBroadcast();
-    }
-
-    // ========== 原有方法 ==========
-
     /**
      * 通过广播发送重启模块服务的指令。
      */
@@ -945,14 +885,6 @@ public class ApplicationHook implements TaskExecutor {
         }
     }
 
-    @SuppressLint("ObsoleteSdkInt")
-    private static int getPendingIntentFlag() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
-        } else {
-            return PendingIntent.FLAG_UPDATE_CURRENT;
-        }
-    }
 
     public static Object getMicroApplicationContext() {
         if (microApplicationContextObject == null) {
@@ -1033,6 +965,7 @@ public class ApplicationHook implements TaskExecutor {
                     appContext.startActivity(intent);
                 });
     }
+
 
     static class AlipayBroadcastReceiver extends BroadcastReceiver {
         @Override

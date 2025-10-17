@@ -1,24 +1,28 @@
 package fansirsqi.xposed.sesame.hook
 
-// import android.os.Handler // 不再需要Handler
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+// import android.os.Handler // 不再需要Handler
 import android.os.PowerManager
 import androidx.annotation.RequiresApi
-import androidx.core.net.toUri
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.task.BaseTask
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.TimeUtil
-import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
+import androidx.core.net.toUri
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 统一的闹钟调度管理器（协程版本）
@@ -30,43 +34,31 @@ import kotlin.random.Random
  * 4. 唤醒锁管理
  *
  * @param context Android上下文
- * @param taskExecutor 任务执行器（可选），用于备份机制触发任务重启
  */
-class AlarmScheduler(
-    private val context: Context,
-    private val taskExecutor: TaskExecutor? = null
-) {
+class AlarmScheduler(private val context: Context) {
     private val scheduledAlarms: MutableMap<Int, PendingIntent> = ConcurrentHashMap()
+    private val isTaskExecutionPending = AtomicBoolean(false)
 
     // 协程相关
-    // 使用 Dispatchers.Default 因为闹钟调度主要是计算密集型任务（时间计算、状态管理）
-    // 而非 IO 密集型（文件、网络），具体 IO 操作会在内部切换到合适的调度器
     private val alarmScope = CoroutineScope(
         SupervisorJob() +
                 Dispatchers.Default +
                 CoroutineName("AlarmSchedulerScope")
     )
+    private val executionMutex = Mutex()
 
-    // 备份管理器（组合模式）
-    private val backupManager = AlarmBackupManager(alarmScope, taskExecutor)
-    
-    // 实例级唤醒锁管理（避免静态字段的多实例问题）
-    private var wakeLock: PowerManager.WakeLock? = null
+    // 存储备份任务的Job，用于取消
+    private val backupJobs = ConcurrentHashMap<String, Job>()
 
     /**
      * 闹钟相关常量
      */
     object Constants {
-        // 唤醒锁相关
-        const val WAKE_LOCK_SETUP_TIMEOUT = 5000L // 5秒，设置闹钟时的临时唤醒锁超时
-        const val WAKE_LOCK_EXECUTION_TIMEOUT = 15 * 60 * 1000L // 15分钟，任务执行时的唤醒锁超时
-
-        const val BACKUP_ALARM_DELAY = 12000L // 12秒，备份闹钟延迟
-        
-        // 请求码相关
-        const val REQUEST_CODE_MODULO = 10000 // 请求码取模基数
-        const val REQUEST_CODE_MULTIPLIER = 10 // 请求码乘数
-        const val BACKUP_REQUEST_CODE_OFFSET = 10000 // 备份闹钟请求码偏移量
+        const val WAKE_LOCK_SETUP_TIMEOUT = 5000L // 5秒
+        const val FIRST_BACKUP_DELAY = 15000L // 15秒，协程版本可以更快响应
+        const val SECOND_BACKUP_DELAY = 35000L // 35秒，优化备份时间
+        const val BACKUP_ALARM_DELAY = 12000L // 12秒，更快的备份闹钟
+        const val BACKUP_REQUEST_CODE_OFFSET = 10000
     }
 
     /**
@@ -75,24 +67,6 @@ class AlarmScheduler(
     object Actions {
         const val EXECUTE = "com.eg.android.AlipayGphone.sesame.execute"
         const val ALARM_CATEGORY = "fansirsqi.xposed.sesame.ALARM_CATEGORY"
-    }
-
-    /**
-     * 异常处理工具方法
-     */
-    private inline fun <T> safeExecute(
-        operation: String,
-        printStackTrace: Boolean = false,
-        defaultValue: T? = null,
-        block: () -> T
-    ): T? = try {
-        block()
-    } catch (e: Exception) {
-        Log.error(TAG, "$operation 失败: ${e.message}")
-        if (printStackTrace) {
-            Log.printStackTrace(TAG, e)
-        }
-        defaultValue
     }
 
     /**
@@ -141,10 +115,13 @@ class AlarmScheduler(
      * 取消指定闹钟
      */
     fun cancelAlarm(pendingIntent: PendingIntent?) {
-        safeExecute("取消闹钟", printStackTrace = true) {
+        try {
             if (pendingIntent != null) {
                 alarmManager?.cancel(pendingIntent)
             }
+        } catch (e: Exception) {
+            Log.error(TAG, "取消闹钟失败: " + e.message)
+            Log.printStackTrace(e)
         }
     }
 
@@ -162,28 +139,6 @@ class AlarmScheduler(
             scheduledAlarms.remove(requestCode)
             Log.record(TAG, "已消费并取消闹钟: ID=$requestCode")
         }
-    }
-
-    /**
-     * 取消所有已设置的闹钟
-     * 注意：此方法只取消闹钟，不清理协程资源
-     */
-    fun cancelAllAlarms() {
-        if (scheduledAlarms.isEmpty()) {
-            Log.record(TAG, "没有需要取消的闹钟")
-            return
-        }
-
-        val totalAlarms = scheduledAlarms.size
-        scheduledAlarms.forEach { (requestCode, pendingIntent) ->
-            try {
-                cancelAlarm(pendingIntent)
-            } catch (e: Exception) {
-                Log.error(TAG, "取消闹钟失败: ID=$requestCode, ${e.message}")
-            }
-        }
-        scheduledAlarms.clear()
-        Log.record(TAG, "已取消所有闹钟，共${totalAlarms}个")
     }
 
     /**
@@ -212,7 +167,7 @@ class AlarmScheduler(
                     PowerManager.PARTIAL_WAKE_LOCK,
                     "Sesame:AlarmWakeLock:$requestCode"
                 )
-                wakeLock.acquire(Constants.WAKE_LOCK_SETUP_TIMEOUT) // 持有指定时间以确保闹钟设置成功
+                wakeLock.acquire(5000) // 持有5秒钟以确保闹钟设置成功
                 Log.record(
                     TAG,
                     "已设置多重保护闹钟: ID=$requestCode, 预定时间=${TimeUtil.getTimeStr(triggerAtMillis)}"
@@ -240,11 +195,10 @@ class AlarmScheduler(
             )
             val success = setAlarm(exactTimeMillis, pendingIntent, requestCode)
             if (success) {
-                // 设置待处理标志并启动备份机制
-                backupManager.setTaskPending(true)
-                backupManager.scheduleBackups(delayMillis)  // 协程备份已足够
-                // 同时设置传统的备份闹钟（可选的第三级备份）
-                scheduleBackupAlarm(exactTimeMillis)
+                // 设置一个待处理任务
+                isTaskExecutionPending.set(true)
+                // 设置备份机制
+                scheduleBackupMechanisms(exactTimeMillis, delayMillis)
                 // 更新通知
                 updateNotification(exactTimeMillis)
                 // 保存执行状态
@@ -259,20 +213,50 @@ class AlarmScheduler(
             Log.error(TAG, "设置闹钟备份失败：" + e.message)
             Log.printStackTrace(e)
 
-            // 失败时仍然启动备份机制
-            backupManager.setTaskPending(true)
-            backupManager.scheduleBackups(delayMillis)
+            // 失败时使用协程备份
+            scheduleCoroutineBackup(delayMillis)
         }
     }
 
     /**
-     * 设置备份闹钟（第三级备份）
+     * 设置备份机制（协程版本）
+     */
+    private fun scheduleBackupMechanisms(exactTimeMillis: Long, delayMillis: Long) {
+        val backupKey = "backup_${System.currentTimeMillis()}"
+        // 取消之前的备份任务
+        backupJobs.values.forEach { it.cancel() }
+        backupJobs.clear()
+        
+        // 1. 协程第一级备份
+        val firstBackupJob = alarmScope.launch {
+            delay(delayMillis + Constants.FIRST_BACKUP_DELAY)
+            if (isActive && isTaskExecutionPending.compareAndSet(true, false)) {
+                executeBackupTaskSuspend()
+            }
+        }
+        backupJobs["${backupKey}_first"] = firstBackupJob
+
+        // 2. 协程第二级备份
+        val secondBackupJob = alarmScope.launch {
+            delay(delayMillis + Constants.SECOND_BACKUP_DELAY)
+            if (isActive && isTaskExecutionPending.compareAndSet(true, false)) {
+                executeBackupTaskSuspend()
+            }
+        }
+        backupJobs["${backupKey}_second"] = secondBackupJob
+        // 3. 备份闹钟
+        scheduleBackupAlarm(exactTimeMillis)
+    }
+
+
+    /**
+     * 设置备份闹钟
      */
     @SuppressLint("DefaultLocale")
     private fun scheduleBackupAlarm(exactTimeMillis: Long) {
-        safeExecute("设置备份闹钟") {
+        try {
             // 备份闹钟使用随机请求码以避免冲突
-            val backupRequestCode = (System.currentTimeMillis() % Constants.REQUEST_CODE_MODULO).toInt() + Constants.BACKUP_REQUEST_CODE_OFFSET
+            val backupRequestCode = (System.currentTimeMillis() % 10000).toInt() + Constants.BACKUP_REQUEST_CODE_OFFSET
             val backupTriggerTime = exactTimeMillis + Constants.BACKUP_ALARM_DELAY
             val backupIntent = Intent(Actions.EXECUTE).apply {
                 putExtra("execution_time", backupTriggerTime)
@@ -298,6 +282,8 @@ class AlarmScheduler(
                     "已设置备份闹钟: ID=$backupRequestCode, 预定时间=${TimeUtil.getTimeStr(backupTriggerTime)} (+${Constants.BACKUP_ALARM_DELAY / 1000}秒)"
                 )
             }
+        } catch (e: Exception) {
+            Log.error(TAG, "设置备份闹钟失败: " + e.message)
         }
     }
 
@@ -319,11 +305,9 @@ class AlarmScheduler(
 
     /**
      * 生成唯一请求码
-     * 基于时间戳生成，确保唯一性
      */
     private fun generateRequestCode(timeMillis: Long): Int {
-        return (timeMillis % Constants.REQUEST_CODE_MODULO * Constants.REQUEST_CODE_MULTIPLIER 
-                + Random.nextInt(Constants.REQUEST_CODE_MULTIPLIER)).toInt()
+        return (timeMillis % 10000 * 10 + Random.nextInt(10)).toInt()
     }
 
     /**
@@ -346,7 +330,7 @@ class AlarmScheduler(
      */
     @RequiresApi(api = Build.VERSION_CODES.S)
     private fun requestAlarmPermission() {
-        safeExecute("请求精确闹钟权限") {
+        try {
             val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                 data = ("package:" + General.PACKAGE_NAME).toUri()
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -354,6 +338,8 @@ class AlarmScheduler(
             context.startActivity(intent)
             Log.record(TAG, "已发送精确闹钟权限请求，等待用户授权")
             Notify.updateStatusText("请授予精确闹钟权限以确保定时任务正常执行")
+        } catch (e: Exception) {
+            Log.error(TAG, "请求精确闹钟权限失败: " + e.message)
         }
     }
 
@@ -368,11 +354,10 @@ class AlarmScheduler(
     }
 
     /**
-     * 获取AlarmManager实例（使用 lazy 缓存，避免重复获取）
+     * 获取AlarmManager实例
      */
-    private val alarmManager: AlarmManager? by lazy {
-        context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-    }
+    private val alarmManager: AlarmManager?
+        get() = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
 
     /**
      * 获取PendingIntent标志
@@ -380,6 +365,49 @@ class AlarmScheduler(
     private val pendingIntentFlags: Int
         get() = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
 
+    /**
+     * 执行备份任务（协程版本）
+     */
+    private suspend fun executeBackupTaskSuspend() = withContext(Dispatchers.Main) {
+        executionMutex.withLock {
+            try {
+                val  aTask=  ApplicationHook.mainTask
+                // 检查主任务是否已在运行
+                if (aTask is BaseTask) {
+                    val taskThread = aTask.thread
+                    if (taskThread?.isAlive == true) {
+                        Log.record(TAG, "主任务正在运行，备份任务跳过执行。")
+                        return@withLock
+                    }
+                }
+                Log.record(TAG, "通过协程备份重启任务")
+                ApplicationHook.restartByBroadcast()
+                Log.record(TAG, "协程备份任务触发完成")
+            } catch (e: Exception) {
+                Log.error(TAG, "执行协程备份任务失败: " + e.message)
+            }
+        }
+    }
+    /**
+     * 执行备份任务（兼容旧版本）
+     */
+    private fun executeBackupTask() {
+        // 启动协程版本
+        alarmScope.launch {
+            executeBackupTaskSuspend()
+        }
+    }
+
+    /**
+     * 协程备份执行（替代Handler）
+     */
+    private fun scheduleCoroutineBackup(delayMillis: Long) {
+        alarmScope.launch {
+            delay(delayMillis)
+            Log.record(TAG, "闹钟设置失败，使用协程备份执行")
+            executeBackupTaskSuspend()
+        }
+    }
 
 
     /**
@@ -442,10 +470,15 @@ class AlarmScheduler(
      * 由BroadcastReceiver调用，用于处理闹钟触发
      */
     fun handleAlarmTrigger() {
-        // 通过 backupManager 处理闹钟触发
-        backupManager.handleAlarmTrigger()
-        // 获取唤醒锁确保任务执行
-        acquireWakeLock()
+        if (isTaskExecutionPending.compareAndSet(true, false)) {
+            Log.record(TAG, "闹钟触发，开始执行任务。")
+            // 获取唤醒锁
+            acquireWakeLock()
+            // 执行任务
+            executeBackupTask()
+        } else {
+            Log.record(TAG, "闹钟触发，但任务已由其他机制启动，跳过执行。")
+        }
     }
 
     /**
@@ -459,9 +492,9 @@ class AlarmScheduler(
             }
         }
         if (wakeLock?.isHeld == false) {
-            // 设置超时，防止任务卡死导致无法释放
-            wakeLock?.acquire(Constants.WAKE_LOCK_EXECUTION_TIMEOUT)
-            Log.record(TAG, "闹钟触发，已获取唤醒锁以确保任务持续执行 (超时: ${Constants.WAKE_LOCK_EXECUTION_TIMEOUT / 60000}分钟)")
+            // 设置15分钟超时，防止任务卡死导致无法释放
+            wakeLock?.acquire(15 * 60 * 1000L)
+            Log.record(TAG, "闹钟触发，已获取唤醒锁以确保任务持续执行")
         }
     }
 
@@ -470,91 +503,55 @@ class AlarmScheduler(
      */
     fun getCoroutineStatus(): String {
         return try {
+            val activeJobs = backupJobs.values.count { it.isActive }
+            val completedJobs = backupJobs.values.count { it.isCompleted }
+            val cancelledJobs = backupJobs.values.count { it.isCancelled }
             val scopeActive = alarmScope.isActive
-            val backupStatus = backupManager.getStatus()
-            "协程状态: 作用域=${if (scopeActive) "活跃" else "非活跃"}, $backupStatus"
+            "协程状态: 作用域=${if (scopeActive) "活跃" else "非活跃"}, " +
+                    "活跃任务=$activeJobs, 完成任务=$completedJobs, 取消任务=$cancelledJobs"
         } catch (e: Exception) {
             "协程状态获取失败: ${e.message}"
         }
     }
 
     /**
-     * 清理所有资源（包括闹钟、协程、唤醒锁）
-     * 使用 runCatching 确保所有清理步骤都能执行，不会因某个步骤失败而中断
+     * 清理协程资源
      */
     fun cleanup() {
-        val errors = mutableListOf<String>()
-        val totalAlarms = scheduledAlarms.size
+        try {
+            val totalJobs = backupJobs.size
 
-        // 1. 取消所有已设置的闹钟
-        runCatching {
-            var successCount = 0
-            scheduledAlarms.forEach { (requestCode, pendingIntent) ->
-                runCatching {
-                    cancelAlarm(pendingIntent)
-                    successCount++
-                }.onFailure { e ->
-                    Log.error(TAG, "取消闹钟失败: ID=$requestCode, ${e.message}")
+            // 取消所有备份任务
+            backupJobs.values.forEach { job ->
+                if (job.isActive) {
+                    job.cancel("AlarmScheduler cleanup")
                 }
             }
-            scheduledAlarms.clear()
-            Log.record(TAG, "已取消 $successCount/$totalAlarms 个闹钟")
-        }.onFailure { e ->
-            errors.add("闹钟清理异常: ${e.message}")
-        }
+            backupJobs.clear()
 
-        // 2. 取消所有备份任务（通过 backupManager）
-        runCatching {
-            backupManager.cancelAllBackups()
-        }.onFailure { e ->
-            errors.add("备份任务清理异常: ${e.message}")
-        }
-
-        // 3. 取消协程作用域
-        runCatching {
+            // 取消协程作用域
             alarmScope.cancel("AlarmScheduler cleanup")
-            Log.record(TAG, "已取消协程作用域")
-        }.onFailure { e ->
-            errors.add("协程作用域取消异常: ${e.message}")
-        }
 
-        // 4. 重置待处理标志（通过 backupManager）
-        runCatching {
-            backupManager.setTaskPending(false)
-        }.onFailure { e ->
-            errors.add("重置标志异常: ${e.message}")
+            Log.record(TAG, "AlarmScheduler协程资源已清理 (清理了${totalJobs}个备份任务)")
+        } catch (e: Exception) {
+            Log.error(TAG, "清理AlarmScheduler协程资源失败: " + e.message)
         }
-
-        // 5. 释放唤醒锁
-        runCatching {
-            releaseWakeLock()
-        }.onFailure { e ->
-            errors.add("唤醒锁释放异常: ${e.message}")
-        }
-
-        // 汇总清理结果
-        if (errors.isEmpty()) {
-            Log.record(TAG, "✅ AlarmScheduler资源已全部清理 (闹钟:${totalAlarms}个)")
-        } else {
-            Log.error(TAG, "⚠️ AlarmScheduler清理完成，但遇到 ${errors.size} 个错误:")
-            errors.forEach { Log.error(TAG, "  - $it") }
-        }
-    }
-
-    /**
-     * 释放唤醒锁（实例方法）
-     */
-    fun releaseWakeLock() {
-        if (wakeLock?.isHeld == true) {
-            safeExecute("释放唤醒锁") {
-                wakeLock?.release()
-                Log.record(TAG, "唤醒锁已释放")
-            }
-        }
-        wakeLock = null
     }
 
     companion object {
         private const val TAG = "AlarmScheduler"
+        private var wakeLock: PowerManager.WakeLock? = null
+
+        @JvmStatic
+        fun releaseWakeLock() {
+            if (wakeLock?.isHeld == true) {
+                try {
+                    wakeLock?.release()
+                    Log.record(TAG, "唤醒锁已释放")
+                } catch (e: Exception) {
+                    Log.error(TAG, "释放唤醒锁失败: " + e.message)
+                }
+            }
+        }
     }
 }
