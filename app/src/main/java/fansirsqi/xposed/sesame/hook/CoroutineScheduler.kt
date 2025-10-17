@@ -110,7 +110,6 @@ class CoroutineScheduler(private val context: Context) {
         executionMutex.withLock {
             try {
                 Log.record(TAG, "开始执行任务")
-                
                 // ✅ 唤醒支付宝进程
                 try {
                     AlipayComponentHelper(context).wakeupAlipayLite()
