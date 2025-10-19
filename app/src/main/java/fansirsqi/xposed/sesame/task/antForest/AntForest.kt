@@ -1928,10 +1928,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return@withContext
             }
             
-            // 优化：限制处理好友数量，加快主任务完成
-            // 只处理前60个好友（前20个已处理，再处理40个即2批）
-            val maxFriendsToProcess = 60 // 可调整：60/100/150等
-            val remainingToProcess = minOf(totalDatas.length() - 20, maxFriendsToProcess - 20)
+            // 处理所有好友（无限制模式）
+            val remainingToProcess = totalDatas.length() - 20
             
             if (remainingToProcess <= 0) {
                 Log.record(TAG, rankingName + "已处理前20位好友，跳过后续处理")
@@ -1943,13 +1941,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val batches = (remainingToProcess + batchSize - 1) / batchSize
             Log.record(
                 TAG,
-                "⚡ 快速模式：处理" + rankingName + "前${maxFriendsToProcess}位好友中的后续${remainingToProcess}位，共" + batches + "批（跳过${totalDatas.length() - maxFriendsToProcess}位好友）"
+                "🌟 处理所有好友：" + rankingName + "共${totalDatas.length()}位好友，需处理后续${remainingToProcess}位，共${batches}批"
             )
 
             // 串行处理批次，避免总并发数过高
             var batchCount = 0
 
-            for (pos in 20..<minOf(totalDatas.length(), maxFriendsToProcess)) {
+            for (pos in 20..<totalDatas.length()) {
                 // 检查协程是否被取消
                 if (!isActive) {
                     Log.runtime(TAG, "协程被取消，停止处理${rankingName}批次")
