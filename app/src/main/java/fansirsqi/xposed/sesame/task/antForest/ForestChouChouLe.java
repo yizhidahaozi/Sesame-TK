@@ -30,8 +30,8 @@ public class ForestChouChouLe {
             presetBad.add("FOREST_ACTIVITY_DRAW_SHARE"); // 活动版邀请好友任务（屏蔽）
             // =====================================================
 
-            // 获取所有抽奖场景
-            JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source));
+            // 获取所有抽奖场景 - 使用修复后的方法
+            JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source, "", ""));
             if (!ResChecker.checkRes(TAG, jo)) {
                 Log.error(TAG, "获取抽奖场景列表失败");
                 return;
