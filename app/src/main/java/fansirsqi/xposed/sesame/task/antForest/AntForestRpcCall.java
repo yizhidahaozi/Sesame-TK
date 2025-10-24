@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.task.antForest;
 
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -76,32 +75,6 @@ public class AntForestRpcCall {
 
     /**
      * 批量获取好友能量信息（标准版）
-     * 用途：批量查询多个好友的蚂蚁森林信息，包括：
-     * - 好友昵称（displayName）
-     * - 是否可收取能量（canCollectEnergy）
-     * - 能量球信息（bubbles）
-     * - 保护罩状态等
-     * <p>
-     * 性能优势：一次网络请求获取多个好友信息，比逐个查询快得多
-     * @param userIdList 用户ID列表（JSONArray），例如：["2088xxx", "2088yyy", ...]
-     *                   通常每批20个好友ID
-     * @return JSON字符串，包含 friendRanking 数组，每个元素是一个好友的详细信息
-     * <p>
-     * 返回数据结构示例：
-     * {
-     *   "friendRanking": [
-     *     {
-     *       "userId": "2088xxx",
-     *       "displayName": "张三",
-     *       "canCollectEnergy": true,
-     *       "bubbles": [...],
-     *       ...
-     *     }
-     *   ]
-     * }
-     * 调用示例（Kotlin）：
-     * val userIds = JSONArray(listOf("2088xxx", "2088yyy"))
-     * val response = AntForestRpcCall.fillUserRobFlag(userIds)
      */
     public static String fillUserRobFlag(JSONArray userIdList) {
         try {
@@ -109,7 +82,6 @@ public class AntForestRpcCall {
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("userIdList", userIdList);
             String param = "[" + arg + "]";
-            // relationLocal 指定返回的数据路径，这里只要 friendRanking 数组
             JSONObject joRelationLocal = new JSONObject();
             joRelationLocal.put("pathList", new JSONArray().put("friendRanking"));
             String relationLocal = "[" + joRelationLocal + "]";
@@ -121,22 +93,6 @@ public class AntForestRpcCall {
 
     /**
      * 批量获取好友能量信息（增强版 - PK排行榜专用）
-     * 与标准版的区别：
-     * - 增加了 needFillUserInfo 参数
-     * - 用于PK排行榜场景，需要更完整的用户信息
-     * - 不指定 relationLocal，返回完整数据
-     *
-     * @param userIdList        用户ID列表（JSONArray）
-     * @param needFillUserInfo  是否需要填充详细用户信息
-     *                          true: 返回完整的用户资料（PK排行榜使用）
-     *                          false: 只返回基本信息
-     * @return JSON字符串，包含好友的完整信息
-     * 使用场景：
-     * - 普通好友排行榜：fillUserRobFlag(userIds)
-     * - PK好友排行榜：fillUserRobFlag(userIds, true)
-     * 调用示例（Kotlin）：
-     * // PK排行榜场景
-     * val response = AntForestRpcCall.fillUserRobFlag(userIds, true)
      */
     public static String fillUserRobFlag(JSONArray userIdList, boolean needFillUserInfo) {
         try {
@@ -145,7 +101,6 @@ public class AntForestRpcCall {
             arg.put("userIdList", userIdList);
             arg.put("needFillUserInfo", needFillUserInfo);
             String param = "[" + arg + "]";
-            // 不指定 relationLocal，返回完整数据
             return RequestManager.requestString("alipay.antforest.forest.h5.fillUserRobFlag", param);
         } catch (Exception e) {
             return "";
@@ -189,12 +144,8 @@ public class AntForestRpcCall {
         }
     }
 
-
     /**
      * 找能量方法 - 查找可收取能量的好友（带跳过用户列表）
-     *
-     * @param skipUsers 跳过的用户列表，格式：{"userId": "baohuzhao"} 表示该用户有保护罩
-     * @return 找能量的响应结果
      */
     public static String takeLook(JSONObject skipUsers) {
         try {
@@ -254,8 +205,6 @@ public class AntForestRpcCall {
 
     /**
      * 收取复活能量
-     *
-     * @return 收取结果
      */
     public static String collectRebornEnergy() {
         try {
@@ -274,7 +223,6 @@ public class AntForestRpcCall {
             JSONObject arg = new JSONObject();
             arg.put("bizNo", bizNo + UUID.randomUUID().toString());
             arg.put("energyId", energyId);
-            // ✅ 根据 notifyFriend 参数设置是否通知好友
             arg.put("extendInfo", new JSONObject().put("sendChat", notifyFriend ? "Y" : "N"));
             arg.put("from", "friendIndex");
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
@@ -338,7 +286,6 @@ public class AntForestRpcCall {
                         "\"source\":\"mokuai_senlin_hlz\",\"trafficDriverId\":\"mokuai_senlin_hlz\",\"unityDeviceLevel\":\"high\"}]");
     }
 
-
     /*青春特权道具任务状态查询🔍*/
     public static String queryTaskListV2(String firstTaskType) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -368,10 +315,6 @@ public class AntForestRpcCall {
 
     /**
      * 领取青春特权道具
-     *
-     * @param taskType DAXUESHENG_SJK,NENGLIANGZHAO_20230807,JIASUQI_20230808
-     * @return 领取结果
-     * @throws JSONException JSON 解析异常
      */
     public static String receiveTaskAwardV2(String taskType) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -396,19 +339,16 @@ public class AntForestRpcCall {
     }
 
     public static String popupTask() throws JSONException {
-        // 创建用于构造 JSON 请求的对象
         JSONObject jo = new JSONObject();
         jo.put("fromAct", "pop_task");
         jo.put("needInitSign", false);
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
         jo.put("statusList", new JSONArray().put("TODO").put("FINISHED"));
         jo.put("version", VERSION);
-        // 将 JSON 对象转换为字符串请求
         return RequestManager.requestString("alipay.antforest.forest.h5.popupTask", new JSONArray().put(jo).toString());
     }
 
     public static String antiepSign(String entityId, String userId, String sceneCode) throws JSONException {
-        // 构造 JSON 对象
         JSONObject jo = new JSONObject();
         jo.put("entityId", entityId);
         jo.put("requestType", "rpc");
@@ -421,10 +361,6 @@ public class AntForestRpcCall {
 
     /**
      * 查询背包道具列表
-     *
-     * @param onlyGive 是否只显示可赠送道具
-     * @return 道具列表
-     * @throws JSONException JSON 解析异常
      */
     public static String queryPropList(boolean onlyGive) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -442,13 +378,6 @@ public class AntForestRpcCall {
 
     /**
      * 创建使用道具的请求数据
-     *
-     * @param propGroup     道具组
-     * @param propId        道具ID
-     * @param propType      道具类型
-     * @param secondConfirm 是否为确认调用（续用时传 true，不传则为null）
-     * @return 请求的JSONObject
-     * @throws JSONException JSON异常
      */
     private static JSONObject createConsumePropRequestData(String propGroup, String propId, String propType, Boolean secondConfirm) throws JSONException {
         JSONObject jo = new JSONObject();
@@ -463,23 +392,15 @@ public class AntForestRpcCall {
         }
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
         jo.put("timezoneId", "Asia/Shanghai");
-
-        jo.put("version", VERSION); // Hardcode version for consumeProp based on logs
+        jo.put("version", VERSION);
         return jo;
     }
 
     /**
      * 调用蚂蚁森林 RPC 使用道具 (可续写/二次确认)
-     *
-     * @param propGroup     道具组
-     * @param propId        道具ID
-     * @param propType      道具类型
-     * @param secondConfirm 是否为确认调用
-     * @return RPC 响应字符串
      */
     public static String consumeProp(String propGroup, String propId, String propType, boolean secondConfirm) throws JSONException {
         JSONObject requestData = createConsumePropRequestData(propGroup, propId, propType, secondConfirm);
-       // Log.record(TAG, "requestData: " + "["+requestData+"]");
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.consumeProp",
                 "["+requestData+"]"
@@ -488,11 +409,6 @@ public class AntForestRpcCall {
 
     /**
      * 调用蚂蚁森林 RPC 使用道具 (不可续写/直接使用)
-     *
-     * @param propGroup 道具组
-     * @param propId    道具ID
-     * @param propType  道具类型
-     * @return RPC 响应字符串
      */
     public static String consumeProp2(String propGroup, String propId, String propType) throws JSONException {
         JSONObject requestData = createConsumePropRequestData(propGroup, propId, propType, null);
@@ -504,11 +420,6 @@ public class AntForestRpcCall {
 
     /**
      * 调用蚂蚁森林 RPC 使用道具 (旧方法，为兼容性保留)
-     *
-     * @param propId        道具ID
-     * @param propType      道具类型
-     * @param secondConfirm 是否为确认调用（续用时传 true）
-     * @return RPC 响应字符串
      */
     public static String consumeProp(String propId, String propType, boolean secondConfirm) throws JSONException {
         return consumeProp("", propId, propType, secondConfirm);
@@ -747,8 +658,6 @@ public class AntForestRpcCall {
                         "\"scenceCode\":\"HEALTH_CHANNEL\",\"schemeParams\":{}," +
                         "\"scope\":\"PARTIAL\",\"selectedTabCode\":\"\",\"sourceType\":\"miniApp\",\"specialItemId\":\"\",\"specialItemType\":\"\"," +
                         "\"tenantCode\":\"2021003141652419\",\"underTakeContentId\":\"\"},\"version\":\"2.0\"}]");
-
-
     }
 
     public static String studentQqueryCheckInModel() throws JSONException {
@@ -794,8 +703,6 @@ public class AntForestRpcCall {
 
     /**
      * 查询绿色行动
-     *
-     * @return 结果
      */
     public static String ecolifeQueryHomePage() {
         return RequestManager.requestString("alipay.ecolife.rpc.h5.queryHomePage",
@@ -804,8 +711,6 @@ public class AntForestRpcCall {
 
     /**
      * 开通绿色行动
-     *
-     * @return 结果
      */
     public static String ecolifeOpenEcolife() {
         return RequestManager.requestString("alipay.ecolife.rpc.h5.openEcolife",
@@ -814,11 +719,6 @@ public class AntForestRpcCall {
 
     /**
      * 执行任务
-     *
-     * @param actionId actionId
-     * @param dayPoint 当前日期
-     * @param source   来源renwuGD,photo-comparison,search_brandbox
-     * @return 结果
      */
     public static String ecolifeTick(String actionId, String dayPoint, String source) {
         String args1 = "[{\"actionId\":\"" + actionId + "\",\"channel\":\"ALIPAY\",\"dayPoint\":\""
@@ -828,10 +728,6 @@ public class AntForestRpcCall {
 
     /**
      * 查询任务信息
-     *
-     * @param source   来源renwuGD,photo-comparison,search_brandbox
-     * @param dayPoint 当前日期
-     * @return 结果
      */
     public static String ecolifeQueryDish(String source, String dayPoint) {
         return RequestManager.requestString("alipay.ecolife.rpc.h5.queryDish",
@@ -841,13 +737,6 @@ public class AntForestRpcCall {
 
     /**
      * 上传照片
-     *
-     * @param operateType 类型：餐前、餐后
-     * @param imageId     图片id
-     * @param conf1       位移值？
-     * @param conf2       conf2
-     * @param conf3       conf3
-     * @return 结果
      */
     public static String ecolifeUploadDishImage(String operateType, String imageId,
                                                 double conf1, double conf2, double conf3, String dayPoint) {
@@ -884,19 +773,19 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.iblib.channel.data", args);
     }
 
-    // ==================== 森林抽抽乐相关方法（支持双活动页面） ====================
+    // ==================== 森林抽抽乐相关方法（修复版） ====================
 
     /**
      * 森林抽抽乐-活动列表（支持多活动）
      */
     public static String enterDrawActivityopengreen(String source) throws JSONException {
         JSONObject params = new JSONObject();
-        // 移除硬编码的 activityId，让服务端返回所有可用活动
         params.put("activityId", ""); // 改为空字符串，获取所有活动
         params.put("requestType", "RPC");
         params.put("sceneCode", ""); // 场景码也设为空，获取全部
         params.put("source", source);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 获取所有活动");
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
@@ -907,34 +796,54 @@ public class AntForestRpcCall {
         JSONObject params = new JSONObject();
         params.put("activityId", "");
         params.put("requestType", "RPC");
-        params.put("sceneCode", sceneCode);
+        params.put("sceneCode", sceneCode); // 修复：必须传递 sceneCode
         params.put("source", source);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 场景: " + sceneCode);
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-活动列表（指定活动ID）
+     * 森林抽抽乐-活动列表（指定活动ID和场景）
      */
     public static String enterDrawActivityopengreen(String source, String sceneCode, String activityId) throws JSONException {
         JSONObject params = new JSONObject();
         params.put("activityId", activityId);
         params.put("requestType", "RPC");
-        params.put("sceneCode", sceneCode);
+        params.put("sceneCode", sceneCode); // 修复：必须传递 sceneCode
         params.put("source", source);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 活动: " + activityId + ", 场景: " + sceneCode);
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-请求任务列表
+     * 森林抽抽乐-请求任务列表（修复版）
      */
-    public static String listTaskopengreen(String activityId, String sceneCode, String source) throws JSONException {
+    public static String listTaskopengreen(String sceneCode, String source) throws JSONException {
         JSONObject params = new JSONObject();
         params.put("requestType", "RPC");
-        params.put("sceneCode", sceneCode);
+        params.put("sceneCode", sceneCode); // 修复：必须传递 sceneCode
         params.put("source", source);
+        
+        // 根据抓包日志，还需要 headers 参数
+        JSONObject headers = new JSONObject();
+        headers.put("ags-source", source);
+        headers.put("source", source);
+        params.put("headers", headers);
+        
+        // 根据抓包日志，还需要 requestData 数组
+        JSONObject requestData = new JSONObject();
+        requestData.put("requestType", "RPC");
+        requestData.put("sceneCode", sceneCode);
+        requestData.put("source", source);
+        
+        JSONArray requestDataArray = new JSONArray();
+        requestDataArray.put(requestData);
+        params.put("requestData", requestDataArray);
+        
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 
@@ -949,6 +858,7 @@ public class AntForestRpcCall {
         params.put("source", source);
         params.put("taskType", taskType);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "receiveTaskAwardopengreen - 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardopengreen", args);
     }
 
@@ -964,6 +874,7 @@ public class AntForestRpcCall {
         params.put("taskSceneCode", taskSceneCode);
         params.put("taskType", taskType);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "exchangeTimesFromTaskopengreen - 活动: " + activityId + ", 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antiepdrawprod.exchangeTimesFromTaskopengreen", args);
     }
 
@@ -987,6 +898,7 @@ public class AntForestRpcCall {
         
         params.put("taskType", taskType);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "finishTask4Chouchoule - 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antiep.finishTask", args);
     }
 
@@ -1004,28 +916,28 @@ public class AntForestRpcCall {
         
         params.put("taskType", taskType);
         String args = "[" + params + "]";
+        Log.record("AntForestRpcCall", "finishTaskopengreen - 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-抽奖
+     * 森林抽抽乐-抽奖（修复版）
      */
     public static String drawopengreen(String activityId, String sceneCode, String source, String userId) throws JSONException {
         JSONObject params = new JSONObject();
         params.put("activityId", activityId);
         params.put("requestType", "RPC");
-        params.put("sceneCode", sceneCode);
+        params.put("sceneCode", sceneCode); // 修复：必须传递 sceneCode
         params.put("source", source);
         params.put("userId", userId);
+        
         String args = "[" + params + "]";
-        return RequestManager.requestString("com.alipay.antiepdrawprod.drawopengreen", args,
-                "antiepdrawprod", "draw", "DrawRpc");
+        Log.record("AntForestRpcCall", "drawopengreen - 活动: " + activityId + ", 场景: " + sceneCode);
+        return RequestManager.requestString("com.alipay.antiepdrawprod.drawopengreen", args);
     }
 
     /**
      * 根据道具类型获取道具组
-     * @param propType 道具类型
-     * @return 道具组
      */
     public static String getPropGroup(String propType) {
         if (propType.contains("SHIELD")) {
