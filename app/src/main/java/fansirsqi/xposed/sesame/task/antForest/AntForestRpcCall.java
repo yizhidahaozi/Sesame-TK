@@ -773,16 +773,14 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.iblib.channel.data", args);
     }
 
-    // ==================== 森林抽抽乐相关方法（完全修复版） ====================
+    // ==================== 森林抽抽乐相关方法（最终修复版） ====================
 
     /**
-     * 森林抽抽乐-活动列表（支持多活动）- 完全修复版
+     * 森林抽抽乐-活动列表（最终修复版）
+     * 根据抓包日志，正确的参数结构应该是直接传递参数，不需要requestData包装
      */
-    public static String enterDrawActivityopengreen(String source, String sceneCode, String activityId) throws JSONException {
-        // 创建主请求参数
-        JSONObject params = new JSONObject();
-        
-        // 创建 requestData 数组 - 这是关键修复点
+    public static String enterDrawActivityopengreen(String activityId, String sceneCode, String source) throws JSONException {
+        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
         if (activityId != null && !activityId.isEmpty()) {
             requestData.put("activityId", activityId);
@@ -791,115 +789,77 @@ public class AntForestRpcCall {
         }
         requestData.put("requestType", "RPC");
         requestData.put("sceneCode", sceneCode); // 必须传递 sceneCode
-        requestData.put("source", source);
+        requestData.put("source", source); // 必须传递 source
         
-        JSONArray requestDataArray = new JSONArray();
-        requestDataArray.put(requestData);
-        params.put("requestData", requestDataArray);
-        
-        String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", 参数: " + args);
+        String args = "[" + requestData + "]";
+        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-请求任务列表（完全修复版）
+     * 森林抽抽乐-请求任务列表（最终修复版）
      */
     public static String listTaskopengreen(String sceneCode, String source) throws JSONException {
-        // 创建主请求参数
-        JSONObject params = new JSONObject();
-        
-        // 创建 requestData 数组 - 这是关键修复点
+        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
         requestData.put("requestType", "RPC");
         requestData.put("sceneCode", sceneCode); // 必须传递 sceneCode
-        requestData.put("source", source);
+        requestData.put("source", source); // 必须传递 source
         
-        JSONArray requestDataArray = new JSONArray();
-        requestDataArray.put(requestData);
-        params.put("requestData", requestDataArray);
-        
-        // 添加 headers
-        JSONObject headers = new JSONObject();
-        headers.put("ags-source", source);
-        headers.put("source", source);
-        params.put("headers", headers);
-        
-        String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", 参数: " + args);
+        String args = "[" + requestData + "]";
+        Log.record("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-抽奖（完全修复版）
+     * 森林抽抽乐-抽奖（最终修复版）
      */
     public static String drawopengreen(String activityId, String sceneCode, String source, String userId) throws JSONException {
-        // 创建主请求参数
-        JSONObject params = new JSONObject();
-        
-        // 创建 requestData 数组 - 这是关键修复点
+        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
         requestData.put("activityId", activityId);
         requestData.put("requestType", "RPC");
         requestData.put("sceneCode", sceneCode); // 必须传递 sceneCode
-        requestData.put("source", source);
+        requestData.put("source", source); // 必须传递 source
         requestData.put("userId", userId);
         
-        JSONArray requestDataArray = new JSONArray();
-        requestDataArray.put(requestData);
-        params.put("requestData", requestDataArray);
-        
-        String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "drawopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", 参数: " + args);
+        String args = "[" + requestData + "]";
+        Log.record("AntForestRpcCall", "drawopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.drawopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-签到领取次数（完全修复版）
+     * 森林抽抽乐-签到领取次数（最终修复版）
      */
     public static String receiveTaskAwardopengreen(String source, String sceneCode, String taskType) throws JSONException {
-        // 创建主请求参数
-        JSONObject params = new JSONObject();
-        
-        // 创建 requestData 数组
+        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
         requestData.put("ignoreLimit", true);
         requestData.put("requestType", "RPC");
         requestData.put("sceneCode", sceneCode);
-        requestData.put("source", source);
+        requestData.put("source", source); // 必须传递 source
         requestData.put("taskType", taskType);
         
-        JSONArray requestDataArray = new JSONArray();
-        requestDataArray.put(requestData);
-        params.put("requestData", requestDataArray);
-        
-        String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "receiveTaskAwardopengreen - 任务: " + taskType);
+        String args = "[" + requestData + "]";
+        Log.record("AntForestRpcCall", "receiveTaskAwardopengreen - 任务: " + taskType + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardopengreen", args);
     }
 
     /**
-     * 森林抽抽乐-任务-活力值兑换抽奖次数（完全修复版）
+     * 森林抽抽乐-任务-活力值兑换抽奖次数（最终修复版）
      */
     public static String exchangeTimesFromTaskopengreen(String activityId, String sceneCode, String source, String taskSceneCode, String taskType) throws JSONException {
-        // 创建主请求参数
-        JSONObject params = new JSONObject();
-        
-        // 创建 requestData 数组
+        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
         requestData.put("activityId", activityId);
         requestData.put("requestType", "RPC");
         requestData.put("sceneCode", sceneCode);
-        requestData.put("source", source);
+        requestData.put("source", source); // 必须传递 source
         requestData.put("taskSceneCode", taskSceneCode);
         requestData.put("taskType", taskType);
         
-        JSONArray requestDataArray = new JSONArray();
-        requestDataArray.put(requestData);
-        params.put("requestData", requestDataArray);
-        
-        String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "exchangeTimesFromTaskopengreen - 活动: " + activityId + ", 任务: " + taskType);
+        String args = "[" + requestData + "]";
+        Log.record("AntForestRpcCall", "exchangeTimesFromTaskopengreen - 活动: " + activityId + ", 任务: " + taskType + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.exchangeTimesFromTaskopengreen", args);
     }
 

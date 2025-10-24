@@ -30,23 +30,32 @@ public class ForestChouChouLe {
             presetBad.add("FOREST_ACTIVITY_DRAW_SHARE"); // 活动版邀请好友任务（屏蔽）
             // =====================================================
 
-            // 获取所有抽奖场景 - 使用修复后的方法
-            JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source, "", ""));
-            if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(TAG, "获取抽奖场景列表失败");
-                return;
-            }
+            Log.forest("开始处理森林抽抽乐");
 
-            JSONArray drawSceneGroups = jo.getJSONArray("drawSceneGroups");
-            Log.forest("发现 " + drawSceneGroups.length() + " 个抽奖场景");
-            
-            // 遍历所有抽奖场景（普通版 + 活动版）
-            for (int sceneIndex = 0; sceneIndex < drawSceneGroups.length(); sceneIndex++) {
-                JSONObject drawSceneGroup = drawSceneGroups.getJSONObject(sceneIndex);
-                JSONObject drawActivity = drawSceneGroup.getJSONObject("drawActivity");
-                String activityId = drawActivity.getString("activityId");
-                String sceneCode = drawActivity.getString("sceneCode");
-                String sceneName = drawSceneGroup.getString("name");
+            // 直接处理两个已知的抽奖场景，避免复杂的活动发现逻辑
+            processKnownScenes(source, presetBad);
+
+        } catch (Exception e) {
+            Log.printStackTrace(TAG, "chouChouLe 执行异常", e);
+        }
+    }
+
+    /**
+     * 直接处理已知的抽奖场景
+     */
+    private void processKnownScenes(String source, Set<String> presetBad) {
+        try {
+            // 已知的抽奖场景配置
+            String[][] knownScenes = {
+                // {activityId, sceneCode, sceneName}
+                {"2025101301", "ANTFOREST_NORMAL_DRAW", "森林抽抽乐普通版"},
+                {"20251024", "ANTFOREST_ACTIVITY_DRAW", "森林抽抽乐活动版"}
+            };
+
+            for (String[] scene : knownScenes) {
+                String activityId = scene[0];
+                String sceneCode = scene[1];
+                String sceneName = scene[2];
                 
                 Log.forest("开始处理：" + sceneName + " (ActivityId: " + activityId + ", SceneCode: " + sceneCode + ")");
                 
@@ -57,7 +66,7 @@ public class ForestChouChouLe {
             }
 
         } catch (Exception e) {
-            Log.printStackTrace(TAG, "chouChouLe 执行异常", e);
+            Log.printStackTrace(TAG, "processKnownScenes 执行异常", e);
         }
     }
 
@@ -69,8 +78,8 @@ public class ForestChouChouLe {
             boolean doublecheck;
             String listSceneCode = sceneCode + "_TASK";
 
-            // 修复：使用正确的参数调用enterDrawActivity
-            JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source, sceneCode, activityId));
+            // 首先尝试进入活动
+            JSONObject jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(activityId, sceneCode, source));
             if (!ResChecker.checkRes(TAG, jo)) {
                 Log.error(TAG, sceneName + " - enterDrawActivity 调用失败");
                 return;
@@ -88,7 +97,7 @@ public class ForestChouChouLe {
             }
 
             int loopCount = 0;           // 循环次数计数
-            final int MAX_LOOP = 5;      // 最大循环次数，避免死循环
+            final int MAX_LOOP = 3;      // 最大循环次数，避免死循环
 
             do {
                 doublecheck = false;
@@ -196,8 +205,8 @@ public class ForestChouChouLe {
 
             // ==================== 执行当前场景的抽奖 ====================
             Log.forest(sceneName + " 开始处理抽奖");
-            // 修复：使用正确的参数调用enterDrawActivity
-            jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(source, sceneCode, activityId));
+            // 重新进入活动获取最新状态
+            jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(activityId, sceneCode, source));
             if (ResChecker.checkRes(TAG, jo)) {
                 JSONObject drawAsset = jo.getJSONObject("drawAsset");
                 int blance = drawAsset.optInt("blance", 0);
@@ -210,7 +219,7 @@ public class ForestChouChouLe {
                     drawCount++;
                     Log.record(sceneName + " 第 " + drawCount + " 次抽奖");
                     
-                    // 修复：确保draw接口传递所有必需参数
+                    // 执行抽奖
                     jo = new JSONObject(AntForestRpcCall.drawopengreen(activityId, sceneCode, source, UserMap.getCurrentUid()));
                     if (ResChecker.checkRes(TAG, jo)) {
                         drawAsset = jo.getJSONObject("drawAsset");
