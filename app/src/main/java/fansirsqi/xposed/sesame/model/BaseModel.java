@@ -120,13 +120,13 @@ public class BaseModel extends Model {
      * 验证码UI层拦截（阻止对话框显示）
      */
     @Getter
-    public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️验证码UI层拦截", false);
+    public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️滑块UI层拦截", false);
     
     /**
      * 验证码RPC层拦截（跳过验证处理）
      */
     @Getter
-    public static final BooleanModelField enableCaptchaRPCHook = new BooleanModelField("enableCaptchaRPCHook", "🔓验证码RPC层拦截", false);
+    public static final BooleanModelField enableCaptchaRPCHook = new BooleanModelField("enableCaptchaRPCHook", "🔓滑块RPC层拦截", false);
     
     /**
      * 是否记录record日志
