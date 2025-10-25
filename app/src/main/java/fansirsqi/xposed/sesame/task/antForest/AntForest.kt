@@ -942,6 +942,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val obj = querySelfHome()
                 tc.countDebug("获取自己主页对象信息")
                 if (obj != null) {
+                    // 检查并处理打地鼠
+                    checkAndHandleWhackMole(obj)
+                    tc.countDebug("开始拼手速")
+                    
                     collectEnergy(UserMap.currentUid, obj, "self")
                     Log.record(TAG, "✅ 【正常流程】收取自己的能量完成")
                     tc.countDebug("收取自己的能量")
@@ -1545,36 +1549,30 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * 收集能量前，是否执行拼手速操作（协程版本）
-     *
-     * @return 首次收取后用户的能量信息，如果发生错误则返回null。
+     * 检查并处理打地鼠逻辑
+     * 
+     * @param selfHomeObj 自己的主页信息
      */
-    private fun collectSelfEnergy(): JSONObject? {
+    private fun checkAndHandleWhackMole(selfHomeObj: JSONObject) {
         try {
-            val selfHomeObj = querySelfHome()
-            if (selfHomeObj != null) {
-                if (closeWhackMole!!.value) {
-                    val propertiesObject = selfHomeObj.optJSONObject("properties")
-                    if (propertiesObject != null) {
-                        // 如果用户主页的属性中标记了"whackMole"
-                        if ("Y" == propertiesObject.optString("whackMoleEntry")) {
-                            // 尝试关闭"6秒拼手速"功能
-                            val success = WhackMole.closeWhackMole()
-                            Log.record(if (success) "6秒拼手速关闭成功" else "6秒拼手速关闭失败")
-                        }
-                    }
+            // 1. 如果开启了自动关闭开关，检查是否需要关闭打地鼠入口
+            if (closeWhackMole!!.value) {
+                val propertiesObject = selfHomeObj.optJSONObject("properties")
+                if (propertiesObject != null && "Y" == propertiesObject.optString("whackMoleEntry")) {
+                    val success = WhackMole.closeWhackMole()
+                    Log.record(if (success) "✅ 6秒拼手速关闭成功" else "❌ 6秒拼手速关闭失败")
                 }
-                val nextAction = selfHomeObj.optString("nextAction")
-                if ("WhackMole".equals(nextAction, ignoreCase = true)) {
-                    Log.record(TAG, "检测到6秒拼手速强制弹窗，先执行拼手速")
-                    WhackMole.startWhackMole()
-                }
-                return collectEnergy(UserMap.currentUid, selfHomeObj, "self")
+            }
+            
+            // 2. 如果支付宝强制要求打地鼠（弹窗），则必须执行
+            val nextAction = selfHomeObj.optString("nextAction")
+            if ("WhackMole".equals(nextAction, ignoreCase = true)) {
+                Log.record(TAG, "🎮 检测到6秒拼手速强制弹窗，先执行拼手速")
+                WhackMole.startWhackMole()
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(t)
+            Log.printStackTrace(TAG, t)
         }
-        return null
     }
 
     /**
