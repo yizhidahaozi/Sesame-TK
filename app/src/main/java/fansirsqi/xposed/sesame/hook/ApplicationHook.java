@@ -753,6 +753,11 @@ public class ApplicationHook {
                 }
                 // 清理AlarmScheduler协程资源
                 alarmManager.cleanupAlarmScheduler();
+                // 清理支付宝组件保活资源
+                if (alipayComponentHelper != null) {
+                    alipayComponentHelper.stopKeepAlive();
+                    alipayComponentHelper = null;
+                }
                 if (wakeLock != null) {
                     wakeLock.release();
                     wakeLock = null;
