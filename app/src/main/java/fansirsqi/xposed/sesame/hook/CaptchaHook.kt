@@ -12,18 +12,15 @@ import fansirsqi.xposed.sesame.util.Log
  * 1. Hook CaptchaDialog.show() - 阻止验证码对话框显示（UI层拦截）
  * 2. Hook RpcRdsUtilImpl.rdsCaptchaHandle() - 返回0跳过验证（RPC层拦截）
  * 
- * 双重防护：
- * - 第一层：用户看不到验证码
- * - 第二层：系统认为不需要处理验证码
- * 
- * 拦截级别：
- * - 普通验证（NORMAL_CAPTCHA）：只拦截普通验证码，放行滑块验证
- * - 滑块验证（SLIDE_CAPTCHA）：拦截所有验证码（推荐）
+ * 独立开关：
+ * - enableCaptchaUIHook：UI层拦截开关（阻止对话框显示）
+ * - enableCaptchaRPCHook：RPC层拦截开关（跳过验证处理）
  * 
  * 参考：x5.c 的实现方式
  * 
  * 使用方式：
- * CaptchaHook.hookCaptcha(classLoader)
+ * CaptchaHook.setupHook(classLoader)
+ * CaptchaHook.updateHooks(enableUI, enableRPC)  // 动态更新开关状态
  * 
  * @author ghostxx
  * @since 2025-10-23
@@ -40,36 +37,83 @@ object CaptchaHook {
      * RPC处理工具类名
      */
     private const val CLASS_RPC_RDS_UTIL = "com.alipay.edge.observer.rpc.RpcRdsUtilImpl"
+    
+    /**
+     * UI层Hook卸载器（用于动态控制）
+     */
+    private var uiHookUnhook: XC_MethodHook.Unhook? = null
+    
+    /**
+     * RPC层Hook卸载器（用于动态控制）
+     */
+    private var rpcHookUnhook: XC_MethodHook.Unhook? = null
+    
+    /**
+     * 保存ClassLoader供后续使用
+     */
+    private var savedClassLoader: ClassLoader? = null
 
     /**
-     * 主入口：启动滑块验证码Hook
+     * 初始化Hook系统
      * 
      * @param classLoader 目标应用的ClassLoader
      */
-    fun hookCaptcha(classLoader: ClassLoader) {
-        // 检查是否启用验证码拦截
-        if (!BaseModel.enableCaptchaHook.value) {
-            Log.runtime(TAG, "⚠️ 验证码拦截未启用，跳过Hook")
+    fun setupHook(classLoader: ClassLoader) {
+        savedClassLoader = classLoader
+        Log.runtime(TAG, "验证码Hook系统初始化完成")
+        Log.runtime(TAG, "⚠️ Hook配置将在配置文件加载后同步")
+        
+        // 注意：此时配置文件还未加载，不能立即应用Hook
+        // 实际的Hook应用会在BaseModel.boot()中进行
+    }
+    
+    /**
+     * 动态更新Hook开关状态
+     * 
+     * @param enableUI 是否启用UI层拦截
+     * @param enableRPC 是否启用RPC层拦截
+     */
+    fun updateHooks(enableUI: Boolean, enableRPC: Boolean) {
+        val classLoader = savedClassLoader
+        if (classLoader == null) {
+            Log.error(TAG, "❌ ClassLoader未初始化，请先调用setupHook()")
             return
         }
         
-        val hookLevel = BaseModel.captchaHookLevel.value
-        val levelName = when (hookLevel) {
-            BaseModel.CaptchaHookLevel.NORMAL_CAPTCHA -> "普通验证(放行滑块)"
-            BaseModel.CaptchaHookLevel.SLIDE_CAPTCHA -> "滑块验证(屏蔽所有)"
-            else -> "未知"
+        Log.runtime(TAG, "📝 更新验证码Hook状态:")
+        Log.runtime(TAG, "  UI层拦截: ${if (enableUI) "✅ 开启" else "⛔ 关闭"}")
+        Log.runtime(TAG, "  RPC层拦截: ${if (enableRPC) "✅ 开启" else "⛔ 关闭"}")
+        
+        // 先卸载所有现有Hook
+        unhookAll()
+        
+        // 根据开关状态重新Hook
+        if (enableUI) {
+            Log.runtime(TAG, "  🔧 设置UI层拦截...")
+            uiHookUnhook = hookCaptchaDialogShow(classLoader)
         }
         
-        Log.runtime(TAG, "开始Hook支付宝滑块验证码（双Hook方案）...")
-        Log.runtime(TAG, "  拦截级别: $levelName")
+        if (enableRPC) {
+            Log.runtime(TAG, "  🔧 设置RPC层拦截...")
+            rpcHookUnhook = hookRpcRdsUtilHandle(classLoader)
+        }
         
-        // 第一层：阻止验证码对话框显示
-        hookCaptchaDialogShow(classLoader, hookLevel)
+        if (!enableUI && !enableRPC) {
+            Log.runtime(TAG, "  ⚠️ 所有验证码拦截已关闭")
+        }
         
-        // 第二层：返回0跳过RPC验证处理
-        hookRpcRdsUtilHandle(classLoader, hookLevel)
+        Log.runtime(TAG, "验证码Hook更新完成 ✅")
+    }
+    
+    /**
+     * 卸载所有Hook
+     */
+    private fun unhookAll() {
+        uiHookUnhook?.unhook()
+        uiHookUnhook = null
         
-        Log.runtime(TAG, "滑块验证码Hook设置完成 ✅")
+        rpcHookUnhook?.unhook()
+        rpcHookUnhook = null
     }
 
     /**
@@ -79,38 +123,31 @@ object CaptchaHook {
      * 作用: 阻止对话框显示，用户看不到验证码
      * 
      * @param classLoader 类加载器
-     * @param hookLevel 拦截级别
+     * @return Hook卸载器，失败时返回null
      */
-    private fun hookCaptchaDialogShow(classLoader: ClassLoader, hookLevel: Int) {
-        try {
+    private fun hookCaptchaDialogShow(classLoader: ClassLoader): XC_MethodHook.Unhook? {
+        return try {
             val captchaDialogClass = XposedHelpers.findClass(CLASS_CAPTCHA_DIALOG, classLoader)
             
-            XposedHelpers.findAndHookMethod(
+            val unhook = XposedHelpers.findAndHookMethod(
                 captchaDialogClass,
                 "show",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        // 根据拦截级别判断是否拦截
-                        when (hookLevel) {
-                            BaseModel.CaptchaHookLevel.NORMAL_CAPTCHA -> {
-                                // 普通验证模式：不拦截（放行滑块验证）
-                                Log.runtime(TAG, "🔓 [UI层] 普通验证模式，放行滑块验证")
-                            }
-                            BaseModel.CaptchaHookLevel.SLIDE_CAPTCHA -> {
-                                // 滑块验证模式：拦截所有
-                                param.result = null
-                                Log.runtime(TAG, "✅ [UI层拦截] 已阻止验证码对话框显示")
-                                Log.runtime(TAG, "  对话框: ${param.thisObject.javaClass.simpleName}")
-                            }
-                        }
+                        // 阻止验证码对话框显示
+                        param.result = null
+                        Log.runtime(TAG, "✅ [UI层拦截] 已阻止验证码对话框显示")
+                        Log.runtime(TAG, "  对话框: ${param.thisObject.javaClass.simpleName}")
                     }
                 }
             )
             
             Log.runtime(TAG, "✅ Hook CaptchaDialog.show() 成功")
+            unhook
         } catch (e: Throwable) {
             Log.error(TAG, "❌ Hook CaptchaDialog.show() 失败")
             Log.printStackTrace(TAG, e)
+            null
         }
     }
 
@@ -121,10 +158,10 @@ object CaptchaHook {
      * 作用: 返回0表示不需要处理验证码，系统跳过验证流程
      * 
      * @param classLoader 类加载器
-     * @param hookLevel 拦截级别
+     * @return Hook卸载器，失败时返回null
      */
-    private fun hookRpcRdsUtilHandle(classLoader: ClassLoader, hookLevel: Int) {
-        try {
+    private fun hookRpcRdsUtilHandle(classLoader: ClassLoader): XC_MethodHook.Unhook? {
+        return try {
             val rpcRdsUtilClass = XposedHelpers.findClass(CLASS_RPC_RDS_UTIL, classLoader)
             
             // 方法签名：rdsCaptchaHandle(7个参数) -> int
@@ -133,42 +170,37 @@ object CaptchaHook {
             val targetMethod = methods.find { it.name == "rdsCaptchaHandle" }
             
             if (targetMethod != null) {
-                XposedHelpers.findAndHookMethod(
+                val unhook = XposedHelpers.findAndHookMethod(
                     rpcRdsUtilClass,
                     "rdsCaptchaHandle",
                     *targetMethod.parameterTypes,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
-                            // 根据拦截级别判断是否拦截
-                            when (hookLevel) {
-                                BaseModel.CaptchaHookLevel.NORMAL_CAPTCHA -> {
-                                    // 普通验证模式：不拦截，返回原始值
-                                    Log.runtime(TAG, "🔓 [RPC层] 普通验证模式，执行原始逻辑")
-                                }
-                                BaseModel.CaptchaHookLevel.SLIDE_CAPTCHA -> {
-                                    // 滑块验证模式：返回0跳过验证
-                                    param.result = 0
-                                    Log.runtime(TAG, "✅ [RPC层拦截] 已跳过验证处理")
-                                    Log.runtime(TAG, "  返回值: 0 (不需要处理验证码)")
-                                    Log.runtime(TAG, "  参数数量: ${param.args.size}")
-                                }
-                            }
+                            // 返回0跳过验证处理
+                            param.result = 0
+                            Log.runtime(TAG, "✅ [RPC层拦截] 已跳过验证处理")
+                            Log.runtime(TAG, "  返回值: 0 (不需要处理验证码)")
+                            Log.runtime(TAG, "  参数数量: ${param.args.size}")
                         }
                     }
                 )
                 
                 Log.runtime(TAG, "✅ Hook RpcRdsUtilImpl.rdsCaptchaHandle() 成功")
                 Log.runtime(TAG, "  方法参数数量: ${targetMethod.parameterTypes.size}")
+                unhook
             } else {
                 Log.error(TAG, "❌ 未找到 rdsCaptchaHandle 方法")
                 Log.error(TAG, "  可用方法列表:")
                 methods.forEach {
                     Log.error(TAG, "    - ${it.name}(${it.parameterTypes.size}个参数)")
                 }
+                null
             }
         } catch (e: Throwable) {
             Log.error(TAG, "❌ Hook RpcRdsUtilImpl.rdsCaptchaHandle() 失败")
             Log.printStackTrace(TAG, e)
+            null
         }
     }
 }
+

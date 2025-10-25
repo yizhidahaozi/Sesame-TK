@@ -260,10 +260,10 @@ public class ApplicationHook {
         
         // Hook验证码关闭功能（需要在应用初始化之前就Hook配置写入）
         try {
-            CaptchaHook.INSTANCE.hookCaptcha(classLoader);
-            Log.runtime(TAG, "验证码Hook已启用");
+            CaptchaHook.INSTANCE.setupHook(classLoader);
+            Log.runtime(TAG, "验证码Hook系统已初始化");
         } catch (Throwable t) {
-            Log.runtime(TAG, "验证码Hook启用失败");
+            Log.runtime(TAG, "验证码Hook初始化失败");
             Log.printStackTrace(TAG, t);
         }
         
@@ -778,12 +778,8 @@ public class ApplicationHook {
         if (alipayComponentHelper != null) {
             try {
                 // 【唤醒方式选择】
-
                 // 方式1: 完整唤醒（启动所有4个服务，包括日志同步、计步统计等）
                 alipayComponentHelper.wakeupAlipay();
-
-                // 方式2: 精简唤醒（仅流量监控，跳过日志同步和计步统计）⭐ 推荐
-                alipayComponentHelper.wakeupAlipayLite();
             } catch (Exception e) {
                 Log.runtime(TAG, "唤醒支付宝进程失败: " + e.getMessage());
             }

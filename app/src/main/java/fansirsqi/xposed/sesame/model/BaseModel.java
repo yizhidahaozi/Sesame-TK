@@ -117,16 +117,16 @@ public class BaseModel extends Model {
     public static final BooleanModelField batteryPerm = new BooleanModelField("batteryPerm", "为支付宝申请后台运行权限", true);
     
     /**
-     * 验证码拦截开关
+     * 验证码UI层拦截（阻止对话框显示）
      */
     @Getter
-    public static final BooleanModelField enableCaptchaHook = new BooleanModelField("enableCaptchaHook", "启用验证码拦截", false);
+    public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️验证码UI层拦截", false);
     
     /**
-     * 验证码拦截级别
+     * 验证码RPC层拦截（跳过验证处理）
      */
     @Getter
-    public static final ChoiceModelField captchaHookLevel = new ChoiceModelField("captchaHookLevel", "验证码拦截级别", CaptchaHookLevel.SLIDE_CAPTCHA, CaptchaHookLevel.nickNames);
+    public static final BooleanModelField enableCaptchaRPCHook = new BooleanModelField("enableCaptchaRPCHook", "🔓验证码RPC层拦截", false);
     
     /**
      * 是否记录record日志
@@ -185,6 +185,21 @@ public class BaseModel extends Model {
     }
 
     @Override
+    public void boot(ClassLoader classLoader) {
+        // 配置已加载，更新验证码Hook状态
+        try {
+            fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
+                enableCaptchaUIHook.getValue(), 
+                enableCaptchaRPCHook.getValue()
+            );
+            Log.runtime(TAG, "✅ 验证码Hook配置已同步");
+        } catch (Throwable t) {
+            Log.error(TAG, "❌ 验证码Hook配置同步失败");
+            Log.printStackTrace(TAG, t);
+        }
+    }
+
+    @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(stayAwake);//是否保持唤醒状态
@@ -205,8 +220,8 @@ public class BaseModel extends Model {
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限
-        modelFields.addField(enableCaptchaHook);//验证码拦截开关
-        modelFields.addField(captchaHookLevel);//验证码拦截级别
+        modelFields.addField(enableCaptchaUIHook);//验证码UI层拦截
+        modelFields.addField(enableCaptchaRPCHook);//验证码RPC层拦截
         modelFields.addField(recordLog);//是否记录record日志
         modelFields.addField(runtimeLog);//是否记录runtime日志
         modelFields.addField(showToast);//是否显示气泡提示
@@ -240,14 +255,5 @@ public class BaseModel extends Model {
         int SYSTEM = 0;
         int PROGRAM = 1;
         String[] nickNames = {"🤖系统计时", "📦程序计时"};
-    }
-
-    /**
-     * 验证码拦截级别选项
-     */
-    public interface CaptchaHookLevel {
-        int NORMAL_CAPTCHA = 0;
-        int SLIDE_CAPTCHA = 1;
-        String[] nickNames = {"🔓普通验证(放行滑块)", "🛡️滑块验证(屏蔽所有)"};
     }
 }

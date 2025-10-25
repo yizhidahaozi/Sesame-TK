@@ -103,6 +103,8 @@ object DataStore {
 
     private fun loadFromDisk() {
         if (!::storageFile.isInitialized) return
+        // 检查文件是否存在，避免在文件被删除-重命名期间读取
+        if (!storageFile.exists()) return
         if (storageFile.length() == 0L) return
         lock.write {
             try {
@@ -110,7 +112,9 @@ object DataStore {
                 data.clear()
                 data.putAll(loaded)
             } catch (e: MismatchedInputException) {
-                // Ignore, may be caused by file being written
+                // 忽略，可能是文件正在写入导致的格式错误
+            } catch (e: java.io.FileNotFoundException) {
+                // 忽略，可能是文件在检查后、读取前被删除（竞态条件）
             }
         }
     }
@@ -161,7 +165,11 @@ object DataStore {
         while (true) {
             val key = watch.take()
             key.pollEvents().forEach {
-                if (it.context().toString() == storageFile.name) loadFromDisk()
+                val fileName = it.context().toString()
+                // 只处理目标文件的修改事件，忽略临时文件
+                if (fileName == storageFile.name && !fileName.endsWith(".tmp")) {
+                    loadFromDisk()
+                }
             }
             key.reset()
         }
