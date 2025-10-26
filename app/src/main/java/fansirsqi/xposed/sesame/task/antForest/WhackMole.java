@@ -75,7 +75,7 @@ public class WhackMole {
                         Log.forest("森林能量⚡️[打地鼠:" + moleId + " 能量+" + energy + "g]");
                         // 间隔一小段时间再打下一个
                         if (hitCount < bubbleMoleIds.size()) {
-                            GlobalThreadPools.sleepCompat(200 + (long)(Math.random() * 300));
+                            GlobalThreadPools.sleepCompat(100 + (long)(Math.random() * 201));
                         }
                     }
                 } catch (Throwable t) {
