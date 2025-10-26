@@ -319,7 +319,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         modelFields.addField(
             BooleanModelField(
                 "closeWhackMole",
-                "自动关闭6秒拼手速 | 开关",
+                "🎮 6秒拼手速 | 开关",
                 false
             ).also { closeWhackMole = it })
         modelFields.addField(
@@ -901,16 +901,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters()
-            
             // 优化：移除午夜任务，避免重复执行和耗时
             // 正常流程会自动处理所有收取任务，无需特殊处理
-
             errorWait = false
-
             // 计数器和时间记录
             monday = true
             val tc = TimeCounter(TAG)
-
             if (showBagList!!.value) showBag()
 
             Log.record(TAG, "执行开始-蚂蚁$name")
@@ -942,9 +938,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val obj = querySelfHome()
                 tc.countDebug("获取自己主页对象信息")
                 if (obj != null) {
-                    // 检查并处理打地鼠
-                    checkAndHandleWhackMole(obj)
-                    tc.countDebug("开始拼手速")
+                    // 检查并处理打地鼠（每天一次）
+                    checkAndHandleWhackMole()
+                    tc.countDebug("拼手速")
                     
                     collectEnergy(UserMap.currentUid, obj, "self")
                     Log.record(TAG, "✅ 【正常流程】收取自己的能量完成")
@@ -1549,26 +1545,23 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * 检查并处理打地鼠逻辑
-     * 
-     * @param selfHomeObj 自己的主页信息
+     * 检查并处理6秒拼手速逻辑（每天主动执行一次）
      */
-    private fun checkAndHandleWhackMole(selfHomeObj: JSONObject) {
+    private fun checkAndHandleWhackMole() {
         try {
-            // 1. 如果开启了自动关闭开关，检查是否需要关闭打地鼠入口
+            // 只有开启开关时才执行
             if (closeWhackMole!!.value) {
-                val propertiesObject = selfHomeObj.optJSONObject("properties")
-                if (propertiesObject != null && "Y" == propertiesObject.optString("whackMoleEntry")) {
-                    val success = WhackMole.closeWhackMole()
-                    Log.record(if (success) "✅ 6秒拼手速关闭成功" else "❌ 6秒拼手速关闭失败")
+                val whackMoleFlag = "forest::whackMole::executed"
+                // 检查今天是否已执行过打地鼠
+                if (Status.hasFlagToday(whackMoleFlag)) {
+                    Log.record(TAG, "⏭️ 今天已完成过6秒拼手速，跳过执行")
+                } else {
+                    // 主动执行打地鼠（今日首次）
+                    Log.record(TAG, "🎮 开始执行6秒拼手速（今日首次）")
+                    WhackMole.startWhackMole()
+                    Status.setFlagToday(whackMoleFlag)
+                    Log.record(TAG, "✅ 6秒拼手速已完成，今天不再执行")
                 }
-            }
-            
-            // 2. 如果支付宝强制要求打地鼠（弹窗），则必须执行
-            val nextAction = selfHomeObj.optString("nextAction")
-            if ("WhackMole".equals(nextAction, ignoreCase = true)) {
-                Log.record(TAG, "🎮 检测到6秒拼手速强制弹窗，先执行拼手速")
-                WhackMole.startWhackMole()
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, t)

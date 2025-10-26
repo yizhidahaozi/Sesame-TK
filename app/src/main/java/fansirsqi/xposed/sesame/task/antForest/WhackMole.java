@@ -112,20 +112,5 @@ public class WhackMole {
         }
     }
 
-    /**
-     * 关闭6秒拼手速
-     */
-    public static Boolean closeWhackMole() {
-        try {
-            JSONObject jo = new JSONObject(AntForestRpcCall.closeWhackMole("senlinguangchangdadishu"));
-            if (jo.optBoolean("success")) {
-                return true;
-            } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(t);
-        }
-        return false;
-    }
+
 }
