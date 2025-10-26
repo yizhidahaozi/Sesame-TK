@@ -30,7 +30,7 @@ public class ForestChouChouLe {
             presetBad.add("FOREST_ACTIVITY_DRAW_SHARE"); // 活动版邀请好友任务（屏蔽）
             // =====================================================
 
-            Log.forest("开始处理森林抽抽乐");
+            Log.record("开始处理森林抽抽乐");
 
             // 直接处理两个已知的抽奖场景，避免复杂的活动发现逻辑
             processKnownScenes(source, presetBad);
@@ -57,7 +57,7 @@ public class ForestChouChouLe {
                 String sceneCode = scene[1];
                 String sceneName = scene[2];
                 
-                Log.forest("开始处理：" + sceneName + " (ActivityId: " + activityId + ", SceneCode: " + sceneCode + ")");
+                Log.record("开始处理：" + sceneName + " (ActivityId: " + activityId + ", SceneCode: " + sceneCode + ")");
                 
                 processChouChouLeScene(activityId, sceneCode, sceneName, source, presetBad);
                 
@@ -92,7 +92,7 @@ public class ForestChouChouLe {
             // 检查活动是否在有效期内
             long currentTime = System.currentTimeMillis();
             if (currentTime < startTime || currentTime > endTime) {
-                Log.forest(sceneName + " 活动不在有效期内，跳过");
+                Log.record(sceneName + " 活动不在有效期内，跳过");
                 return;
             }
 
@@ -107,7 +107,7 @@ public class ForestChouChouLe {
                 JSONObject listTaskopengreen = new JSONObject(AntForestRpcCall.listTaskopengreen(listSceneCode, source));
                 if (ResChecker.checkRes(TAG, listTaskopengreen)) {
                     JSONArray taskList = listTaskopengreen.getJSONArray("taskInfoList");
-                    Log.forest(sceneName + " 发现 " + taskList.length() + " 个任务");
+                    Log.record(sceneName + " 发现 " + taskList.length() + " 个任务");
 
                     for (int i = 0; i < taskList.length(); i++) {
                         JSONObject taskInfo = taskList.getJSONObject(i);
@@ -139,7 +139,7 @@ public class ForestChouChouLe {
                                     activityId, sceneCode, source, taskSceneCode, taskType
                             );
                             if (ResChecker.checkRes(TAG, sginRes)) {
-                                Log.forest(sceneName + "🧾：" + taskName + " 兑换成功");
+                                Log.record(sceneName + "🧾：" + taskName + " 兑换成功");
                                 doublecheck = true;
                             } else {
                                 Log.error(TAG, sceneName + " 活力值兑换失败: " + taskName);
@@ -163,14 +163,14 @@ public class ForestChouChouLe {
                             }
 
                             if (ResChecker.checkRes(TAG, result)) {
-                                Log.forest(sceneName + "🧾：" + taskName + " 完成成功");
+                                Log.record(sceneName + "🧾：" + taskName + " 完成成功");
                                 doublecheck = true;
                             } else {
                                 Log.error(TAG, sceneName + " 任务完成失败: " + taskName);
                                 // 失败计数（不会自动屏蔽）
                                 int tryCount = taskTryCount.computeIfAbsent(taskType, k -> new AtomicInteger(0)).incrementAndGet();
                                 if (tryCount > 3) {
-                                    Log.forest(sceneName + " 任务 " + taskName + " 多次失败，建议检查");
+                                    Log.record(sceneName + " 任务 " + taskName + " 多次失败，建议检查");
                                 }
                             }
                         }
@@ -181,7 +181,7 @@ public class ForestChouChouLe {
                             GlobalThreadPools.sleepCompat(3000L);
                             String sginRes = AntForestRpcCall.receiveTaskAwardopengreen(source, taskSceneCode, taskType);
                             if (ResChecker.checkRes(TAG, sginRes)) {
-                                Log.forest(sceneName + "🧾：" + taskName + " 奖励领取成功");
+                                Log.record(sceneName + "🧾：" + taskName + " 奖励领取成功");
                                 if (rightsTimesLimit - rightsTimes > 0) {
                                     doublecheck = true;
                                 }
@@ -204,7 +204,7 @@ public class ForestChouChouLe {
             } while (doublecheck && ++loopCount < MAX_LOOP);
 
             // ==================== 执行当前场景的抽奖 ====================
-            Log.forest(sceneName + " 开始处理抽奖");
+            Log.record(sceneName + " 开始处理抽奖");
             // 重新进入活动获取最新状态
             jo = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen(activityId, sceneCode, source));
             if (ResChecker.checkRes(TAG, jo)) {
@@ -212,7 +212,7 @@ public class ForestChouChouLe {
                 int blance = drawAsset.optInt("blance", 0);
                 int totalTimes = drawAsset.optInt("totalTimes", 0);
 
-                Log.forest(sceneName + " 剩余抽奖次数：" + blance + "/" + totalTimes);
+                Log.record(sceneName + " 剩余抽奖次数：" + blance + "/" + totalTimes);
 
                 int drawCount = 0;
                 while (blance > 0 && drawCount < 50) { // 防止无限循环
@@ -227,7 +227,7 @@ public class ForestChouChouLe {
                         JSONObject prizeVO = jo.getJSONObject("prizeVO");
                         String prizeName = prizeVO.getString("prizeName");
                         int prizeNum = prizeVO.getInt("prizeNum");
-                        Log.forest(sceneName + "🎁[领取: " + prizeName + "*" + prizeNum + "] 剩余次数: " + newBlance);
+                        Log.record(sceneName + "🎁[领取: " + prizeName + "*" + prizeNum + "] 剩余次数: " + newBlance);
                         
                         blance = newBlance;
                         
@@ -242,7 +242,7 @@ public class ForestChouChouLe {
                 }
                 
                 if (drawCount > 0) {
-                    Log.forest(sceneName + " 抽奖完成，共抽奖 " + drawCount + " 次");
+                    Log.record(sceneName + " 抽奖完成，共抽奖 " + drawCount + " 次");
                 }
             } else {
                 Log.error(TAG, sceneName + " - 抽奖前enterDrawActivity调用失败");
