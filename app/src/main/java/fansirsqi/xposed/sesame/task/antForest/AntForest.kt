@@ -2055,7 +2055,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 if (takeLookResponse.isEmpty()) {
                     consecutiveEmpty++
-                    if (consecutiveEmpty >= 3) {
+                    if (consecutiveEmpty >= 5) {
                         shouldCooldown = true
                         nextTakeLookTime = System.currentTimeMillis() + TAKE_LOOK_COOLDOWN_MS
                         Log.record(TAG, "连续" + consecutiveEmpty + "次接口返回空结果，提前结束找能量，休息15分钟")
