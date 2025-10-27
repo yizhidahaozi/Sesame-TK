@@ -88,14 +88,40 @@ public class ApplicationHook {
     }
 
     /**
+     * 确保 WorkManager 调度器已初始化
+     * 如果未初始化则尝试初始化
+     */
+    private static void ensureWorkScheduler() {
+        if (workScheduler == null && appContext != null) {
+            Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试初始化...");
+            try {
+                workScheduler = new WorkManagerScheduler(appContext);
+                Log.record(TAG, "✅ WorkManager 调度器已自动初始化");
+            } catch (Exception e) {
+                Log.error(TAG, "❌ WorkManager 调度器自动初始化失败: " + e.getMessage());
+                Log.printStackTrace(TAG, e);
+            }
+        }
+    }
+
+    /**
      * 获取 WorkManager 调度器状态
      */
     @JvmStatic
     public static String getWorkSchedulerStatus() {
+        // 确保调度器已初始化
+        ensureWorkScheduler();
+        
         if (workScheduler != null) {
-            return workScheduler.getStatus();
+            try {
+                return workScheduler.getStatus();
+            } catch (Exception e) {
+                Log.error(TAG, "获取 WorkManager 状态失败: " + e.getMessage());
+                return "WorkManager: 状态获取失败 - " + e.getMessage();
+            }
         }
-        return "WorkManager: 未初始化";
+        
+        return "WorkManager: 未初始化 (appContext 为 null)";
     }
 
     @Getter
@@ -213,11 +239,25 @@ public class ApplicationHook {
 
             // 使用 WorkManager 调度器
             nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
-            if (workScheduler != null) {
-                workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
-            } else {
-                Log.error(TAG, "WorkManager 调度器未初始化");
+            if (workScheduler == null) {
+                Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试重新初始化...");
+                if (appContext != null) {
+                    try {
+                        workScheduler = new WorkManagerScheduler(appContext);
+                        Log.record(TAG, "✅ WorkManager 调度器已重新初始化");
+                    } catch (Exception e) {
+                        Log.error(TAG, "❌ WorkManager 调度器重新初始化失败: " + e.getMessage());
+                        Log.printStackTrace(TAG, e);
+                        return;
+                    }
+                } else {
+                    Log.error(TAG, "❌ 无法初始化 WorkManager：appContext 为 null");
+                    return;
+                }
             }
+            
+            // 调度下次执行
+            workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -452,6 +492,7 @@ public class ApplicationHook {
 
                                     if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
                                         Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
+                                        ensureWorkScheduler();
                                         if (workScheduler != null) {
                                             workScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
                                         }
@@ -529,17 +570,19 @@ public class ApplicationHook {
      */
     private static void setWakenAtTimeAlarmWithRetry(int retryCount) {
         try {
-            // 检查 WorkManager 调度器是否已初始化
+            // 确保 WorkManager 调度器已初始化
+            ensureWorkScheduler();
+            
             if (workScheduler == null) {
                 if (retryCount < 3) {
                     // 延迟重试，最多3次
                     final int currentRetry = retryCount + 1;
-                    Log.runtime(TAG, "WorkManager 调度器未初始化，延迟" + (currentRetry * 2) + "秒后重试设置定时唤醒 (第" + currentRetry + "次)");
+                    Log.runtime(TAG, "WorkManager 调度器初始化失败，延迟" + (currentRetry * 2) + "秒后重试 (第" + currentRetry + "次)");
                     if (mainHandler != null) {
                         mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
                     }
                 } else {
-                    Log.error(TAG, "WorkManager 调度器初始化超时，放弃设置定时唤醒");
+                    Log.error(TAG, "WorkManager 调度器初始化超时，放弃设置定时任务");
                 }
                 return;
             }
@@ -601,6 +644,7 @@ public class ApplicationHook {
      * 取消所有定时任务
      */
     private static void unsetWakenAtTimeAlarm() {
+        ensureWorkScheduler();
         if (workScheduler != null) {
             workScheduler.cancelAllWakeupAlarms();
             Log.record(TAG, "已取消所有定时任务");
@@ -955,6 +999,7 @@ public class ApplicationHook {
                     }
 
                     // 使用 WorkManager 调度器
+                    ensureWorkScheduler();
                     if (workScheduler != null) {
                         workScheduler.scheduleDelayedExecution(delayMillis);
                     }
