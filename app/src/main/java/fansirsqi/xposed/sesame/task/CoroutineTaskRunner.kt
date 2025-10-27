@@ -109,7 +109,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 
                 // 调度下次执行
                 try {
-                    fansirsqi.xposed.sesame.hook.ApplicationHook.scheduleNextExecution()
+                    ApplicationHook.scheduleNextExecution()
                     Log.record(TAG, "✅ 已调度下次执行")
                 } catch (e: Exception) {
                     Log.error(TAG, "调度下次执行失败: ${e.message}")
