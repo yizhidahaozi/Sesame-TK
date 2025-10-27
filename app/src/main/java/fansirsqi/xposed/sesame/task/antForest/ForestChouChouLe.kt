@@ -125,7 +125,7 @@ class ForestChouChouLe {
                     if (!checkRes(TAG, draw)) return@repeat
                     balance = draw.getJSONObject("drawAsset").getInt("blance")
                     val prize = draw.getJSONObject("prizeVO")
-                    Log.record("${s.name}🎁[领取: ${prize.getString("prizeName")}*${prize.getInt("prizeNum")}] 剩余次数: $balance")
+                    Log.forest("${s.name}🎁[领取: ${prize.getString("prizeName")}*${prize.getInt("prizeNum")}] 剩余次数: $balance")
                     if (balance > 0) sleepCompat(2000L)
                 }
             }
@@ -203,7 +203,7 @@ class ForestChouChouLe {
                 Log.record("${s.name} 处理活力值兑换任务：$taskName")
                 val result = AntForestRpcCall.exchangeTimesFromTaskopengreen(s.id, s.code, SOURCE, taskCode, taskType)
                 checkRes(TAG, result).also {
-                    if (it) Log.record("${s.name}🧾：$taskName 兑换成功")
+                    if (it) Log.forest("${s.name}🧾：$taskName 兑换成功")
                     else Log.error(TAG, "${s.name} 活力值兑换失败: $taskName")
                 }
             }
@@ -220,7 +220,7 @@ class ForestChouChouLe {
                     
                 checkRes(TAG, result).also {
                     if (it) {
-                        Log.record("${s.name}🧾：$taskName 完成成功")
+                        Log.forest("${s.name}🧾：$taskName 完成成功")
                     } else {
                         Log.error(TAG, "${s.name} 任务完成失败: $taskName")
                         val tryCount = taskTryCount.computeIfAbsent(taskType) { AtomicInteger(0) }.incrementAndGet()
@@ -236,7 +236,7 @@ class ForestChouChouLe {
                 val result = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, taskCode, taskType)
                 checkRes(TAG, result).also {
                     if (it) {
-                        Log.record("${s.name}🧾：$taskName 奖励领取成功")
+                        Log.forest("${s.name}🧾：$taskName 奖励领取成功")
                     } else {
                         Log.error(TAG, "${s.name} 奖励领取失败: $taskName")
                     }
