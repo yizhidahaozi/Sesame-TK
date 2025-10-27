@@ -184,11 +184,19 @@ public class ApplicationHook {
     }
 
     /**
-     * 调度定时执行
+     * 调度下次执行（公共静态方法）
+     */
+    @JvmStatic
+    public static void scheduleNextExecution() {
+        scheduleNextExecutionInternal(lastExecTime);
+    }
+
+    /**
+     * 调度定时执行（内部静态方法）
      *
      * @param lastExecTime 上次执行时间
      */
-    private void scheduleNextExecution(long lastExecTime) {
+    private static void scheduleNextExecutionInternal(long lastExecTime) {
         try {
             // 检查长时间未执行的情况
             checkInactiveTime();
@@ -492,7 +500,7 @@ public class ApplicationHook {
                                     // 方式1：直接使用数组转换
                                     TaskRunnerAdapter adapter = new TaskRunnerAdapter();
                                     adapter.run();
-                                    scheduleNextExecution(lastExecTime);
+                                    scheduleNextExecutionInternal(lastExecTime);
                                 } catch (Exception e) {
                                     Log.record(TAG, "❌执行异常");
                                     Log.printStackTrace(TAG, e);
@@ -810,7 +818,7 @@ public class ApplicationHook {
      * 检查长时间未执行的情况，如果超过阈值则自动重启
      * 特别针对0点后可能出现的执行中断情况
      */
-    private void checkInactiveTime() {
+    private static void checkInactiveTime() {
         try {
             if (lastExecTime == 0) {
                 return; // 首次执行，跳过检查

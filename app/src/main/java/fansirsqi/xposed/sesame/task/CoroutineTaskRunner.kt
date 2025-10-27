@@ -106,6 +106,15 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 printExecutionSummary(startTime, endTime)
                 // 清空恢复尝试计数
                 recoveryAttempts.clear()
+                
+                // 调度下次执行
+                try {
+                    fansirsqi.xposed.sesame.hook.ApplicationHook.scheduleNextExecution()
+                    Log.record(TAG, "✅ 已调度下次执行")
+                } catch (e: Exception) {
+                    Log.error(TAG, "调度下次执行失败: ${e.message}")
+                    Log.printStackTrace(TAG, e)
+                }
             }
         }
     }
