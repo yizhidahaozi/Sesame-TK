@@ -70,7 +70,7 @@ public class ApplicationHook {
 
     /**
      * WorkManager调度器 - 完全替代 AlarmManager
-     * 优势：无500个闹钟限制、系统级优化、自动重试
+     * 优势：无任务数量限制、系统级优化、自动重试
      */
     private static WorkManagerScheduler workScheduler = null;
 
@@ -417,7 +417,7 @@ public class ApplicationHook {
                                     }
 
                                     if (isAlarmTriggered) {
-                                        Log.record(TAG, "⏰ 开始新一轮任务 (闹钟触发)");
+                                        Log.record(TAG, "⏰ 开始新一轮任务 (定时任务触发)");
                                     } else {
                                         if (lastExecTime == 0) {
                                             Log.record(TAG, "▶️ 首次手动触发，开始运行");
@@ -440,7 +440,7 @@ public class ApplicationHook {
                                     long timeSinceLastExec = currentTime - lastExecTime;
 
                                     if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
-                                        Log.record(TAG, "⚠️ 闹钟触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
+                                        Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
                                         if (workScheduler != null) {
                                             workScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
                                         }
@@ -539,7 +539,7 @@ public class ApplicationHook {
                 return;
             }
 
-            // 清理旧唤醒闹钟
+            // 清理旧唤醒任务
             unsetWakenAtTimeAlarm();
 
             // 设置0点唤醒
@@ -552,9 +552,9 @@ public class ApplicationHook {
 
             boolean success = workScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
             if (success) {
-                Log.record(TAG, "⏰ 设置0点定时唤醒成功");
+                Log.record(TAG, "⏰ 设置0点定时任务成功");
             } else {
-                Log.runtime(TAG, "⏰ 设置0点定时唤醒失败");
+                Log.runtime(TAG, "⏰ 设置0点定时任务失败");
             }
 
             // 设置自定义时间点唤醒
@@ -569,7 +569,7 @@ public class ApplicationHook {
                             boolean customSuccess = workScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
                             if (customSuccess) {
                                 successCount++;
-                                Log.record(TAG, "⏰ 设置定时唤醒成功: " + wakenAtTime);
+                                Log.record(TAG, "⏰ 设置定时任务成功: " + wakenAtTime);
                             }
                         }
                     } catch (Exception e) {
@@ -577,7 +577,7 @@ public class ApplicationHook {
                     }
                 }
                 if (successCount > 0) {
-                    Log.record(TAG, "⏰ 共设置了 " + successCount + " 个自定义定时唤醒");
+                    Log.record(TAG, "⏰ 共设置了 " + successCount + " 个自定义定时任务");
                 }
             }
         } catch (Exception e) {
@@ -587,12 +587,12 @@ public class ApplicationHook {
     }
 
     /**
-     * 取消所有定时唤醒
+     * 取消所有定时任务
      */
     private static void unsetWakenAtTimeAlarm() {
         if (workScheduler != null) {
             workScheduler.cancelAllWakeupAlarms();
-            Log.record(TAG, "已取消所有定时唤醒");
+            Log.record(TAG, "已取消所有定时任务");
         }
     }
 

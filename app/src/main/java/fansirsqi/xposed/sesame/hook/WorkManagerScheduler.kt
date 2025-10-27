@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
  * WorkManager 调度器 - 完全替代 AlarmManager
  * 
  * 优势：
- * 1. 无系统 500 个闹钟限制
+ * 1. 无系统任务数量限制
  * 2. 自动处理应用重启
  * 3. 系统级优化，省电
  * 4. 支持约束条件
@@ -120,11 +120,11 @@ class WorkManagerScheduler(private val context: Context) {
     }
 
     /**
-     * 调度定时唤醒闹钟
+     * 调度定时唤醒任务
      * 
      * @param triggerAtMillis 触发时间戳
      * @param requestCode 请求码
-     * @param isMainAlarm 是否为主闹钟（0点唤醒）
+     * @param isMainAlarm 是否为主任务（0点唤醒）
      * @return 是否调度成功
      */
     fun scheduleWakeupAlarm(
@@ -166,14 +166,14 @@ class WorkManagerScheduler(private val context: Context) {
                 workRequest
             )
             
-            val alarmType = if (isMainAlarm) "主闹钟" else "自定义闹钟"
-            Log.record(TAG, "⏰ ${alarmType}调度成功: ID=$requestCode")
+            val taskType = if (isMainAlarm) "主定时任务" else "自定义定时任务"
+            Log.record(TAG, "⏰ ${taskType}调度成功: ID=$requestCode")
             Log.record(TAG, "触发时间: ${TimeUtil.getCommonDate(triggerAtMillis)}")
             
             true
             
         } catch (e: Exception) {
-            Log.error(TAG, "调度唤醒闹钟失败: ${e.message}")
+            Log.error(TAG, "调度唤醒任务失败: ${e.message}")
             Log.printStackTrace(TAG, e)
             false
         }
@@ -194,14 +194,14 @@ class WorkManagerScheduler(private val context: Context) {
     }
 
     /**
-     * 取消所有唤醒闹钟
+     * 取消所有唤醒任务
      */
     fun cancelAllWakeupAlarms() {
         try {
             workManager.cancelAllWorkByTag("wakeup")
-            Log.record(TAG, "已取消所有唤醒闹钟")
+            Log.record(TAG, "已取消所有唤醒任务")
         } catch (e: Exception) {
-            Log.error(TAG, "取消唤醒闹钟失败: ${e.message}")
+            Log.error(TAG, "取消唤醒任务失败: ${e.message}")
         }
     }
 
