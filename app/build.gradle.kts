@@ -211,6 +211,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)     // 协程核心库
     implementation(libs.kotlinx.coroutines.android)  // Android 协程支持
 
+    // WorkManager 依赖 - 后台任务调度
+    implementation(libs.androidx.work.runtime.ktx)   // WorkManager KTX 扩展
+
     // 数据观察和 HTTP 服务
     implementation(libs.androidx.lifecycle.livedata.ktx)  // LiveData KTX 扩展
     implementation(libs.androidx.runtime.livedata)        // Compose LiveData 运行时

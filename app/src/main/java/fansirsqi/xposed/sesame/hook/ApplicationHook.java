@@ -11,7 +11,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import androidx.annotation.NonNull;
-import fansirsqi.xposed.sesame.hook.keepalive.AlipayComponentHelper;
 import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 import java.io.File;
@@ -70,10 +69,10 @@ public class ApplicationHook {
     
 
     /**
-     * AlarmScheduler管理器 - 统一管理所有闹钟相关功能
-     * 通过此管理器访问所有闹钟调度功能，避免直接引用 AlarmScheduler
+     * WorkManager调度器 - 完全替代 AlarmManager
+     * 优势：无500个闹钟限制、系统级优化、自动重试
      */
-    private static final AlarmSchedulerManager alarmManager = new AlarmSchedulerManager();
+    private static WorkManagerScheduler workScheduler = null;
 
     @Getter
     private static ClassLoader classLoader = null;
@@ -82,8 +81,6 @@ public class ApplicationHook {
     @SuppressLint("StaticFieldLeak")
     static Context appContext = null;
 
-    @SuppressLint("StaticFieldLeak")
-    private static AlipayComponentHelper alipayComponentHelper;
 
     @JvmStatic
     public static Context getAppContext() {
@@ -116,7 +113,7 @@ public class ApplicationHook {
     static Handler mainHandler;
     /**
      * -- GETTER --
-     * 获取主任务实例 - 供AlarmScheduler使用
+     * 获取主任务实例 - 供任务调度使用
      */
     @Getter
     static BaseTask mainTask;
@@ -203,9 +200,13 @@ public class ApplicationHook {
                 Log.printStackTrace(TAG, e);
             }
 
-            // 使用统一的闹钟调度器
+            // 使用 WorkManager 调度器
             nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
-            alarmManager.scheduleExactExecution(delayMillis, nextExecutionTime);
+            if (workScheduler != null) {
+                workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
+            } else {
+                Log.error(TAG, "WorkManager 调度器未初始化");
+            }
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -283,16 +284,14 @@ public class ApplicationHook {
                     appContext = (Context) param.args[0];
 
                     registerBroadcastReceiver(appContext);
-                    // 设置AlarmSchedulerManager依赖项
-                    alarmManager.setMainHandler(mainHandler);
-                    alarmManager.setAppContext(appContext);
-                    // 初始化闹钟调度器
-                    alarmManager.initializeAlarmScheduler(appContext);
-
-                    // 初始化支付宝组件帮助类（用于任务执行前唤醒）
-                    alipayComponentHelper = new AlipayComponentHelper(appContext);
-                    alipayComponentHelper.setupKeepAlive();
-                    Log.runtime(TAG, "✅ 已初始化支付宝组件帮助类");
+                    // 初始化 WorkManager 调度器（替代 AlarmManager）
+                    try {
+                        workScheduler = new WorkManagerScheduler(appContext);
+                        Log.runtime(TAG, "✅ WorkManager 调度器初始化成功");
+                    } catch (Exception e) {
+                        Log.error(TAG, "❌ WorkManager 调度器初始化失败: " + e.getMessage());
+                        Log.printStackTrace(TAG, e);
+                    }
 
                     PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                     Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
@@ -442,8 +441,9 @@ public class ApplicationHook {
 
                                     if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
                                         Log.record(TAG, "⚠️ 闹钟触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
-                                        alarmManager.scheduleDelayedExecutionWithRetry(
-                                                BaseModel.getCheckInterval().getValue(), "跳过执行后的重新调度");
+                                        if (workScheduler != null) {
+                                            workScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
+                                        }
                                         return;
                                     }
 
@@ -462,8 +462,6 @@ public class ApplicationHook {
                                 } catch (Exception e) {
                                     Log.record(TAG, "❌执行异常");
                                     Log.printStackTrace(TAG, e);
-                                } finally {
-                                    AlarmScheduler.releaseWakeLock();
                                 }
                             });
                             dayCalendar = Calendar.getInstance();
@@ -520,17 +518,17 @@ public class ApplicationHook {
      */
     private static void setWakenAtTimeAlarmWithRetry(int retryCount) {
         try {
-            // 检查AlarmScheduler是否已初始化
-            if (!alarmManager.isAlarmSchedulerAvailable()) {
+            // 检查 WorkManager 调度器是否已初始化
+            if (workScheduler == null) {
                 if (retryCount < 3) {
                     // 延迟重试，最多3次
                     final int currentRetry = retryCount + 1;
-                    Log.runtime(TAG, "AlarmScheduler未初始化，延迟" + (currentRetry * 2) + "秒后重试设置定时唤醒 (第" + currentRetry + "次)");
+                    Log.runtime(TAG, "WorkManager 调度器未初始化，延迟" + (currentRetry * 2) + "秒后重试设置定时唤醒 (第" + currentRetry + "次)");
                     if (mainHandler != null) {
                         mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
                     }
                 } else {
-                    Log.error(TAG, "AlarmScheduler初始化超时，放弃设置定时唤醒");
+                    Log.error(TAG, "WorkManager 调度器初始化超时，放弃设置定时唤醒");
                 }
                 return;
             }
@@ -552,7 +550,7 @@ public class ApplicationHook {
             calendar.set(Calendar.SECOND, 0);
             calendar.set(Calendar.MILLISECOND, 0);
 
-            boolean success = alarmManager.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
+            boolean success = workScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
             if (success) {
                 Log.record(TAG, "⏰ 设置0点定时唤醒成功");
             } else {
@@ -568,7 +566,7 @@ public class ApplicationHook {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                            boolean customSuccess = alarmManager.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
+                            boolean customSuccess = workScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
                             if (customSuccess) {
                                 successCount++;
                                 Log.record(TAG, "⏰ 设置定时唤醒成功: " + wakenAtTime);
@@ -592,11 +590,9 @@ public class ApplicationHook {
      * 取消所有定时唤醒
      */
     private static void unsetWakenAtTimeAlarm() {
-        if (alarmManager.isAlarmSchedulerAvailable()) {
-            // AlarmScheduler内部没有提供仅取消唤醒闹钟的方法，
-            // 但在destroyHandler中会取消所有闹钟，这里可以依赖该逻辑
-            // 如果需要精细控制，需要在AlarmScheduler中增加按分类取消的功能
-            Log.debug(TAG, "取消定时唤醒将由destroyHandler统一处理");
+        if (workScheduler != null) {
+            workScheduler.cancelAllWakeupAlarms();
+            Log.record(TAG, "已取消所有定时唤醒");
         }
     }
 
@@ -610,9 +606,14 @@ public class ApplicationHook {
                 destroyHandler(true); // 重新初始化时销毁旧的handler
             }
 
-            // AlarmScheduler 确保可用
-            if (!alarmManager.isAlarmSchedulerAvailable() && appContext != null) {
-                alarmManager.initializeAlarmScheduler(appContext);
+            // WorkManager 调度器确保可用
+            if (workScheduler == null && appContext != null) {
+                try {
+                    workScheduler = new WorkManagerScheduler(appContext);
+                    Log.record(TAG, "✅ WorkManager 调度器已重新初始化");
+                } catch (Exception e) {
+                    Log.error(TAG, "WorkManager 调度器重新初始化失败: " + e.getMessage());
+                }
             }
 
             Model.initAllModel(); // 在所有服务启动前装模块配置
@@ -642,20 +643,7 @@ public class ApplicationHook {
                     return false;
                 }
 
-                // 闹钟权限检查
-                if (!PermissionUtil.checkAlarmPermissions()) {
-                    Log.record(TAG, "❌ 支付宝无闹钟权限");
-                    mainHandler.postDelayed(
-                            () -> {
-                                if (!PermissionUtil.checkOrRequestAlarmPermissions(appContext)) {
-                                    Toast.show("请授予支付宝使用闹钟权限");
-                                }
-                            },
-                            2000);
-                    return false;
-                }
-
-                // 后台运行权限检查
+                // 后台运行权限检查 (WorkManager 不需要精确闹钟权限)
                 if (!init && !PermissionUtil.checkBatteryPermissions()) {
                     Log.record(TAG, "支付宝无始终在后台运行权限");
                     mainHandler.postDelayed(
@@ -751,13 +739,12 @@ public class ApplicationHook {
                     Config.unload();
                     UserMap.unload();
                 }
-                // 清理AlarmScheduler协程资源
-                alarmManager.cleanupAlarmScheduler();
-                // 清理支付宝组件保活资源
-                if (alipayComponentHelper != null) {
-                    alipayComponentHelper.stopKeepAlive();
-                    alipayComponentHelper = null;
+                // 清理 WorkManager 调度器资源
+                if (workScheduler != null) {
+                    workScheduler.cleanup();
+                    workScheduler = null;
                 }
+
                 if (wakeLock != null) {
                     wakeLock.release();
                     wakeLock = null;
@@ -779,16 +766,6 @@ public class ApplicationHook {
     }
 
     static void execHandler() {
-        // 任务执行前唤醒支付宝进程，确保RPC调用正常
-        if (alipayComponentHelper != null) {
-            try {
-                // 【唤醒方式选择】
-                // 方式1: 完整唤醒（启动所有4个服务，包括日志同步、计步统计等）
-                alipayComponentHelper.wakeupAlipay();
-            } catch (Exception e) {
-                Log.runtime(TAG, "唤醒支付宝进程失败: " + e.getMessage());
-            }
-        }
         mainTask.startTask(false);// 非强制执行，避免重复排队
     }
 
@@ -966,8 +943,10 @@ public class ApplicationHook {
                         delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
                     }
 
-                    // 使用统一的闹钟调度器
-                    alarmManager.scheduleDelayedExecution(delayMillis);
+                    // 使用 WorkManager 调度器
+                    if (workScheduler != null) {
+                        workScheduler.scheduleDelayedExecution(delayMillis);
+                    }
 
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
@@ -1028,14 +1007,8 @@ public class ApplicationHook {
                             }).start();
                             break;
                         default:
-                            // 处理闹钟相关的广播
-                            if (alarmManager.isAlarmSchedulerAvailable()) {
-                                int requestCode = intent.getIntExtra("request_code", -1);
-                                Thread alarmThread = new Thread(() -> alarmManager.handleAlarmTrigger(requestCode));
-                                alarmThread.setName("AlarmTriggered_" + requestCode);
-                                alarmThread.start();
-                                Log.record(TAG, "闹钟广播触发，创建处理线程: " + alarmThread.getName());
-                            }
+                            // WorkManager 会自动处理任务触发，无需额外处理
+                            Log.debug(TAG, "收到未知广播: " + action);
                             break;
                     }
                 }
