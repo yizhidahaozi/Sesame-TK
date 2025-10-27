@@ -420,7 +420,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         val totalTasks = taskList.size
         val enabledTasks = taskList.count { it.isEnable }
 
-        Log.record(TAG, ApplicationHook.getWorkSchedulerStatus())
         Log.record(TAG, "📈 ===== 协程任务执行统计摘要 =====")
         Log.record(TAG, "🕐 执行时间: ${totalTime}ms (${String.format("%.1f", totalTime/1000.0)}秒)")
         val nextTime = ApplicationHook.nextExecutionTime

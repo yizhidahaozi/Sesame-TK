@@ -9,7 +9,6 @@ object TaskConstants {
      * 广播动作常量
      */
     const val ACTION_EXECUTE = "com.eg.android.AlipayGphone.sesame.execute"
-    const val ALARM_CATEGORY = "fansirsqi.xposed.sesame.ALARM_CATEGORY"
     
     /**
      * 唤醒锁相关常量

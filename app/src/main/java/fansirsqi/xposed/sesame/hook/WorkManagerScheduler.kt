@@ -5,6 +5,7 @@ import androidx.work.*
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
 
 /**
  * WorkManager 调度器 - 完全替代 AlarmManager
@@ -31,9 +32,53 @@ class WorkManagerScheduler(private val context: Context) {
         private const val WORK_MAIN_TASK = "sesame_main_task"
         private const val WORK_WAKEUP_PREFIX = "sesame_wakeup_"
         private const val WORK_EXACT_PREFIX = "sesame_exact_"
+        
+        /**
+         * 初始化 WorkManager
+         * 必须在第一次使用前调用
+         */
+        @JvmStatic
+        fun initializeWorkManager(context: Context) {
+            try {
+                // 检查是否已经初始化
+                try {
+                    WorkManager.getInstance(context)
+                    Log.debug(TAG, "WorkManager 已经初始化")
+                    return
+                } catch (e: IllegalStateException) {
+                    // 未初始化，继续初始化
+                }
+                
+                // 使用 applicationContext 并包装以避免资源冲突
+                val appContext = context.applicationContext
+                val safeContext = SafeContextWrapper(appContext)
+                
+                // 创建自定义配置 - 完全手动配置避免读取资源
+                val configuration = Configuration.Builder()
+                    .setMinimumLoggingLevel(android.util.Log.INFO)
+                    .setExecutor(Executors.newFixedThreadPool(4))
+                    .setTaskExecutor(Executors.newSingleThreadExecutor())
+                    // 设置所有可能从资源读取的配置项
+                    .setJobSchedulerJobIdRange(0, 1000)
+                    .build()
+                
+                // 手动初始化 WorkManager，使用安全包装的 Context
+                WorkManager.initialize(safeContext, configuration)
+                Log.record(TAG, "✅ WorkManager 已成功初始化")
+            } catch (e: Exception) {
+                Log.error(TAG, "❌ WorkManager 初始化失败: ${e.message}")
+                Log.printStackTrace(TAG, e)
+                throw e
+            }
+        }
     }
 
-    private val workManager: WorkManager = WorkManager.getInstance(context)
+    private val workManager: WorkManager by lazy {
+        // 确保 WorkManager 已初始化
+        val appContext = context.applicationContext
+        initializeWorkManager(appContext)
+        WorkManager.getInstance(appContext)
+    }
 
     /**
      * 调度延迟执行任务
@@ -214,24 +259,6 @@ class WorkManagerScheduler(private val context: Context) {
             Log.record(TAG, "已取消所有 WorkManager 任务")
         } catch (e: Exception) {
             Log.error(TAG, "取消所有任务失败: ${e.message}")
-        }
-    }
-
-    /**
-     * 获取调度器状态
-     * 
-     * @return 状态描述字符串
-     */
-    fun getStatus(): String {
-        return try {
-            val workInfos = workManager.getWorkInfosByTag(WORK_MAIN_TASK).get()
-            val runningCount = workInfos.count { it.state == WorkInfo.State.RUNNING }
-            val enqueuedCount = workInfos.count { it.state == WorkInfo.State.ENQUEUED }
-            val succeededCount = workInfos.count { it.state == WorkInfo.State.SUCCEEDED }
-            
-            "WorkManager: 运行中=$runningCount, 排队中=$enqueuedCount, 已完成=$succeededCount"
-        } catch (e: Exception) {
-            "WorkManager: 状态获取失败 - ${e.message}"
         }
     }
 

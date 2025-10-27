@@ -79,7 +79,7 @@ public class ApplicationHook {
     private static Object microApplicationContextObject = null;
 
     @SuppressLint("StaticFieldLeak")
-    static Context appContext = null;
+    static volatile Context appContext = null;
 
 
     @JvmStatic
@@ -91,37 +91,21 @@ public class ApplicationHook {
      * 确保 WorkManager 调度器已初始化
      * 如果未初始化则尝试初始化
      */
-    private static void ensureWorkScheduler() {
-        if (workScheduler == null && appContext != null) {
-            Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试初始化...");
-            try {
-                workScheduler = new WorkManagerScheduler(appContext);
-                Log.record(TAG, "✅ WorkManager 调度器已自动初始化");
-            } catch (Exception e) {
-                Log.error(TAG, "❌ WorkManager 调度器自动初始化失败: " + e.getMessage());
-                Log.printStackTrace(TAG, e);
+    private static synchronized void ensureWorkScheduler() {
+        if (workScheduler == null) {
+            if (appContext != null) {
+                Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试初始化...");
+                try {
+                    workScheduler = new WorkManagerScheduler(appContext);
+                    Log.record(TAG, "✅ WorkManager 调度器已自动初始化");
+                } catch (Exception e) {
+                    Log.error(TAG, "❌ WorkManager 调度器自动初始化失败: " + e.getMessage());
+                    Log.printStackTrace(TAG, e);
+                }
+            } else {
+                Log.debug(TAG, "⚠️ 无法初始化 WorkManager: appContext 为 null (可能应用刚启动)");
             }
         }
-    }
-
-    /**
-     * 获取 WorkManager 调度器状态
-     */
-    @JvmStatic
-    public static String getWorkSchedulerStatus() {
-        // 确保调度器已初始化
-        ensureWorkScheduler();
-        
-        if (workScheduler != null) {
-            try {
-                return workScheduler.getStatus();
-            } catch (Exception e) {
-                Log.error(TAG, "获取 WorkManager 状态失败: " + e.getMessage());
-                return "WorkManager: 状态获取失败 - " + e.getMessage();
-            }
-        }
-        
-        return "WorkManager: 未初始化 (appContext 为 null)";
     }
 
     @Getter
@@ -338,7 +322,6 @@ public class ApplicationHook {
                     // 初始化 WorkManager 调度器（替代 AlarmManager）
                     try {
                         workScheduler = new WorkManagerScheduler(appContext);
-                        Log.runtime(TAG, "✅ WorkManager 调度器初始化成功");
                     } catch (Exception e) {
                         Log.error(TAG, "❌ WorkManager 调度器初始化失败: " + e.getMessage());
                         Log.printStackTrace(TAG, e);
@@ -498,7 +481,6 @@ public class ApplicationHook {
                                         }
                                         return;
                                     }
-
                                     String currentUid = UserMap.getCurrentUid();
                                     String targetUid = HookUtil.INSTANCE.getUserId(classLoader);
                                     if (targetUid == null || !targetUid.equals(currentUid)) {
@@ -1029,8 +1011,14 @@ public class ApplicationHook {
                             Log.printStack(TAG);
                             if (intent.getBooleanExtra("alarm_triggered", false)) {
                                 alarmTriggeredFlag = true;
+                                Log.record(TAG, "⏰ 收到定时任务触发广播 (WorkManager)");
                             }
-                            new Thread(() -> initHandler(false)).start();
+                            // 如果已初始化，直接执行任务；否则先初始化
+                            if (init) {
+                                execHandler();
+                            } else {
+                                new Thread(() -> initHandler(false)).start();
+                            }
                             break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
                             Log.printStack(TAG);

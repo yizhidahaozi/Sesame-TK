@@ -98,7 +98,6 @@ class TaskExecutionWorker(
                 putExtra("scheduled_at", System.currentTimeMillis())
                 putExtra("from_work_manager", true)
                 setPackage(General.PACKAGE_NAME)
-                addCategory(TaskConstants.ALARM_CATEGORY)
             }
             
             context.sendBroadcast(intent)
