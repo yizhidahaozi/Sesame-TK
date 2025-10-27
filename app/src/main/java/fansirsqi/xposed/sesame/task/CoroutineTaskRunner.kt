@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.hook.WorkManagerScheduler
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.util.Log
@@ -418,7 +419,8 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         val totalTime = endTime - startTime
         val totalTasks = taskList.size
         val enabledTasks = taskList.count { it.isEnable }
-        
+
+        Log.record(TAG, ApplicationHook.getWorkSchedulerStatus())
         Log.record(TAG, "📈 ===== 协程任务执行统计摘要 =====")
         Log.record(TAG, "🕐 执行时间: ${totalTime}ms (${String.format("%.1f", totalTime/1000.0)}秒)")
         val nextTime = ApplicationHook.nextExecutionTime

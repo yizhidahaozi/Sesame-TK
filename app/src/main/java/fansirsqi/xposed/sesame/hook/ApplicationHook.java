@@ -87,6 +87,17 @@ public class ApplicationHook {
         return appContext;
     }
 
+    /**
+     * 获取 WorkManager 调度器状态
+     */
+    @JvmStatic
+    public static String getWorkSchedulerStatus() {
+        if (workScheduler != null) {
+            return workScheduler.getStatus();
+        }
+        return "WorkManager: 未初始化";
+    }
+
     @Getter
     static AlipayVersion alipayVersion = new AlipayVersion("");
 
