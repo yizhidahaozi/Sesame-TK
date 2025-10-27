@@ -776,11 +776,11 @@ public class ApplicationHook {
                     Config.unload();
                     UserMap.unload();
                 }
-                // 清理 WorkManager 调度器资源
-                if (workScheduler != null) {
-                    workScheduler.cleanup();
-                    workScheduler = null;
-                }
+                
+                // 不清理 WorkManager 调度器
+                // WorkManager 任务应该持久化，即使应用重新初始化
+                // 只在模块完全停止时才取消任务
+                Log.debug(TAG, "重新初始化，保留 WorkManager 任务");
 
                 if (wakeLock != null) {
                     wakeLock.release();
