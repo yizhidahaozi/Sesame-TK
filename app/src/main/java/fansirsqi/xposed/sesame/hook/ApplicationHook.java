@@ -69,9 +69,13 @@ public class ApplicationHook {
     
 
     /**
-     * WorkManager调度器 - 完全替代 AlarmManager
-     * 优势：无任务数量限制、系统级优化、自动重试
+     * 任务调度器选择：
+     * - JobScheduler: 系统级服务，支持所有进程（主进程+子进程），Android 5.0+
+     * - WorkManager: 应用级框架，仅支持主进程（在 Xposed 子进程环境中可能失败）
+     * 
+     * 优先使用 JobScheduler 以确保在支付宝的所有进程中都能正常工作
      */
+    private static boolean useJobScheduler = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
     private static WorkManagerScheduler workScheduler = null;
 
     @Getter
@@ -229,11 +233,29 @@ public class ApplicationHook {
                 Log.printStackTrace(TAG, e);
             }
 
-            // 使用 WorkManager 调度器
+            // 使用任务调度器
             nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
-            if (workScheduler == null) {
-                Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试重新初始化...");
-                if (appContext != null) {
+            
+            if (appContext == null) {
+                Log.error(TAG, "❌ 无法调度任务：appContext 为 null");
+                return;
+            }
+            
+            // 优先使用 JobScheduler（支持所有进程）
+
+            if (useJobScheduler) {
+                boolean success = JobSchedulerHelper.INSTANCE.scheduleMainTask(
+                    appContext,
+                    delayMillis,
+                    nextExecutionTime
+                );
+                if (!success) {
+                    Log.error(TAG, "❌ JobScheduler 调度失败");
+                }
+            } else {
+                // 降级到 WorkManager（仅主进程）
+                if (workScheduler == null) {
+                    Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试重新初始化...");
                     try {
                         workScheduler = new WorkManagerScheduler(appContext);
                         Log.record(TAG, "✅ WorkManager 调度器已重新初始化");
@@ -242,14 +264,9 @@ public class ApplicationHook {
                         Log.printStackTrace(TAG, e);
                         return;
                     }
-                } else {
-                    Log.error(TAG, "❌ 无法初始化 WorkManager：appContext 为 null");
-                    return;
                 }
+                workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
             }
-            
-            // 调度下次执行
-            workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -560,21 +577,26 @@ public class ApplicationHook {
      */
     private static void setWakenAtTimeAlarmWithRetry(int retryCount) {
         try {
-            // 确保 WorkManager 调度器已初始化
-            ensureWorkScheduler();
-            
-            if (workScheduler == null) {
+            if (appContext == null) {
                 if (retryCount < 3) {
-                    // 延迟重试，最多3次
                     final int currentRetry = retryCount + 1;
-                    Log.runtime(TAG, "WorkManager 调度器初始化失败，延迟" + (currentRetry * 2) + "秒后重试 (第" + currentRetry + "次)");
+                    Log.runtime(TAG, "appContext 未初始化，延迟" + (currentRetry * 2) + "秒后重试 (第" + currentRetry + "次)");
                     if (mainHandler != null) {
                         mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
                     }
                 } else {
-                    Log.error(TAG, "WorkManager 调度器初始化超时，放弃设置定时任务");
+                    Log.error(TAG, "appContext 初始化超时，放弃设置定时任务");
                 }
                 return;
+            }
+            
+            // 如果不使用 JobScheduler，则确保 WorkManager 调度器已初始化
+            if (!useJobScheduler) {
+                ensureWorkScheduler();
+                if (workScheduler == null) {
+                    Log.error(TAG, "WorkManager 调度器初始化失败");
+                    return;
+                }
             }
 
             List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
@@ -594,7 +616,18 @@ public class ApplicationHook {
             calendar.set(Calendar.SECOND, 0);
             calendar.set(Calendar.MILLISECOND, 0);
 
-            boolean success = workScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
+            boolean success;
+            if (useJobScheduler) {
+                success = JobSchedulerHelper.INSTANCE.scheduleWakeupTask(
+                    appContext,
+                    calendar.getTimeInMillis(),
+                    0,
+                    true
+                );
+            } else {
+                success = workScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
+            }
+            
             if (success) {
                 Log.record(TAG, "⏰ 设置0点定时任务成功");
             } else {
@@ -610,7 +643,17 @@ public class ApplicationHook {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                            boolean customSuccess = workScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
+                            boolean customSuccess;
+                            if (useJobScheduler) {
+                                customSuccess = JobSchedulerHelper.INSTANCE.scheduleWakeupTask(
+                                    appContext,
+                                    wakenAtTimeCalendar.getTimeInMillis(),
+                                    i,
+                                    false
+                                );
+                            } else {
+                                customSuccess = workScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
+                            }
                             if (customSuccess) {
                                 successCount++;
                                 Log.record(TAG, "⏰ 设置定时任务成功: " + wakenAtTime);
@@ -634,11 +677,20 @@ public class ApplicationHook {
      * 取消所有定时任务
      */
     private static void unsetWakenAtTimeAlarm() {
-        ensureWorkScheduler();
-        if (workScheduler != null) {
-            workScheduler.cancelAllWakeupAlarms();
-            Log.record(TAG, "已取消所有定时任务");
+        if (appContext == null) {
+            Log.runtime(TAG, "appContext 为 null，无法取消定时任务");
+            return;
         }
+        
+        if (useJobScheduler) {
+            JobSchedulerHelper.INSTANCE.cancelAllWakeupTasks(appContext);
+        } else {
+            ensureWorkScheduler();
+            if (workScheduler != null) {
+                workScheduler.cancelAllWakeupAlarms();
+            }
+        }
+        Log.record(TAG, "已取消所有定时任务");
     }
 
     private static synchronized Boolean initHandler(Boolean force) {
@@ -1111,3 +1163,4 @@ public class ApplicationHook {
     }
 
 }
+
