@@ -48,39 +48,22 @@ public abstract class BaseTask {
 
     public synchronized void addChildTask(BaseTask childTask) {
         String childId = childTask.getId();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            childTaskMap.compute(childId, (key, value) -> {
-                if (value != null) {
-                    value.stopTask();
-                }
-                childTask.startTask();
-                return childTask;
-            });
-        } else {
-            BaseTask oldTask = childTaskMap.get(childId);
-            if (oldTask != null) {
-                oldTask.stopTask();
+        childTaskMap.compute(childId, (key, value) -> {
+            if (value != null) {
+                value.stopTask();
             }
             childTask.startTask();
-            childTaskMap.put(childId, childTask);
-        }
+            return childTask;
+        });
     }
 
     public synchronized void removeChildTask(String childId) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            childTaskMap.compute(childId, (key, value) -> {
-                if (value != null) {
-                    shutdownAndWait(value.getThread(), -1, TimeUnit.SECONDS);
-                }
-                return null;
-            });
-        } else {
-            BaseTask oldTask = childTaskMap.get(childId);
-            if (oldTask != null) {
-                shutdownAndWait(oldTask.getThread(), -1, TimeUnit.SECONDS);
+        childTaskMap.compute(childId, (key, value) -> {
+            if (value != null) {
+                shutdownAndWait(value.getThread(), -1, TimeUnit.SECONDS);
             }
-            childTaskMap.remove(childId);
-        }
+            return null;
+        });
     }
 
     public synchronized Integer countChildTask() {

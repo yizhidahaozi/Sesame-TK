@@ -10,12 +10,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
 import kotlin.math.min
@@ -56,27 +51,6 @@ object GlobalThreadPools {
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val computeDispatcher = Dispatchers.Default.limitedParallelism(COMPUTE_PARALLELISM)
-
-    /**
-     * 任务调度器
-     * 用于执行延迟或周期性任务
-     */
-    private val schedulerScope = CoroutineScope(
-        SupervisorJob() + 
-        Dispatchers.Default + 
-        CoroutineName("SesameScheduler")
-    )
-
-    /**
-     * 任务ID生成器
-     */
-    private val taskIdGenerator = AtomicInteger(0)
-
-    /**
-     * 已调度任务的映射表
-     * 用于存储和管理周期性任务
-     */
-    private val scheduledTasks = ConcurrentHashMap<Int, Job>()
 
     /**
      * 在全局协程作用域中执行一个任务。
@@ -144,89 +118,6 @@ object GlobalThreadPools {
         }
     }
 
-    /**
-     * 调度一个延迟执行的任务
-     *
-     * @param delayMillis 延迟的毫秒数
-     * @param context 可选的协程上下文
-     * @param block 要执行的挂起函数代码块
-     * @return 任务ID，可用于取消任务
-     */
-    fun schedule(
-        delayMillis: Long,
-        context: CoroutineContext = computeDispatcher,
-        block: suspend CoroutineScope.() -> Unit
-    ): Int {
-        val taskId = taskIdGenerator.incrementAndGet()
-        val job = schedulerScope.launch(context) {
-            delay(delayMillis)
-            try {
-                block()
-            } catch (_: CancellationException) {
-                // 协程取消异常，正常流程，不记录
-            } catch (e: Exception) {
-                Log.error(TAG, "调度任务执行异常: ${e.message}")
-                Log.printStackTrace(e)
-            } finally {
-                scheduledTasks.remove(taskId)
-            }
-        }
-        scheduledTasks[taskId] = job
-        return taskId
-    }
-
-    /**
-     * 调度一个固定周期执行的任务
-     *
-     * @param periodMillis 周期的毫秒数
-     * @param initialDelayMillis 初始延迟的毫秒数，默认为0
-     * @param context 可选的协程上下文
-     * @param block 要执行的挂起函数代码块
-     * @return 任务ID，可用于取消任务
-     */
-    fun scheduleAtFixedRate(
-        periodMillis: Long,
-        initialDelayMillis: Long = 0,
-        context: CoroutineContext = computeDispatcher,
-        block: suspend CoroutineScope.() -> Unit
-    ): Int {
-        val taskId = taskIdGenerator.incrementAndGet()
-        val job = schedulerScope.launch(context) {
-            delay(initialDelayMillis)
-            while (isActive) {
-                val startTime = System.currentTimeMillis()
-                try {
-                    block()
-                } catch (_: CancellationException) {
-                    break
-                } catch (e: Exception) {
-                    Log.error(TAG, "周期任务执行异常: ${e.message}")
-                    Log.printStackTrace(e)
-                }
-                
-                val executionTime = System.currentTimeMillis() - startTime
-                val nextDelay = (periodMillis - executionTime).coerceAtLeast(0)
-                delay(nextDelay)
-            }
-            scheduledTasks.remove(taskId)
-        }
-        scheduledTasks[taskId] = job
-        return taskId
-    }
-
-    /**
-     * 取消一个已调度的任务
-     *
-     * @param taskId 任务ID
-     * @return 是否成功取消
-     */
-    fun cancelTask(taskId: Int): Boolean {
-        val job = scheduledTasks.remove(taskId) ?: return false
-        job.cancel()
-        return true
-    }
-
-
 
     /**
      * 协程兼容的暂停方法
@@ -238,14 +129,5 @@ object GlobalThreadPools {
     fun sleepCompat(millis: Long) {
         CoroutineUtils.sleepCompat(millis)
     }
-    
-    /**
-     * 关闭全局协程调度器
-     * 取消所有正在执行的任务
-     */
-    fun shutdown() {
-        scheduledTasks.clear()
-        schedulerScope.cancel()
-        globalScope.cancel()
-    }
+
 }

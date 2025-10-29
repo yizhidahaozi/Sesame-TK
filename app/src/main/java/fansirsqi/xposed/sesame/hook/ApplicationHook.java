@@ -41,7 +41,7 @@ import fansirsqi.xposed.sesame.hook.server.ModuleHttpServer;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.newutil.DataStore;
-import fansirsqi.xposed.sesame.task.BaseTask;
+import fansirsqi.xposed.sesame.task.MainTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskRunnerAdapter;
 import fansirsqi.xposed.sesame.util.AssetUtil;
@@ -53,6 +53,7 @@ import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
+import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModuleInterface;
@@ -157,7 +158,7 @@ public class ApplicationHook {
      * 获取主任务实例 - 供任务调度使用
      */
     @Getter
-    static BaseTask mainTask;
+    static MainTask mainTask;
 
     static volatile RpcBridge rpcBridge;
     private static final Object rpcBridgeLock = new Object();
@@ -446,7 +447,7 @@ public class ApplicationHook {
                                 Log.runtime(TAG, "hook dexkit successfully");
                             }
                             service = appService;
-                            mainTask = BaseTask.newInstance("MAIN_TASK", () -> {
+                            mainTask = MainTask.newInstance("MAIN_TASK", () -> {
                                 try {
                                     boolean isAlarmTriggered = alarmTriggeredFlag;
                                     if (isAlarmTriggered) {
@@ -1002,7 +1003,7 @@ public class ApplicationHook {
                     switch (action) {
                         case "com.eg.android.AlipayGphone.sesame.restart":
                             Log.printStack(TAG);
-                            new Thread(() -> initHandler(true)).start();
+                            GlobalThreadPools.INSTANCE.execute(() -> initHandler(true));
                             break;
                        case "com.eg.android.AlipayGphone.sesame.execute":
                            Log.printStack(TAG);
@@ -1016,19 +1017,19 @@ public class ApplicationHook {
                                execHandler();
                            } else {
                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
-                               new Thread(() -> {
+                               GlobalThreadPools.INSTANCE.execute(() -> {
                                    if (initHandler(false)) {
                                        Log.record(TAG, "✅ 初始化成功，开始执行任务");
                                        execHandler();
                                    } else {
                                        Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                    }
-                               }).start();
+                               });
                            }
                            break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
                             Log.printStack(TAG);
-                            new Thread(ApplicationHook::reLogin).start();
+                            GlobalThreadPools.INSTANCE.execute(ApplicationHook::reLogin);
                             break;
                         case "com.eg.android.AlipayGphone.sesame.status":
                             // 状态查询处理
@@ -1042,7 +1043,7 @@ public class ApplicationHook {
                             }
                             break;
                         case "com.eg.android.AlipayGphone.sesame.rpctest":
-                            new Thread(() -> {
+                            GlobalThreadPools.INSTANCE.execute(() -> {
                                 try {
                                     String method = intent.getStringExtra("method");
                                     String data = intent.getStringExtra("data");
@@ -1054,7 +1055,7 @@ public class ApplicationHook {
                                     Log.runtime(TAG, "sesame 测试RPC请求失败:");
                                     Log.printStackTrace(TAG, th);
                                 }
-                            }).start();
+                            });
                             break;
                         default:
                             // 协程调度器会自动处理任务触发，无需额外处理

@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.webkit.WebSettings
@@ -67,6 +68,7 @@ class MyWebView : WebView {
     /**
      * 默认初始化方法，设置 WebView 的一些默认属性。
      */
+    @SuppressLint("SetJavaScriptEnabled")
     private fun defInit() {
         val settings = settings
         settings.setSupportZoom(true) // 支持缩放

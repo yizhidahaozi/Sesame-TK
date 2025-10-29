@@ -196,26 +196,14 @@ abstract class ModelTask : Model() {
     }
 
     /**
-     * 移除子任务（协程版本）
-     */
-    suspend fun removeChildTask(childId: String) {
-        childTaskMap[childId]?.let { childTask ->
-            childTask.cancel()
-            childTaskMap.remove(childId)
-        }
-    }
-
-    /**
      * 启动任务（协程版本）
      * @param force 是否强制重启
-     * @param mode 执行模式
      * @param rounds 执行轮数，默认2轮
      */
     fun startTask(
-        force: Boolean = false, 
-        mode: TaskExecutionMode = TaskExecutionMode.SEQUENTIAL,
+        force: Boolean = false,
         rounds: Int = 2
-    ): Job? {
+    ): Job {
         ensureTaskScope()
         
         return taskScope!!.launch {
@@ -236,8 +224,8 @@ abstract class ModelTask : Model() {
                     isRunning = true
                     addRunCents()
                     setStatusTextExec(getName())
-                    executeMultiRoundTask(mode, rounds)
-                } catch (e: CancellationException) {
+                    executeMultiRoundTask(rounds)
+                } catch (_: CancellationException) {
                     // 协程取消属于正常控制流程（如停止任务/切换用户），不视为错误
                     Log.runtime(TAG, "任务被取消: ${getName()}")
                 } catch (e: Exception) {
@@ -253,7 +241,7 @@ abstract class ModelTask : Model() {
     /**
      * 执行多轮任务
      */
-    private suspend fun executeMultiRoundTask(mode: TaskExecutionMode, rounds: Int) {
+    private suspend fun executeMultiRoundTask(rounds: Int) {
         val startTime = System.currentTimeMillis()
         val stats = TaskExecutionStats()
         
@@ -284,7 +272,7 @@ abstract class ModelTask : Model() {
         try {
             run()
             stats.recordTaskEnd("${getName()}-Round$round", true)
-        } catch (e: CancellationException) {
+        } catch (_: CancellationException) {
             // 本轮被取消，记录为跳过而非失败
             stats.recordSkipped("${getName()}-Round$round")
             Log.runtime(TAG, "任务本轮被取消: ${getName()}-Round$round")
@@ -298,7 +286,7 @@ abstract class ModelTask : Model() {
     /**
      * 停止任务（协程版本）
      */
-    fun stopTask() {
+    open fun stopTask() {
         runBlocking {
             // 取消所有子任务
             childTaskMap.values.forEach { childTask ->
@@ -332,14 +320,14 @@ abstract class ModelTask : Model() {
     class TaskExecutionStats {
         private val startTime: Long = System.currentTimeMillis()
         private var endTime: Long = 0
-        private val taskExecutionTimes: MutableMap<String?, Long?> =
-            ConcurrentHashMap<String?, Long?>()
+        private val taskExecutionTimes: ConcurrentHashMap<String, Long> =
+            ConcurrentHashMap<String, Long>()
         private val successCount = AtomicInteger(0)
         private val failureCount = AtomicInteger(0)
         private val skippedCount = AtomicInteger(0)
 
         fun recordTaskStart(taskName: String?) {
-            taskExecutionTimes.put(taskName, System.currentTimeMillis())
+            taskName?.let { taskExecutionTimes.put(it, System.currentTimeMillis()) }
         }
 
         fun recordTaskEnd(taskName: String?, success: Boolean) {
@@ -436,7 +424,7 @@ abstract class ModelTask : Model() {
             // 执行任务逻辑
             try {
                 suspendRunnable?.invoke() ?: defaultRun()
-            } catch (e: CancellationException) {
+            } catch (_: CancellationException) {
                 // 任务被取消是正常的协程控制流程，记录日志但不需要打印堆栈
                 val parentTaskName = modelTask?.getName() ?: "未知任务"
                 Log.runtime("子任务被取消: $parentTaskName-$id")
@@ -523,24 +511,5 @@ abstract class ModelTask : Model() {
             }
         }
 
-        /**
-         * 批量启动任务（协程版本）
-         * @param tasks 要启动的任务列表
-         * @param mode 执行模式
-         * @param rounds 执行轮数
-         */
-        @JvmStatic
-        fun startAllTasks(
-            tasks: List<ModelTask>,
-            mode: TaskExecutionMode = TaskExecutionMode.SEQUENTIAL,
-            rounds: Int = 2
-        ) {
-            globalTaskScope.launch {
-                // 无论传入什么模式，都使用顺序执行
-                tasks.forEach { task ->
-                    task.startTask(false, TaskExecutionMode.SEQUENTIAL, rounds)?.join()
-                }
-            }
-        }
     }
 }

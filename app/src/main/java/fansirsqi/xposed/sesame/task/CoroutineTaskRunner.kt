@@ -2,7 +2,6 @@ package fansirsqi.xposed.sesame.task
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.hook.ApplicationHook
-import fansirsqi.xposed.sesame.hook.WorkManagerScheduler
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.util.Log
@@ -170,7 +169,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             executeTaskWithGracefulTimeout(task, round, taskStartTime, taskId, effectiveTimeout)
             val executionTime = System.currentTimeMillis() - taskStartTime
             Log.record(TAG, "✅ 任务[$taskId]执行完成，耗时: ${executionTime}ms")
-        } catch (e: TimeoutCancellationException) {
+        } catch (_: TimeoutCancellationException) {
             val executionTime = System.currentTimeMillis() - taskStartTime
             failureCount.incrementAndGet()
             val timeoutMsg = "${executionTime}ms > ${effectiveTimeout}ms"
@@ -202,7 +201,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 // 强制重启任务
                 val recoveryJob = task.startTask(
                     force = true,
-                    mode = ModelTask.TaskExecutionMode.SEQUENTIAL,
                     rounds = 1
                 )
                 
@@ -212,13 +210,13 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                     runnerScope.launch {
                         // 监控超时提示（不取消任务）
                         delay(RECOVERY_TIMEOUT)
-                        if (recoveryJob?.isActive == true) {
+                        if (recoveryJob.isActive) {
                             Log.record(TAG, "任务[$taskId]恢复执行已超过${RECOVERY_TIMEOUT/1000}秒，继续在后台运行")
                         }
                         
                         // 监控最大运行时间
                         delay(MAX_RECOVERY_RUNTIME - RECOVERY_TIMEOUT)
-                        if (recoveryJob?.isActive == true) {
+                        if (recoveryJob.isActive) {
                             Log.record(TAG, "任务[$taskId]恢复执行已超过最大运行时间(${MAX_RECOVERY_RUNTIME/1000/60}分钟)，标记为已完成")
                             // 取消恢复任务，避免无限运行
                             recoveryJob.cancel()
@@ -228,15 +226,16 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                     }
                     
                     // 等待恢复任务完成或超时任务触发
-                    recoveryJob?.invokeOnCompletion { cause ->
+                    recoveryJob.invokeOnCompletion { cause ->
                         when (cause) {
                             null -> {
                                 // 任务正常完成
                                 successCount.incrementAndGet()
                                 Log.record(TAG, "任务[$taskId]自动恢复成功")
                             }
+
                             is CancellationException -> {
-                                // 任务被取消（可能是由于超时或手动取消）
+                                // 任务可能被……取消是由于超时或手动取消）
                                 Log.record(TAG, "任务[$taskId]恢复过程被取消")
                             }
 
@@ -305,7 +304,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                         }
                         Log.record(TAG, "✅ 任务[$taskId]在宽限期内完成")
                     }
-                } catch (graceTimeoutException: TimeoutCancellationException) {
+                } catch (_: TimeoutCancellationException) {
                     // 宽限期也超时了，重新抛出原始超时异常
                     Log.error(TAG, "❌ 任务[$taskId]宽限期(${gracePeriod/1000}秒)也超时，强制超时处理")
                     throw e
@@ -335,16 +334,9 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             // 启动任务（使用新的协程接口）
             val job = task.startTask(
                 force = false,
-                mode = ModelTask.TaskExecutionMode.SEQUENTIAL,
                 rounds = 1
             )
-            
-            if (job == null) {
-                Log.runtime(TAG, "⚠️ 模块[${taskName}]第${round}轮启动失败，job为null")
-                skippedCount.incrementAndGet()
-                return
-            }
-            
+
             // 监控任务执行状态
             val monitorJob = runnerScope.launch {
                 var lastLogTime = System.currentTimeMillis()
@@ -367,7 +359,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             successCount.incrementAndGet()
             Log.record(TAG, "✅ 模块[${taskName}]第${round}轮执行成功，耗时: ${executionTime}ms")
             
-        } catch (e: CancellationException) {
+        } catch (_: CancellationException) {
             // 任务取消是正常的协程控制流程，不需要作为错误处理
             val executionTime = System.currentTimeMillis() - taskStartTime
             skippedCount.incrementAndGet()
