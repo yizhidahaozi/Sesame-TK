@@ -140,7 +140,7 @@ class WorkManagerScheduler(private val context: Context) {
             TaskExecutionWorker.KEY_IS_WAKEUP_ALARM to true
         )
         
-        // 创建工作请求
+        // 创建工作请求 - 使用加急模式确保尽快执行
         val workRequest = OneTimeWorkRequestBuilder<TaskExecutionWorker>()
             .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
             .setInputData(inputData)
@@ -148,6 +148,8 @@ class WorkManagerScheduler(private val context: Context) {
                 BackoffPolicy.EXPONENTIAL,
                 10, TimeUnit.SECONDS
             )
+            // ⚡ 使用加急执行（Android 12+ 会优先调度，之前版本退化为普通任务）
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(taskId)
             .build()
         
@@ -158,7 +160,7 @@ class WorkManagerScheduler(private val context: Context) {
             workRequest
         )
         
-        Log.record(TAG, "⏰ 已调度精确执行: 时间 ${TimeUtil.getCommonDate(exactTimeMillis)}")
+        Log.record(TAG, "⏰ 已调度精确执行（加急模式）: 时间 ${TimeUtil.getCommonDate(exactTimeMillis)}")
         Log.record(TAG, "延迟: ${delayMillis / 1000} 秒")
         
         return taskId
@@ -192,7 +194,7 @@ class WorkManagerScheduler(private val context: Context) {
                 TaskExecutionWorker.KEY_WAKEN_TIME to if (isMainAlarm) null else TimeUtil.getTimeStr(triggerAtMillis)
             )
             
-            // 创建工作请求
+            // 创建工作请求 - 使用加急模式确保准时唤醒
             val workRequest = OneTimeWorkRequestBuilder<TaskExecutionWorker>()
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .setInputData(inputData)
@@ -200,6 +202,8 @@ class WorkManagerScheduler(private val context: Context) {
                     BackoffPolicy.EXPONENTIAL,
                     10, TimeUnit.SECONDS
                 )
+                // ⚡ 唤醒任务也使用加急模式
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .addTag(taskId)
                 .addTag("wakeup")
                 .build()
@@ -212,7 +216,7 @@ class WorkManagerScheduler(private val context: Context) {
             )
             
             val taskType = if (isMainAlarm) "主定时任务" else "自定义定时任务"
-            Log.record(TAG, "⏰ ${taskType}调度成功: ID=$requestCode")
+            Log.record(TAG, "⏰ ${taskType}调度成功（加急模式）: ID=$requestCode")
             Log.record(TAG, "触发时间: ${TimeUtil.getCommonDate(triggerAtMillis)}")
             
             true

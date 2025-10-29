@@ -5,6 +5,11 @@ import android.content.Intent
 import android.os.PowerManager
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.ForegroundInfo
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
@@ -39,6 +44,46 @@ class TaskExecutionWorker(
         const val TASK_TYPE_DELAYED = "delayed"
         const val TASK_TYPE_EXACT = "exact"
         const val TASK_TYPE_WAKEUP = "wakeup"
+        
+        // 通知相关
+        private const val NOTIFICATION_CHANNEL_ID = "sesame_worker_channel"
+        private const val NOTIFICATION_ID = 8888
+    }
+
+    /**
+     * 为加急任务提供前台服务信息
+     * Android 12+ 加急任务需要此方法
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        return createForegroundInfo()
+    }
+
+    /**
+     * 创建前台服务通知信息
+     */
+    private fun createForegroundInfo(): ForegroundInfo {
+        // 创建通知渠道（Android 8.0+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "芝麻粒任务调度",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "芝麻粒后台任务执行通知"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        // 创建通知
+        val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("芝麻粒")
+            .setContentText("正在执行后台任务...")
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setOngoing(true)
+            .build()
+
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 
     override suspend fun doWork(): Result {

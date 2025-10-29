@@ -69,14 +69,10 @@ public class ApplicationHook {
     
 
     /**
-     * 任务调度器选择：
-     * - JobScheduler: 系统级服务，支持所有进程（主进程+子进程），Android 5.0+
-     * - WorkManager: 应用级框架，仅支持主进程（在 Xposed 子进程环境中可能失败）
-     * 
-     * 优先使用 JobScheduler 以确保在支付宝的所有进程中都能正常工作
+     * 智能调度器管理器
+     * 自动切换调度器 + 自动补偿延迟
      */
-    private static boolean useJobScheduler = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
-    private static WorkManagerScheduler workScheduler = null;
+    private static boolean smartSchedulerInitialized = false;
 
     @Getter
     private static ClassLoader classLoader = null;
@@ -92,23 +88,43 @@ public class ApplicationHook {
     }
 
     /**
-     * 确保 WorkManager 调度器已初始化
-     * 如果未初始化则尝试初始化
+     * 确保智能调度器已初始化
      */
-    private static synchronized void ensureWorkScheduler() {
-        if (workScheduler == null) {
-            if (appContext != null) {
-                Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试初始化...");
-                try {
-                    workScheduler = new WorkManagerScheduler(appContext);
-                    Log.record(TAG, "✅ WorkManager 调度器已自动初始化");
-                } catch (Exception e) {
-                    Log.error(TAG, "❌ WorkManager 调度器自动初始化失败: " + e.getMessage());
-                    Log.printStackTrace(TAG, e);
-                }
-            } else {
-                Log.debug(TAG, "⚠️ 无法初始化 WorkManager: appContext 为 null (可能应用刚启动)");
+    private static synchronized void ensureScheduler() {
+        if (appContext == null) {
+            Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null (可能应用刚启动)");
+            return;
+        }
+        
+        if (!smartSchedulerInitialized) {
+            try {
+                SmartSchedulerManager.INSTANCE.initialize(appContext);
+                smartSchedulerInitialized = true;
+            } catch (Exception e) {
+                Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
+                Log.printStackTrace(TAG, e);
             }
+        }
+    }
+    
+    /**
+     * 调度器适配器 - 使用智能管理器
+     */
+    private static class SchedulerAdapter {
+        static void scheduleExactExecution(long delayMillis, long nextExecutionTime) {
+            SmartSchedulerManager.INSTANCE.scheduleExactExecution(delayMillis, nextExecutionTime);
+        }
+        
+        static void scheduleDelayedExecution(long delayMillis) {
+            SmartSchedulerManager.INSTANCE.scheduleDelayedExecution(delayMillis);
+        }
+        
+        static boolean scheduleWakeupAlarm(long triggerAtMillis, int requestCode, boolean isMainAlarm) {
+            return SmartSchedulerManager.INSTANCE.scheduleWakeupAlarm(triggerAtMillis, requestCode, isMainAlarm);
+        }
+        
+        static void cancelAllWakeupAlarms() {
+            SmartSchedulerManager.INSTANCE.cancelAllWakeupAlarms();
         }
     }
 
@@ -233,7 +249,7 @@ public class ApplicationHook {
                 Log.printStackTrace(TAG, e);
             }
 
-            // 使用任务调度器
+            // 使用调度器（协程或 WorkManager）
             nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
             
             if (appContext == null) {
@@ -241,32 +257,8 @@ public class ApplicationHook {
                 return;
             }
             
-            // 优先使用 JobScheduler（支持所有进程）
-
-            if (useJobScheduler) {
-                boolean success = JobSchedulerHelper.INSTANCE.scheduleMainTask(
-                    appContext,
-                    delayMillis,
-                    nextExecutionTime
-                );
-                if (!success) {
-                    Log.error(TAG, "❌ JobScheduler 调度失败");
-                }
-            } else {
-                // 降级到 WorkManager（仅主进程）
-                if (workScheduler == null) {
-                    Log.runtime(TAG, "⚠️ WorkManager 调度器未初始化，尝试重新初始化...");
-                    try {
-                        workScheduler = new WorkManagerScheduler(appContext);
-                        Log.record(TAG, "✅ WorkManager 调度器已重新初始化");
-                    } catch (Exception e) {
-                        Log.error(TAG, "❌ WorkManager 调度器重新初始化失败: " + e.getMessage());
-                        Log.printStackTrace(TAG, e);
-                        return;
-                    }
-                }
-                workScheduler.scheduleExactExecution(delayMillis, nextExecutionTime);
-            }
+            ensureScheduler();
+            SchedulerAdapter.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
             Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
             Log.printStackTrace(TAG, e);
@@ -344,13 +336,8 @@ public class ApplicationHook {
                     appContext = (Context) param.args[0];
 
                     registerBroadcastReceiver(appContext);
-                    // 初始化 WorkManager 调度器（替代 AlarmManager）
-                    try {
-                        workScheduler = new WorkManagerScheduler(appContext);
-                    } catch (Exception e) {
-                        Log.error(TAG, "❌ WorkManager 调度器初始化失败: " + e.getMessage());
-                        Log.printStackTrace(TAG, e);
-                    }
+                    // 初始化调度器（协程或 WorkManager）
+                    ensureScheduler();
 
                     PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                     Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
@@ -500,10 +487,8 @@ public class ApplicationHook {
 
                                     if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
                                         Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
-                                        ensureWorkScheduler();
-                                        if (workScheduler != null) {
-                                            workScheduler.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
-                                        }
+                                        ensureScheduler();
+                                        SchedulerAdapter.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
                                         return;
                                     }
                                     String currentUid = UserMap.getCurrentUid();
@@ -590,14 +575,8 @@ public class ApplicationHook {
                 return;
             }
             
-            // 如果不使用 JobScheduler，则确保 WorkManager 调度器已初始化
-            if (!useJobScheduler) {
-                ensureWorkScheduler();
-                if (workScheduler == null) {
-                    Log.error(TAG, "WorkManager 调度器初始化失败");
-                    return;
-                }
-            }
+            // 确保调度器已初始化
+            ensureScheduler();
 
             List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
             if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) {
@@ -616,18 +595,7 @@ public class ApplicationHook {
             calendar.set(Calendar.SECOND, 0);
             calendar.set(Calendar.MILLISECOND, 0);
 
-            boolean success;
-            if (useJobScheduler) {
-                success = JobSchedulerHelper.INSTANCE.scheduleWakeupTask(
-                    appContext,
-                    calendar.getTimeInMillis(),
-                    0,
-                    true
-                );
-            } else {
-                success = workScheduler.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
-            }
-            
+            boolean success = SchedulerAdapter.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
             if (success) {
                 Log.record(TAG, "⏰ 设置0点定时任务成功");
             } else {
@@ -643,17 +611,7 @@ public class ApplicationHook {
                         String wakenAtTime = wakenAtTimeList.get(i);
                         Calendar wakenAtTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakenAtTime);
                         if (wakenAtTimeCalendar != null && wakenAtTimeCalendar.compareTo(nowCalendar) > 0) {
-                            boolean customSuccess;
-                            if (useJobScheduler) {
-                                customSuccess = JobSchedulerHelper.INSTANCE.scheduleWakeupTask(
-                                    appContext,
-                                    wakenAtTimeCalendar.getTimeInMillis(),
-                                    i,
-                                    false
-                                );
-                            } else {
-                                customSuccess = workScheduler.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
-                            }
+                            boolean customSuccess = SchedulerAdapter.scheduleWakeupAlarm(wakenAtTimeCalendar.getTimeInMillis(), i, false);
                             if (customSuccess) {
                                 successCount++;
                                 Log.record(TAG, "⏰ 设置定时任务成功: " + wakenAtTime);
@@ -677,19 +635,8 @@ public class ApplicationHook {
      * 取消所有定时任务
      */
     private static void unsetWakenAtTimeAlarm() {
-        if (appContext == null) {
-            Log.runtime(TAG, "appContext 为 null，无法取消定时任务");
-            return;
-        }
-        
-        if (useJobScheduler) {
-            JobSchedulerHelper.INSTANCE.cancelAllWakeupTasks(appContext);
-        } else {
-            ensureWorkScheduler();
-            if (workScheduler != null) {
-                workScheduler.cancelAllWakeupAlarms();
-            }
-        }
+        ensureScheduler();
+        SchedulerAdapter.cancelAllWakeupAlarms();
         Log.record(TAG, "已取消所有定时任务");
     }
 
@@ -703,15 +650,8 @@ public class ApplicationHook {
                 destroyHandler(true); // 重新初始化时销毁旧的handler
             }
 
-            // WorkManager 调度器确保可用
-            if (workScheduler == null && appContext != null) {
-                try {
-                    workScheduler = new WorkManagerScheduler(appContext);
-                    Log.record(TAG, "✅ WorkManager 调度器已重新初始化");
-                } catch (Exception e) {
-                    Log.error(TAG, "WorkManager 调度器重新初始化失败: " + e.getMessage());
-                }
-            }
+            // 调度器确保可用
+            ensureScheduler();
 
             Model.initAllModel(); // 在所有服务启动前装模块配置
             if (service == null) {
@@ -837,10 +777,6 @@ public class ApplicationHook {
                     UserMap.unload();
                 }
                 
-                // 不清理 WorkManager 调度器
-                // WorkManager 任务应该持久化，即使应用重新初始化
-                // 只在模块完全停止时才取消任务
-                Log.debug(TAG, "重新初始化，保留 WorkManager 任务");
 
                 if (wakeLock != null) {
                     wakeLock.release();
@@ -1040,11 +976,9 @@ public class ApplicationHook {
                         delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
                     }
 
-                    // 使用 WorkManager 调度器
-                    ensureWorkScheduler();
-                    if (workScheduler != null) {
-                        workScheduler.scheduleDelayedExecution(delayMillis);
-                    }
+                    // 使用调度器（协程或 WorkManager）
+                    ensureScheduler();
+                    SchedulerAdapter.scheduleDelayedExecution(delayMillis);
 
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
@@ -1071,7 +1005,7 @@ public class ApplicationHook {
                             Log.printStack(TAG);
                             if (intent.getBooleanExtra("alarm_triggered", false)) {
                                 alarmTriggeredFlag = true;
-                                Log.record(TAG, "⏰ 收到定时任务触发广播 (WorkManager)");
+                                Log.record(TAG, "⏰ 收到定时任务触发广播 (协程调度器)");
                             }
                             // 如果已初始化，直接执行任务；否则先初始化
                             if (init) {
@@ -1111,7 +1045,7 @@ public class ApplicationHook {
                             }).start();
                             break;
                         default:
-                            // WorkManager 会自动处理任务触发，无需额外处理
+                            // 协程调度器会自动处理任务触发，无需额外处理
                             Log.debug(TAG, "收到未知广播: " + action);
                             break;
                     }
