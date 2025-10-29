@@ -737,19 +737,22 @@ public class ApplicationHook {
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
                 }
 
-                Model.bootAllModel(classLoader);
-                Status.load(userId);
-                DataStore.INSTANCE.init(Files.CONFIG_DIR);
-                updateDay(userId);
-                String successMsg = "芝麻粒-TK 加载成功✨";
-                Log.record(successMsg);
-                Toast.show(successMsg);
-            }
+                   Model.bootAllModel(classLoader);
+                   Status.load(userId);
+                   DataStore.INSTANCE.init(Files.CONFIG_DIR);
+                   updateDay(userId);
+                   String successMsg = "芝麻粒-TK 加载成功✨";
+                   Log.record(successMsg);
+                   Toast.show(successMsg);
+               }
 
-            offline = false;
-            execHandler();
-            init = true;
-            return true;
+               offline = false;
+               init = true;
+               
+               // 首次初始化后，立即执行一次任务并调度下次执行
+               execHandler();
+               
+               return true;
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "startHandler", th);
             Toast.show("芝麻粒加载失败 🎃");
@@ -1001,19 +1004,28 @@ public class ApplicationHook {
                             Log.printStack(TAG);
                             new Thread(() -> initHandler(true)).start();
                             break;
-                        case "com.eg.android.AlipayGphone.sesame.execute":
-                            Log.printStack(TAG);
-                            if (intent.getBooleanExtra("alarm_triggered", false)) {
-                                alarmTriggeredFlag = true;
-                                Log.record(TAG, "⏰ 收到定时任务触发广播 (协程调度器)");
-                            }
-                            // 如果已初始化，直接执行任务；否则先初始化
-                            if (init) {
-                                execHandler();
-                            } else {
-                                new Thread(() -> initHandler(false)).start();
-                            }
-                            break;
+                       case "com.eg.android.AlipayGphone.sesame.execute":
+                           Log.printStack(TAG);
+                           if (intent.getBooleanExtra("alarm_triggered", false)) {
+                               alarmTriggeredFlag = true;
+                               Log.record(TAG, "⏰ 收到定时任务触发广播 (协程调度器)");
+                           }
+                           // 如果已初始化，直接执行任务；否则先初始化
+                           if (init) {
+                               Log.record(TAG, "✅ 模块已初始化，开始执行任务");
+                               execHandler();
+                           } else {
+                               Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
+                               new Thread(() -> {
+                                   if (initHandler(false)) {
+                                       Log.record(TAG, "✅ 初始化成功，开始执行任务");
+                                       execHandler();
+                                   } else {
+                                       Log.error(TAG, "❌ 初始化失败，任务无法执行");
+                                   }
+                               }).start();
+                           }
+                           break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
                             Log.printStack(TAG);
                             new Thread(ApplicationHook::reLogin).start();

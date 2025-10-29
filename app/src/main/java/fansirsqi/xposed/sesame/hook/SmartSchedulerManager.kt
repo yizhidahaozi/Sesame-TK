@@ -64,18 +64,31 @@ object SmartSchedulerManager {
     @SuppressLint("StaticFieldLeak")
     private var workManagerScheduler: WorkManagerScheduler? = null
     
+    // 初始化标志（避免重复初始化）
+    @Volatile
+    private var initialized = false
+    
     /**
      * 初始化调度器
      */
+    @Synchronized
     fun initialize(context: Context) {
+        if (initialized) {
+            Log.debug(TAG, "调度器已经初始化，跳过重复初始化")
+            return
+        }
+        
         try {
             // 预创建两个调度器实例
             coroutineScheduler = CoroutineScheduler(context)
             workManagerScheduler = WorkManagerScheduler(context)
             
+            initialized = true
+            
             Log.record(TAG, "✅ 智能调度器管理器已初始化")
             Log.record(TAG, "当前调度器: ${currentSchedulerType.name}")
             Log.record(TAG, "初始补偿: ${currentCompensation / 1000} 秒")
+            Log.record(TAG, "历史记录: ${delayHistory.size} 条")
         } catch (e: Exception) {
             Log.error(TAG, "初始化失败: ${e.message}")
             Log.printStackTrace(TAG, e)
