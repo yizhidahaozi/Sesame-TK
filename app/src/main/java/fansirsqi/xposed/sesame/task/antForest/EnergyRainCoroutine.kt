@@ -41,11 +41,11 @@ object EnergyRainCoroutine {
             // 执行频率检查：防止短时间内重复执行
             val currentTime = System.currentTimeMillis()
             val timeSinceLastExec = currentTime - lastExecuteTime
-            val cooldownMinutes = 10 // 冷却时间：10分钟
+            val cooldownSeconds = 3 // 冷却时间：3秒
             
-            if (timeSinceLastExec < cooldownMinutes * 60 * 1000) {
-                val remainingMinutes = (cooldownMinutes * 60 * 1000 - timeSinceLastExec) / 60000
-                Log.record(TAG, "⏱️ 能量雨冷却中，还需等待 $remainingMinutes 分钟")
+            if (timeSinceLastExec < cooldownSeconds * 1000) {
+                val remainingSeconds = (cooldownSeconds * 1000 - timeSinceLastExec) / 1000
+                Log.record(TAG, "⏱️ 能量雨冷却中，还需等待 $remainingSeconds 秒")
                 return
             }
             
