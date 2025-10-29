@@ -30,7 +30,7 @@ class MainTask(
         
         /**
          * 工厂方法：从 Java Runnable 创建 MainTask
-         * 兼容原有的 BaseTask.newInstance 接口
+
          * 
          * @param id 任务ID
          * @param runnable Java Runnable 对象
@@ -96,7 +96,6 @@ class MainTask(
     
     /**
      * Java 兼容的 startTask 方法
-     * 保持与原 BaseTask 相同的接口
      */
     fun startTask(force: Boolean) {
         startTask(force, 1)
