@@ -166,6 +166,10 @@ public class ApplicationHook {
     private static RpcVersion rpcVersion;
 
     private static PowerManager.WakeLock wakeLock;
+    
+    // 任务执行互斥锁（防止任务重叠执行）
+    private static volatile boolean isTaskRunning = false;
+    private static final Object taskLock = new Object();
 
     public static void setOffline(boolean offline) {
         ApplicationHook.offline = offline;
@@ -449,6 +453,15 @@ public class ApplicationHook {
                             service = appService;
                             mainTask = MainTask.newInstance("MAIN_TASK", () -> {
                                 try {
+                                    // 🔒 检查任务是否正在执行（防止重叠）
+                                    synchronized (taskLock) {
+                                        if (isTaskRunning) {
+                                            Log.record(TAG, "⚠️ 上一个任务还在执行中，跳过本次触发");
+                                            return;
+                                        }
+                                        isTaskRunning = true;
+                                    }
+                                    
                                     boolean isAlarmTriggered = alarmTriggeredFlag;
                                     if (isAlarmTriggered) {
                                         alarmTriggeredFlag = false; // Consume the flag
@@ -456,10 +469,12 @@ public class ApplicationHook {
 
                                     if (!init) {
                                         Log.record(TAG, "️🐣跳过执行-未初始化");
+                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     if (!Config.isLoaded()) {
                                         Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
+                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
 
@@ -475,12 +490,19 @@ public class ApplicationHook {
                                                 adapter.run();
                                             }
                                             Log.record(TAG, "手动APP触发，已关闭");
-
+                                            synchronized (taskLock) { isTaskRunning = false; }
                                             return;
                                         }
                                     }
 
                                     long currentTime = System.currentTimeMillis();
+                                    
+                                    // 通知监控器：任务开始执行
+                                    if (nextExecutionTime > 0) {
+                                        String taskId = "task_" + nextExecutionTime;
+                                        SmartSchedulerManager.INSTANCE.notifyTaskExecution(taskId);
+                                    }
+                                    
                                     // 获取最小执行间隔（2秒）
                                     final long MIN_EXEC_INTERVAL = 2000;
                                     // 计算距离上次执行的时间间隔
@@ -490,6 +512,7 @@ public class ApplicationHook {
                                         Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
                                         ensureScheduler();
                                         SchedulerAdapter.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
+                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     String currentUid = UserMap.getCurrentUid();
@@ -497,6 +520,7 @@ public class ApplicationHook {
                                     if (targetUid == null || !targetUid.equals(currentUid)) {
                                         Log.record(TAG, "用户切换或为空，重新登录");
                                         reLogin();
+                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     lastExecTime = currentTime; // 更新最后执行时间
@@ -507,6 +531,11 @@ public class ApplicationHook {
                                 } catch (Exception e) {
                                     Log.record(TAG, "❌执行异常");
                                     Log.printStackTrace(TAG, e);
+                                } finally {
+                                    // 🔓 释放任务锁
+                                    synchronized (taskLock) {
+                                        isTaskRunning = false;
+                                    }
                                 }
                             });
                             dayCalendar = Calendar.getInstance();
@@ -656,6 +685,21 @@ public class ApplicationHook {
 
             Model.initAllModel(); // 在所有服务启动前装模块配置
             if (service == null) {
+                Log.runtime(TAG, "⚠️ Service 未就绪，无法初始化");
+                // 如果是非强制初始化（来自 execute 广播），延迟重试
+                if (!force && mainHandler != null) {
+                    Log.runtime(TAG, "将在 5 秒后重试初始化");
+                    mainHandler.postDelayed(() -> {
+                        GlobalThreadPools.INSTANCE.execute(() -> {
+                            if (initHandler(false)) {
+                                Log.record(TAG, "✅ 延迟初始化成功，开始执行任务");
+                                execHandler();
+                            } else {
+                                Log.error(TAG, "❌ 延迟初始化仍然失败");
+                            }
+                        });
+                    }, 5000);
+                }
                 return false;
             }
 
@@ -1015,7 +1059,8 @@ public class ApplicationHook {
                            if (init) {
                                Log.record(TAG, "✅ 模块已初始化，开始执行任务");
                                execHandler();
-                           } else {
+                           } else if (service != null) {
+                               // Service 已就绪，可以初始化
                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
                                GlobalThreadPools.INSTANCE.execute(() -> {
                                    if (initHandler(false)) {
@@ -1025,6 +1070,9 @@ public class ApplicationHook {
                                        Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                    }
                                });
+                           } else {
+                               // Service 未就绪，等待 Service 初始化
+                               Log.runtime(TAG, "⏳ Service 未就绪，等待初始化（将由 initHandler 自动重试）");
                            }
                            break;
                         case "com.eg.android.AlipayGphone.sesame.reLogin":
