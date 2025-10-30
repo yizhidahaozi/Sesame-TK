@@ -33,7 +33,7 @@ class ForestChouChouLe {
         private const val SOURCE = "task_entry"
         
         // 屏蔽的任务类型（邀请好友类任务不执行）
-        private val BLOCKED = setOf("FOREST_NORMAL_DRAW_SHARE", "FOREST_ACTIVITY_DRAW_SHARE")
+        private val BLOCKED = setOf("FOREST_NORMAL_DRAW_SHARE", "FOREST_ACTIVITY_DRAW_SHARE", "FOREST_ACTIVITY_DRAW_XSSLXCC")
         
         /**
          * 抽奖场景数据类
