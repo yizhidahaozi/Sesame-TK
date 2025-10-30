@@ -517,15 +517,26 @@ public class Files {
      */
     public static synchronized boolean write2File(String s, File f) {
         if (beforWrite(f)) return false;
+        FileWriter fw = null;
         try {
-            try (FileWriter fw = new FileWriter(f, false)) {
-                fw.write(s);
-                fw.flush();
-                return true;
-            }
+            fw = new FileWriter(f, false);
+            fw.write(s);
+            fw.flush();
+            return true;
         } catch (IOException e) {
             Log.printStackTrace(TAG, e);
             return false;
+        } finally {
+            // 安全关闭流，忽略 close 时的权限异常
+            if (fw != null) {
+                try {
+                    fw.close();
+                } catch (IOException e) {
+                    // 捕获 close 时的异常（包括 EPERM）
+                    // 数据已经 flush，close 失败不影响写入结果
+                    Log.debug(TAG, "文件关闭异常（数据已写入）: " + e.getMessage());
+                }
+            }
         }
     }
 
@@ -636,23 +647,32 @@ public class Files {
      * @return 是否清空成功
      */
     public static Boolean clearFile(File file) {
-        if (file.exists()) {
-            try (FileWriter fileWriter = new FileWriter(file)) {
-                try {
-                    // 使用 FileWriter 清空文件内容
-                    fileWriter.write(""); // 写入空字符串，清空文件内容
-                    fileWriter.flush(); // 刷新缓存，确保内容写入文件
-                    return true; // 返回清空成功
-                } catch (IOException e) {
-                    Log.printStackTrace(e);
-                }
-            } catch (IOException e) {
-                Log.printStackTrace(e);
-            }
-            // 关闭文件写入流
+        if (!file.exists()) {
+            return false; // 如果文件不存在，则返回 false
         }
-        // 如果文件不存在，则返回 false
-        return false;
+        
+        FileWriter fileWriter = null;
+        try {
+            fileWriter = new FileWriter(file);
+            // 使用 FileWriter 清空文件内容
+            fileWriter.write(""); // 写入空字符串，清空文件内容
+            fileWriter.flush(); // 刷新缓存，确保内容写入文件
+            return true; // 返回清空成功
+        } catch (IOException e) {
+            Log.printStackTrace(e);
+            return false;
+        } finally {
+            // 安全关闭流，忽略 close 时的权限异常
+            if (fileWriter != null) {
+                try {
+                    fileWriter.close();
+                } catch (IOException e) {
+                    // 捕获 close 时的异常（包括 EPERM）
+                    // 数据已经 flush，close 失败不影响清空结果
+                    Log.debug(TAG, "文件关闭异常（数据已清空）: " + e.getMessage());
+                }
+            }
+        }
     }
 
     /**
