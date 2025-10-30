@@ -1,7 +1,7 @@
 package fansirsqi.xposed.sesame.hook
 
 import android.content.Context
-import de.robv.android.xposed.XposedHelpers
+import fansirsqi.xposed.sesame.hook.keepalive.AlipayMethodHelper
 import fansirsqi.xposed.sesame.hook.keepalive.KeepAliveHelper
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
@@ -211,13 +211,13 @@ class SchedulerMonitor(private val context: Context) {
                 timeUntil <= 120000 -> { // 2 分钟内
                     Log.record(TAG, "⏰ 任务即将执行（2 分钟内），防止息屏并唤醒屏幕！")
                     keepAliveHelper?.wakeUpScreen()
-                    keepAliveHelper?.preventScreenOff(timeUntil + 60000) // 多保持 1 分钟
-                    callAlipayWakeup()
+                    keepAliveHelper?.preventScreenOff() // 多保持 1 分钟
+                    AlipayMethodHelper.callWakeup()
                 }
                 timeUntil <= 300000 -> { // 2-5 分钟内
                     Log.record(TAG, "⏱️ 任务在 $minutesUntil 分钟内，保持 CPU 唤醒")
                     keepAliveHelper?.keepCpuAwake(timeUntil)
-                    callAlipayWakeup()
+                    AlipayMethodHelper.callWakeup()
                 }
             }
             
@@ -440,7 +440,9 @@ class SchedulerMonitor(private val context: Context) {
             
             while (isActive && isRunning) {
                 try {
-                    callAlipayWakeup()
+                    AlipayMethodHelper.callWakeup()
+                    AlipayMethodHelper.callPushBerserkerSetup()
+                    AlipayMethodHelper.startPushServices()
                     delay(ALIPAY_WAKEUP_INTERVAL)
                 } catch (e: CancellationException) {
                     throw e
@@ -451,170 +453,6 @@ class SchedulerMonitor(private val context: Context) {
             }
             
             Log.runtime(TAG, "🔔 支付宝唤醒任务已停止")
-        }
-    }
-    
-    /**
-     * 调用支付宝唤醒方法
-     */
-    private fun callAlipayWakeup() {
-        try {
-            // 获取支付宝的 Context
-            val alipayContext = ApplicationHook.getAppContext()
-            if (alipayContext == null) {
-                Log.debug(TAG, "支付宝 Context 为 null，跳过唤醒")
-                return
-            }
-            
-            // 方案 1: 调用 PushBerserker.wakeUpOnRebirth(context)
-            tryCallPushBerserker(alipayContext)
-            
-            // 方案 2: 调用 PushBerserker.setup(context)
-            tryCallPushBerserkerSetup(alipayContext)
-            
-            // 方案 3: 启动支付宝推送服务
-            tryStartPushServices(alipayContext)
-            
-        } catch (e: Exception) {
-            Log.error(TAG, "调用支付宝唤醒方法失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
-        }
-    }
-    
-    /**
-     * 获取支付宝的 ClassLoader
-     */
-    private fun getAlipayClassLoader(): ClassLoader? {
-        return try {
-            val appHookClass = ApplicationHook::class.java
-            val classLoaderField = appHookClass.getDeclaredField("classLoader")
-            classLoaderField.isAccessible = true
-            classLoaderField.get(null) as? ClassLoader
-        } catch (e: Exception) {
-            Log.error(TAG, "获取支付宝 ClassLoader 失败: ${e.message}")
-            null
-        }
-    }
-    
-    /**
-     * 尝试调用 PushBerserker.wakeUpOnRebirth
-     */
-    private fun tryCallPushBerserker(alipayContext: Context) {
-        try {
-            val alipayClassLoader = getAlipayClassLoader()
-            if (alipayClassLoader == null) {
-                Log.debug(TAG, "支付宝 ClassLoader 为 null，跳过")
-                return
-            }
-            
-            val pushBerserkerClass = XposedHelpers.findClass(
-                "com.alipay.mobile.rome.voicebroadcast.berserker.PushBerserker",
-                alipayClassLoader
-            )
-            
-            XposedHelpers.callStaticMethod(
-                pushBerserkerClass,
-                "wakeUpOnRebirth",
-                alipayContext
-            )
-            
-            Log.debug(TAG, "✅ 调用 PushBerserker.wakeUpOnRebirth 成功")
-        } catch (_: XposedHelpers.ClassNotFoundError) {
-            Log.debug(TAG, "未找到 PushBerserker 类")
-        } catch (_: NoSuchMethodError) {
-            Log.debug(TAG, "未找到 wakeUpOnRebirth 方法")
-        } catch (e: Exception) {
-            Log.debug(TAG, "调用 wakeUpOnRebirth 失败: ${e.message}")
-        }
-    }
-    
-    /**
-     * 尝试调用 PushBerserker.setup
-     */
-    private fun tryCallPushBerserkerSetup(alipayContext: Context) {
-        try {
-            val alipayClassLoader = getAlipayClassLoader()
-            if (alipayClassLoader == null) {
-                Log.debug(TAG, "支付宝 ClassLoader 为 null，跳过")
-                return
-            }
-            
-            val pushBerserkerClass = XposedHelpers.findClass(
-                "com.alipay.mobile.rome.voicebroadcast.berserker.PushBerserker",
-                alipayClassLoader
-            )
-            
-            XposedHelpers.callStaticMethod(
-                pushBerserkerClass,
-                "setup",
-                alipayContext
-            )
-            
-            Log.debug(TAG, "✅ 调用 PushBerserker.setup 成功")
-        } catch (e: Exception) {
-            Log.debug(TAG, "调用 setup 失败: ${e.message}")
-        }
-    }
-    
-    /**
-     * 尝试启动支付宝推送服务（仅启动核心服务，不含语音播报）
-     */
-    private fun tryStartPushServices(alipayContext: Context) {
-        try {
-            val alipayClassLoader = getAlipayClassLoader()
-            if (alipayClassLoader == null) {
-                Log.debug(TAG, "支付宝 ClassLoader 为 null，跳过")
-                return
-            }
-            
-            // 启动 NotificationService (推送服务)
-            tryStartService(
-                "com.alipay.pushsdk.push.NotificationService",
-                alipayClassLoader,
-                alipayContext
-            )
-            
-            // 启动 NetworkStartMainProcService (主进程服务)
-            tryStartService(
-                "com.alipay.mobile.base.network.NetworkStartMainProcService",
-                alipayClassLoader,
-                alipayContext
-            )
-            
-            Log.debug(TAG, "✅ 已尝试启动核心推送服务")
-        } catch (e: Exception) {
-            Log.debug(TAG, "启动推送服务失败: ${e.message}")
-        }
-    }
-    
-    /**
-     * 尝试启动单个服务
-     */
-    private fun tryStartService(serviceClassName: String, classLoader: ClassLoader, alipayContext: Context) {
-        try {
-            val serviceClass = XposedHelpers.findClass(serviceClassName, classLoader)
-            val intent = android.content.Intent(alipayContext, serviceClass)
-            
-            // 使用 OreoServiceUnlimited.startService (如果存在)
-            try {
-                val oreoServiceClass = XposedHelpers.findClass(
-                    "com.alipay.tianyan.mobilesdk.coco.OreoServiceUnlimited",
-                    classLoader
-                )
-                XposedHelpers.callStaticMethod(
-                    oreoServiceClass,
-                    "startService",
-                    alipayContext,
-                    intent
-                )
-                Log.debug(TAG, "✅ 通过 OreoServiceUnlimited 启动服务: ${serviceClass.simpleName}")
-            } catch (e: Exception) {
-                // 如果 OreoServiceUnlimited 不可用，直接启动
-                alipayContext.startService(intent)
-                Log.debug(TAG, "✅ 直接启动服务: ${serviceClass.simpleName}")
-            }
-        } catch (e: Exception) {
-            Log.debug(TAG, "启动服务 $serviceClassName 失败: ${e.message}")
         }
     }
     
