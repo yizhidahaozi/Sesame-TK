@@ -90,11 +90,7 @@ object AlipayMethodHelper {
                 return
             }
 
-            // 检查 Context 是否为 Activity
-            if (alipayContext !is Activity) {
-                Log.debug(TAG, "支付宝 Context 不是 Activity，无法调用 keepScreenOn")
-                return
-            }
+            
 
             val alipayClassLoader = getAlipayClassLoader()
             if (alipayClassLoader == null) {
