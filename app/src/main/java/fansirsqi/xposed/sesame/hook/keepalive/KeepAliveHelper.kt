@@ -1,11 +1,14 @@
 package fansirsqi.xposed.sesame.hook.keepalive
 
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.PowerManager
+import de.robv.android.xposed.XposedHelpers
+import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
 
 /**
@@ -40,9 +43,6 @@ class KeepAliveHelper(
 
     // 系统广播接收器
     private var systemBroadcastReceiver: BroadcastReceiver? = null
-
-    // 屏幕唤醒锁（防止息屏）
-    private var screenWakeLock: PowerManager.WakeLock? = null
 
     // 部分唤醒锁（防止 CPU 休眠）
     private var partialWakeLock: PowerManager.WakeLock? = null
@@ -101,8 +101,11 @@ class KeepAliveHelper(
         // 注销系统广播
         unregisterSystemBroadcast()
 
-        // 释放所有 WakeLock
-        releaseAllWakeLocks()
+        // 释放 CPU WakeLock（如果有）
+        releasePartialWakeLock()
+
+        // 取消支付宝的 keepScreenOn
+        callAlipayKeepScreenOn(false)
 
         Log.runtime(TAG, "保活助手已停止")
     }
@@ -224,34 +227,16 @@ class KeepAliveHelper(
 
     /**
      * 防止息屏（保持屏幕常亮）
+     * 
+     * 使用支付宝的 keepScreenOn 方法
      *
-     * @param durationMillis 保持时长（毫秒），0 表示一直保持
      */
-    fun preventScreenOff(durationMillis: Long = WAKELOCK_TIMEOUT) {
+    fun preventScreenOff() {
         try {
-            if (powerManager == null) {
-                Log.error(TAG, "PowerManager 为 null，无法防止息屏")
-                return
-            }
-
-            // 释放旧的 WakeLock
-            releaseScreenWakeLock()
-
-            // 创建新的 WakeLock (屏幕常亮 + CPU 保持唤醒)
-            screenWakeLock = powerManager?.newWakeLock(
-                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                "Sesame:KeepScreenOn"
-            )?.apply {
-                setReferenceCounted(false)
-
-                if (durationMillis > 0) {
-                    acquire(durationMillis)
-                    Log.record(TAG, "🔆 已防止息屏 ${durationMillis / 1000}秒")
-                } else {
-                    acquire(0)
-                    Log.record(TAG, "🔆 已防止息屏（持续保持）")
-                }
-            }
+            // 直接调用支付宝的 keepScreenOn 方法
+            callAlipayKeepScreenOn(true)
+            
+            Log.record(TAG, "🔆 已调用支付宝防止息屏")
 
         } catch (e: Exception) {
             Log.error(TAG, "防止息屏失败: ${e.message}")
@@ -261,39 +246,23 @@ class KeepAliveHelper(
 
     /**
      * 唤醒屏幕（立即点亮屏幕）
+     * 
+     * 使用支付宝的 keepScreenOn 方法
      */
     fun wakeUpScreen() {
         try {
-            if (powerManager == null) {
-                Log.error(TAG, "PowerManager 为 null，无法唤醒屏幕")
-                return
-            }
-
             // 检查屏幕是否已经点亮
-            val isScreenOn =
-                powerManager?.isInteractive ?: false
+            val isScreenOn = powerManager?.isInteractive ?: false
 
             if (isScreenOn) {
                 Log.debug(TAG, "屏幕已点亮，无需唤醒")
                 return
             }
 
-            // 创建临时 WakeLock 唤醒屏幕
-            val wakeUpLock = powerManager?.newWakeLock(
-                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
-                PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                PowerManager.ON_AFTER_RELEASE,
-                "Sesame:WakeUpScreen"
-            )
-
-            wakeUpLock?.apply {
-                setReferenceCounted(false)
-                acquire(3000) // 保持 3 秒
-                Log.record(TAG, "💡 已唤醒屏幕")
-
-                // 3 秒后释放
-                release()
-            }
+            // 调用支付宝的 keepScreenOn 方法
+            callAlipayKeepScreenOn(true)
+            
+            Log.record(TAG, "💡 已调用支付宝唤醒屏幕")
 
         } catch (e: Exception) {
             Log.error(TAG, "唤醒屏幕失败: ${e.message}")
@@ -333,23 +302,6 @@ class KeepAliveHelper(
     }
 
     /**
-     * 释放屏幕 WakeLock
-     */
-    private fun releaseScreenWakeLock() {
-        try {
-            screenWakeLock?.let {
-                if (it.isHeld) {
-                    it.release()
-                    Log.debug(TAG, "已释放屏幕 WakeLock")
-                }
-                screenWakeLock = null
-            }
-        } catch (e: Exception) {
-            Log.debug(TAG, "释放屏幕 WakeLock 失败: ${e.message}")
-        }
-    }
-
-    /**
      * 释放部分 WakeLock
      */
     private fun releasePartialWakeLock() {
@@ -357,21 +309,13 @@ class KeepAliveHelper(
             partialWakeLock?.let {
                 if (it.isHeld) {
                     it.release()
-                    Log.debug(TAG, "已释放部分 WakeLock")
+                    Log.debug(TAG, "已释放 CPU WakeLock")
                 }
                 partialWakeLock = null
             }
         } catch (e: Exception) {
-            Log.debug(TAG, "释放部分 WakeLock 失败: ${e.message}")
+            Log.debug(TAG, "释放 CPU WakeLock 失败: ${e.message}")
         }
-    }
-
-    /**
-     * 释放所有 WakeLock
-     */
-    private fun releaseAllWakeLocks() {
-        releaseScreenWakeLock()
-        releasePartialWakeLock()
     }
 
     /**
@@ -380,5 +324,66 @@ class KeepAliveHelper(
     fun cleanup() {
         stop()
         Log.runtime(TAG, "保活助手资源已清理")
+    }
+
+    /**
+     * 调用支付宝的 keepScreenOn 方法
+     *
+     * @param keep true: 保持屏幕常亮, false: 取消保持
+     */
+    private fun callAlipayKeepScreenOn(keep: Boolean) {
+        try {
+            val alipayContext = ApplicationHook.getAppContext()
+            if (alipayContext == null) {
+                Log.debug(TAG, "支付宝 Context 为 null，无法调用 keepScreenOn")
+                return
+            }
+
+            // 检查 Context 是否为 Activity
+            if (alipayContext !is Activity) {
+                Log.debug(TAG, "支付宝 Context 不是 Activity，无法调用 keepScreenOn")
+                return
+            }
+
+            val alipayClassLoader = getAlipayClassLoader()
+            if (alipayClassLoader == null) {
+                Log.debug(TAG, "支付宝 ClassLoader 为 null，无法调用 keepScreenOn")
+                return
+            }
+
+            // 调用支付宝的 BundleUtils.keepScreenOn 方法
+            val bundleUtilsClass = XposedHelpers.findClass(
+                "com.alipay.android.phone.wallet.mylive.BundleUtils",
+                alipayClassLoader
+            )
+
+            XposedHelpers.callStaticMethod(
+                bundleUtilsClass,
+                "keepScreenOn",
+                alipayContext,
+                keep
+            )
+
+            val status = if (keep) "开启" else "关闭"
+            Log.record(TAG, "✅ 已调用支付宝 keepScreenOn ($status)")
+
+        } catch (e: Exception) {
+            Log.debug(TAG, "调用支付宝 keepScreenOn 失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 获取支付宝的 ClassLoader
+     */
+    private fun getAlipayClassLoader(): ClassLoader? {
+        return try {
+            val appHookClass = ApplicationHook::class.java
+            val classLoaderField = appHookClass.getDeclaredField("classLoader")
+            classLoaderField.isAccessible = true
+            classLoaderField.get(null) as? ClassLoader
+        } catch (e: Exception) {
+            Log.debug(TAG, "获取支付宝 ClassLoader 失败: ${e.message}")
+            null
+        }
     }
 }
