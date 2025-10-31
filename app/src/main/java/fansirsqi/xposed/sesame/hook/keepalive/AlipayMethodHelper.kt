@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.hook.keepalive
 
-import android.app.Activity
-import android.content.Context
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
@@ -35,7 +33,7 @@ object AlipayMethodHelper {
 
     /**
      * 调用支付宝的进程唤醒方法
-     * 
+     *
      * 调用 PushBerserker.wakeUpOnRebirth 保持进程活跃
      */
     @JvmStatic
@@ -90,8 +88,6 @@ object AlipayMethodHelper {
                 return
             }
 
-            
-
             val alipayClassLoader = getAlipayClassLoader()
             if (alipayClassLoader == null) {
                 Log.debug(TAG, "支付宝 ClassLoader 为 null，无法调用 keepScreenOn")
@@ -121,7 +117,7 @@ object AlipayMethodHelper {
 
     /**
      * 调用支付宝的 PushBerserker.setup 方法
-     * 
+     *
      * 初始化推送服务
      */
     @JvmStatic
@@ -161,7 +157,7 @@ object AlipayMethodHelper {
 
     /**
      * 启动支付宝推送服务
-     * 
+     *
      * 启动 NotificationService 和 NetworkStartMainProcService
      */
     @JvmStatic
@@ -180,22 +176,22 @@ object AlipayMethodHelper {
             }
 
             // 启动服务列表（不包括语音播报）
-            val serviceNames = listOf(
+            val services = listOf(
                 "com.alipay.android.phone.wallet.push.notification.NotificationService",
-                "com.alipay.android.phone.wallet.push.route.NetworkStartMainProcService"
-            )
+                "com.alipay.android.phone.wallet.push.route.NetworkStartMainProcService",
+                "com.alipay.pushsdk.push.NotificationService",
+                "com.alipay.mobile.base.network.NetworkStartMainProcService"
+            ).mapNotNull { XposedHelpers.findClassIfExists(it, alipayClassLoader) }
 
-            serviceNames.forEach { serviceName ->
+            services.forEach { service ->
                 try {
-                    val serviceClass = XposedHelpers.findClass(serviceName, alipayClassLoader)
-                    val intent = android.content.Intent(alipayContext, serviceClass)
+                    val intent = android.content.Intent(alipayContext, service)
                     alipayContext.startService(intent)
-                    Log.debug(TAG, "✅ 已启动服务: ${serviceName.substringAfterLast('.')}")
+                    Log.debug(TAG, "✅ 已启动服务: ${service.simpleName}")
                 } catch (e: Exception) {
-                    Log.debug(TAG, "启动服务 ${serviceName.substringAfterLast('.')} 失败: ${e.message}")
+                    Log.debug(TAG, "启动服务 ${service.simpleName} 失败: ${e.message}")
                 }
             }
-
         } catch (e: Exception) {
             Log.debug(TAG, "启动推送服务失败: ${e.message}")
         }
