@@ -4246,9 +4246,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val propName = jo.getJSONObject("propConfigVO").getString("propName")
                 if (usePropBag(jo)) {
                     Log.forest("使用加速卡🌪[$propName]")
-                    // 🚀 使用加速卡后，等待3秒让能量球加速成熟，然后收取3次
+                    // 🚀 使用加速卡后，等待1秒让能量球加速成熟，然后收取3次
                     Log.record(TAG, "🚀 加速卡使用成功，等待3秒让能量球成熟...")
-                    GlobalThreadPools.sleepCompat(2000L)
+                    GlobalThreadPools.sleepCompat(1000L)
                     
                     // 连续收取3次，确保收到加速后的能量
                     repeat(3) { index ->
