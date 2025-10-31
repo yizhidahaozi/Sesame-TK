@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -89,7 +90,12 @@ class MainTask(
     override suspend fun runSuspend() {
         try {
             taskRunnable()
+        } catch (e: CancellationException) {
+            // 协程取消是正常的控制流，不应该捕获，需要重新抛出
+            Log.runtime(TAG, "任务被取消: $taskId")
+            throw e // 重新抛出 CancellationException 以保持协程取消语义
         } catch (e: Exception) {
+            // 只捕获真正的异常，不捕获 CancellationException
             Log.printStackTrace(TAG, "主任务执行异常", e)
         }
     }

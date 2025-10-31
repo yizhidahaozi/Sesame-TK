@@ -36,22 +36,23 @@ public class ResChecker {
             String resultDesc = jo.optString("resultDesc", "");
             String memo = jo.optString("memo", "");
             String resultCode = jo.optString("resultCode", "");
-            if (resultDesc.contains("当前参与人数过多") || resultDesc.contains("请稍后再试") ||
-                    resultDesc.contains("手速太快") || resultDesc.contains("频繁") ||
-                    resultDesc.contains("操作过于频繁") ||
-                    memo.contains("我的小鸡在睡觉中") ||
-                    memo.contains("小鸡在睡觉") ||
-                    memo.contains("无法操作") ||
-                    memo.contains("手速太快") ||
-                    memo.contains("有人抢在你") ||
-                    memo.contains("饲料槽已满") ||
-                    memo.contains("当日达到上限") ||
-                    memo.contains("适可而止") ||
-                    memo.contains("不支持rpc完成的任务") ||
-                    memo.contains("庄园的小鸡太多了") ||
-                    "I07".equals(resultCode)) {
-                 return false; // 返回false，但不打印错误日志
-             }
+            
+            // 需要忽略的关键词列表（同时检查 resultDesc 和 memo）
+            String[] ignoreKeywords = {
+                "当前参与人数过多", "请稍后再试", "手速太快", "频繁", "操作过于频繁",
+                "我的小鸡在睡觉中", "小鸡在睡觉", "无法操作", "有人抢在你",
+                "饲料槽已满", "当日达到上限", "适可而止", "不支持rpc完成的任务",
+                "庄园的小鸡太多了"
+            };
+            for (String keyword : ignoreKeywords) {
+                if (resultDesc.contains(keyword) || memo.contains(keyword)) {
+                    return false; // 返回false，但不打印错误日志
+                }
+            }
+            // 特殊的 resultCode 检查
+            if ("I07".equals(resultCode)) {
+                return false; // 返回false，但不打印错误日志
+            }
             // 获取调用栈信息以确定错误来源
             StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
             String callerInfo = getString(stackTrace);

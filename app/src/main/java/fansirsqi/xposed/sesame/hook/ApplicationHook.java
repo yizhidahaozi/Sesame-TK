@@ -175,6 +175,15 @@ public class ApplicationHook {
         ApplicationHook.offline = offline;
     }
 
+    /**
+     * 检查任务是否正在运行
+     * 
+     * @return true: 任务正在运行, false: 任务未运行
+     */
+    public static boolean getIsTaskRunning() {
+        return isTaskRunning;
+    }
+
     private static volatile long lastExecTime = 0; // 添加为类成员变量
     public static volatile long nextExecutionTime = 0;
     private static final long MAX_INACTIVE_TIME = 3600000; // 最大不活动时间：1小时

@@ -244,6 +244,19 @@ object SmartSchedulerManager {
     }
     
     /**
+     * 重置补偿值（强制重新初始化时调用）
+     */
+    fun resetCompensation() {
+        try {
+            currentCompensation = 120000L // 重置为初始值 2 分钟
+            delayHistory.clear() // 清空延迟历史
+            Log.record(TAG, "✅ 补偿值已重置为: ${currentCompensation / 1000}s")
+        } catch (e: Exception) {
+            Log.error(TAG, "重置补偿值失败: ${e.message}")
+        }
+    }
+    
+    /**
      * 调度精确执行
      * 
      * 策略：

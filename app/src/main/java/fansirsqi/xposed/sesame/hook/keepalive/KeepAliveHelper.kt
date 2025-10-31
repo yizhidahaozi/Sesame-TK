@@ -219,6 +219,8 @@ class KeepAliveHelper(
             
             // 调用支付宝唤醒方法
             AlipayMethodHelper.callWakeup()
+            AlipayMethodHelper.callKeepScreenOn(true)
+
         } catch (e: Exception) {
             Log.error(TAG, "检查防止息屏异常: ${e.message}")
         }
