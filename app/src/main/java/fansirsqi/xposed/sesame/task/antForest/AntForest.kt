@@ -4237,29 +4237,26 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             var jo = findPropBag(bag, "LIMIT_TIME_ENERGY_BUBBLE_BOOST")
             if (jo == null) {
                 youthPrivilege()
-                jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_BUBBLE_BOOST") // 重新查找
+                jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_BUBBLE_BOOST")
                 if (jo == null) {
-                    jo = findPropBag(bag, "BUBBLE_BOOST") // 尝试查找 普通加速器，一般用不到
+                    jo = findPropBag(bag, "BUBBLE_BOOST")
                 }
             }
             if (jo != null) {
                 val propName = jo.getJSONObject("propConfigVO").getString("propName")
-
-                // 使用加速卡
                 if (usePropBag(jo)) {
                     Log.forest("使用加速卡🌪[$propName]")
-
-                    // 🚀 关键改动：加速卡立即生效，立即尝试收取自己能量两次
-                    Log.record(TAG, "🚀 加速卡使用成功，立即尝试收取自己能量...")
-
-                    // 第一次立即收取
-                    collectSelfEnergyImmediately("第一次收取")
-
-                    // 等待1秒后第二次收取
-                    GlobalThreadPools.sleepCompat(1000L)
-                    collectSelfEnergyImmediately("第二次收取")
-
-                    Log.record(TAG, "✅ 加速卡自收能量完成（尝试两次）")
+                    // 🚀 使用加速卡后，等待3秒让能量球加速成熟，然后收取3次
+                    Log.record(TAG, "🚀 加速卡使用成功，等待3秒让能量球成熟...")
+                    GlobalThreadPools.sleepCompat(2000L)
+                    
+                    // 连续收取3次，确保收到加速后的能量
+                    repeat(3) { index ->
+                        Log.record(TAG, "🎯 第${index + 1}次收取自己能量...")
+                        collectSelfEnergyImmediately("加速卡第${index + 1}次")
+                        if (index < 2) GlobalThreadPools.sleepCompat(1000L)
+                    }
+                    Log.record(TAG, "✅ 加速卡自收能量完成（共3次）")
                 }
             } else {
                 Log.record(TAG, "背包中无可用加速卡")
