@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.hook
 import android.content.Context
 import android.content.Intent
 import fansirsqi.xposed.sesame.data.General
+import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlinx.coroutines.*

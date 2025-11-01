@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.hook
+package fansirsqi.xposed.sesame.hook.keepalive
 
 import android.content.Context
 import android.content.ContextWrapper
@@ -8,34 +8,30 @@ import fansirsqi.xposed.sesame.util.Log
 /**
  * 安全的 Context 包装器
  * 用于处理 WorkManager 在 Xposed 环境中的资源访问问题
- * 
+ *
  * WorkManager 会尝试读取一些 boolean 资源配置，但这些资源在宿主应用中不存在
  * 此包装器拦截资源访问，返回安全的默认值
  */
 class SafeContextWrapper(base: Context) : ContextWrapper(base) {
-    
+
     companion object {
         private const val TAG = "SafeContextWrapper"
     }
-    
+
     private val safeResources: Resources by lazy {
         SafeResources(baseContext.resources)
     }
-    
+
     override fun getResources(): Resources {
         return safeResources
     }
-    
+
     override fun getApplicationContext(): Context {
         // 确保 applicationContext 也是安全包装的
         val appContext = super.getApplicationContext()
-        return if (appContext is SafeContextWrapper) {
-            appContext
-        } else {
-            SafeContextWrapper(appContext)
-        }
+        return appContext as? SafeContextWrapper ?: SafeContextWrapper(appContext)
     }
-    
+
     /**
      * 安全的 Resources 包装器
      */
@@ -44,7 +40,7 @@ class SafeContextWrapper(base: Context) : ContextWrapper(base) {
         base.displayMetrics,
         base.configuration
     ) {
-        
+
         override fun getBoolean(id: Int): Boolean {
             return try {
                 base.getBoolean(id)
@@ -54,7 +50,7 @@ class SafeContextWrapper(base: Context) : ContextWrapper(base) {
                 false
             }
         }
-        
+
         override fun getInteger(id: Int): Int {
             return try {
                 base.getInteger(id)
@@ -63,7 +59,7 @@ class SafeContextWrapper(base: Context) : ContextWrapper(base) {
                 0
             }
         }
-        
+
         override fun getString(id: Int): String {
             return try {
                 base.getString(id)
@@ -72,7 +68,7 @@ class SafeContextWrapper(base: Context) : ContextWrapper(base) {
                 ""
             }
         }
-        
+
         override fun getString(id: Int, vararg formatArgs: Any?): String {
             return try {
                 base.getString(id, *formatArgs)
@@ -83,4 +79,3 @@ class SafeContextWrapper(base: Context) : ContextWrapper(base) {
         }
     }
 }
-

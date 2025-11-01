@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import androidx.annotation.NonNull;
+import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 import java.io.File;

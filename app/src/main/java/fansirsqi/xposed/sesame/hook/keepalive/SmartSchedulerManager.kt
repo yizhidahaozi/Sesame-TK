@@ -1,20 +1,22 @@
-package fansirsqi.xposed.sesame.hook
+package fansirsqi.xposed.sesame.hook.keepalive
 
 import android.annotation.SuppressLint
 import android.content.Context
+import fansirsqi.xposed.sesame.hook.CoroutineScheduler
+import fansirsqi.xposed.sesame.hook.keepalive.SchedulerMonitor
+import fansirsqi.xposed.sesame.hook.keepalive.WorkManagerScheduler
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.TimeUtil
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 
 /**
  * 智能调度器管理器
- * 
+ *
  * 功能：
  * 1. 自动统计执行延迟
  * 2. 动态调整延迟补偿
  * 3. 智能切换调度器（协程 ↔ WorkManager）
- * 
+ *
  * 策略：
  * - 平均延迟 < 1 分钟：减少补偿，保持协程
  * - 平均延迟 1-3 分钟：增加补偿，保持协程
@@ -22,9 +24,9 @@ import kotlin.math.abs
  * - 平均延迟 > 5 分钟：切换到 WorkManager
  */
 object SmartSchedulerManager {
-    
+
     private const val TAG = "SmartSchedulerManager"
-    
+
     /**
      * 调度器类型
      */
@@ -32,7 +34,7 @@ object SmartSchedulerManager {
         COROUTINE,      // 协程调度器（低内存，可补偿）
         WORK_MANAGER    // WorkManager（中等内存，系统优化）
     }
-    
+
     /**
      * 延迟记录
      */
@@ -41,37 +43,37 @@ object SmartSchedulerManager {
         val actualTime: Long,        // 实际执行时间
         val delayMs: Long            // 延迟时长（毫秒）
     )
-    
+
     // 最近延迟记录（最多保存 10 条）
     private val delayHistory = ConcurrentLinkedQueue<DelayRecord>()
     private const val MAX_HISTORY_SIZE = 10
-    
+
     // 当前使用的调度器类型
     @Volatile
     private var currentSchedulerType = SchedulerType.COROUTINE
-    
+
     // 当前补偿值（毫秒）
     @Volatile
     private var currentCompensation = 120000L // 初始 2 分钟
-    
+
     // 最小/最大补偿值
     private const val MIN_COMPENSATION = 0L          // 0 秒
     private const val MAX_COMPENSATION = 600000L     // 10 分钟（协程最大补偿）
-    
+
     // 调度器实例
     @SuppressLint("StaticFieldLeak")
     private var coroutineScheduler: CoroutineScheduler? = null
     @SuppressLint("StaticFieldLeak")
     private var workManagerScheduler: WorkManagerScheduler? = null
-    
+
     // 调度器监控器（实时检测延迟并调整补偿）
     @SuppressLint("StaticFieldLeak")
     private var schedulerMonitor: SchedulerMonitor? = null
-    
+
     // 初始化标志（避免重复初始化）
     @Volatile
     private var initialized = false
-    
+
     /**
      * 初始化调度器
      */
@@ -81,16 +83,16 @@ object SmartSchedulerManager {
             Log.debug(TAG, "调度器已经初始化，跳过重复初始化")
             return
         }
-        
+
         try {
             // 预创建两个调度器实例
             coroutineScheduler = CoroutineScheduler(context)
             workManagerScheduler = WorkManagerScheduler(context)
-            
+
             // 创建并启动监控器
             schedulerMonitor = SchedulerMonitor(context)
             schedulerMonitor?.startMonitoring()
-            
+
             initialized = true
             Log.runtime(TAG, "✅ 智能调度器管理器已初始化")
             Log.runtime(TAG, "当前调度器: ${currentSchedulerType.name}")
@@ -101,33 +103,33 @@ object SmartSchedulerManager {
             Log.printStackTrace(TAG, e)
         }
     }
-    
+
     /**
      * 记录执行延迟
-     * 
+     *
      * @param expectedTime 预期执行时间戳
      * @param actualTime 实际执行时间戳
      */
     fun recordDelay(expectedTime: Long, actualTime: Long) {
         val delayMs = actualTime - expectedTime
         val record = DelayRecord(expectedTime, actualTime, delayMs)
-        
+
         // 添加记录
         delayHistory.offer(record)
-        
+
         // 限制历史记录数量
         while (delayHistory.size > MAX_HISTORY_SIZE) {
             delayHistory.poll()
         }
-        
+
         // 记录日志
         val delaySeconds = delayMs / 1000
         Log.record(TAG, "📊 记录延迟: ${delaySeconds} 秒 (${if (delayMs > 0) "延迟" else "提前"})")
-        
+
         // 触发智能调整
         adjustStrategy()
     }
-    
+
     /**
      * 智能调整策略
      */
@@ -136,13 +138,13 @@ object SmartSchedulerManager {
             Log.debug(TAG, "历史记录不足，暂不调整策略")
             return
         }
-        
+
         // 计算平均延迟
         val averageDelay = calculateAverageDelay()
         val averageDelaySeconds = averageDelay / 1000
-        
+
         Log.record(TAG, "📈 最近 ${delayHistory.size} 次平均延迟: ${averageDelaySeconds} 秒")
-        
+
         // 根据延迟调整策略
         when {
             // 延迟很小（< 30 秒）：减少补偿
@@ -157,7 +159,7 @@ object SmartSchedulerManager {
                     switchToCoroutine()
                 }
             }
-            
+
             // 延迟适中（30秒 - 90秒）：微调补偿
             averageDelay in 30000..90000 -> {
                 val oldCompensation = currentCompensation
@@ -168,7 +170,7 @@ object SmartSchedulerManager {
                     Log.record(TAG, "⚙️ 微调补偿: ${oldCompensation / 1000}s → ${currentCompensation / 1000}s")
                 }
             }
-            
+
             // 延迟较大（90秒 - 180秒）：增加补偿
             averageDelay in 90000..180000 -> {
                 val oldCompensation = currentCompensation
@@ -177,7 +179,7 @@ object SmartSchedulerManager {
                     Log.record(TAG, "⚠️ 延迟较大，增加补偿: ${oldCompensation / 1000}s → ${currentCompensation / 1000}s")
                 }
             }
-            
+
             // 延迟超过 3 分钟：使用最大补偿（不切换 WorkManager）
             true -> {
                 val oldCompensation = currentCompensation
@@ -190,7 +192,7 @@ object SmartSchedulerManager {
             }
         }
     }
-    
+
     /**
      * 计算平均延迟
      */
@@ -198,39 +200,39 @@ object SmartSchedulerManager {
         if (delayHistory.isEmpty()) return 0L
         return delayHistory.map { it.delayMs }.average().toLong()
     }
-    
+
     /**
      * 切换到 WorkManager
      */
     private fun switchToWorkManager() {
         if (currentSchedulerType == SchedulerType.WORK_MANAGER) return
-        
+
         Log.record(TAG, "🔄 切换调度器: COROUTINE → WORK_MANAGER")
         Log.record(TAG, "原因: 平均延迟超过 3 分钟，WorkManager 更稳定")
-        
+
         currentSchedulerType = SchedulerType.WORK_MANAGER
         currentCompensation = 0L // WorkManager 不需要补偿
-        
+
         // 清空历史记录，重新统计
         delayHistory.clear()
     }
-    
+
     /**
      * 切换到协程
      */
     private fun switchToCoroutine() {
         if (currentSchedulerType == SchedulerType.COROUTINE) return
-        
+
         Log.record(TAG, "🔄 切换调度器: WORK_MANAGER → COROUTINE")
         Log.record(TAG, "原因: WorkManager 延迟已降低，协程更省内存")
-        
+
         currentSchedulerType = SchedulerType.COROUTINE
         currentCompensation = 60000L // 重新从 1 分钟补偿开始
-        
+
         // 清空历史记录，重新统计
         delayHistory.clear()
     }
-    
+
     /**
      * 获取当前补偿值（优先使用监控器的实时补偿）
      */
@@ -242,7 +244,7 @@ object SmartSchedulerManager {
             0L // WorkManager 不需要补偿
         }
     }
-    
+
     /**
      * 重置补偿值（强制重新初始化时调用）
      */
@@ -255,10 +257,10 @@ object SmartSchedulerManager {
             Log.error(TAG, "重置补偿值失败: ${e.message}")
         }
     }
-    
+
     /**
      * 调度精确执行
-     * 
+     *
      * 策略：
      * - 延迟 < 10 分钟：协程 + 智能补偿（监控器动态调整）
      * - 延迟 > 10 分钟：WorkManager（系统长期调度更可靠）
@@ -266,7 +268,7 @@ object SmartSchedulerManager {
     fun scheduleExactExecution(delayMillis: Long, exactTimeMillis: Long) {
         // 智能选择调度器：超过 10 分钟才使用 WorkManager
         val shouldUseWorkManager = delayMillis > 600000 // 10 分钟
-        
+
         if (shouldUseWorkManager && currentSchedulerType == SchedulerType.COROUTINE) {
             Log.record(TAG, "📊 延迟 ${delayMillis / 1000}s > 10 分钟，切换 WorkManager")
             switchToWorkManager()
@@ -275,15 +277,15 @@ object SmartSchedulerManager {
             Log.record(TAG, "📊 延迟 ${delayMillis / 1000}s < 10 分钟，切回协程模式（更精确）")
             switchToCoroutine()
         }
-        
+
         // 应用补偿（优先使用监控器的实时补偿）
         val compensation = getCurrentCompensation()
         val compensatedDelay = (delayMillis - compensation).coerceAtLeast(0)
-        
+
         // 记录到监控器
         val taskId = "task_${exactTimeMillis}"
         schedulerMonitor?.recordSchedule(taskId, exactTimeMillis)
-        
+
         // 根据当前调度器类型调用
         when (currentSchedulerType) {
             SchedulerType.COROUTINE -> {
@@ -295,7 +297,7 @@ object SmartSchedulerManager {
                     ?: Log.error(TAG, "WorkManager 调度器未初始化")
             }
         }
-        
+
         // 记录调度信息
         Log.record(TAG, "📅 已调度 (${currentSchedulerType.name})")
         if (currentSchedulerType == SchedulerType.COROUTINE && compensation > 0) {
@@ -304,7 +306,7 @@ object SmartSchedulerManager {
             Log.record(TAG, "延迟: ${delayMillis / 1000}s (无需补偿)")
         }
     }
-    
+
     /**
      * 调度延迟执行
      */
@@ -314,7 +316,7 @@ object SmartSchedulerManager {
             SchedulerType.WORK_MANAGER -> workManagerScheduler?.scheduleDelayedExecution(delayMillis)
         }
     }
-    
+
     /**
      * 调度唤醒任务
      */
@@ -324,7 +326,7 @@ object SmartSchedulerManager {
             SchedulerType.WORK_MANAGER -> workManagerScheduler?.scheduleWakeupAlarm(triggerAtMillis, requestCode, isMainAlarm) ?: false
         }
     }
-    
+
     /**
      * 取消所有唤醒任务
      */
@@ -334,16 +336,16 @@ object SmartSchedulerManager {
             SchedulerType.WORK_MANAGER -> workManagerScheduler?.cancelAllWakeupAlarms()
         }
     }
-    
+
     /**
      * 通知任务开始执行
-     * 
+     *
      * @param taskId 任务唯一标识
      */
     fun notifyTaskExecution(taskId: String) {
         schedulerMonitor?.recordExecution(taskId)
     }
-    
+
     /**
      * 获取统计信息
      */
@@ -353,9 +355,9 @@ object SmartSchedulerManager {
         } else {
             0L
         }
-        
+
         val monitorStats = schedulerMonitor?.getStatistics() ?: "监控器未启动"
-        
+
         return buildString {
             append("调度器: ${currentSchedulerType.name}")
             append(", 补偿: ${currentCompensation / 1000}s")
@@ -364,7 +366,7 @@ object SmartSchedulerManager {
             append("\n监控: $monitorStats")
         }
     }
-    
+
     /**
      * 清理资源
      */
@@ -373,4 +375,3 @@ object SmartSchedulerManager {
         Log.runtime(TAG, "智能调度器管理器已清理")
     }
 }
-
