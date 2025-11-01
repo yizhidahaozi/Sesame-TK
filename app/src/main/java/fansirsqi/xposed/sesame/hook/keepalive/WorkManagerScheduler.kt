@@ -40,43 +40,56 @@ class WorkManagerScheduler(private val context: Context) {
         private const val WORK_MAIN_TASK = "sesame_main_task"
         private const val WORK_WAKEUP_PREFIX = "sesame_wakeup_"
         private const val WORK_EXACT_PREFIX = "sesame_exact_"
+        
+        // 性能优化：使用标志位替代异常判断
+        @Volatile
+        private var isInitialized = false
+        private val initLock = Any()
 
         /**
-         * 初始化 WorkManager
+         * 初始化 WorkManager（性能优化版）
          * 必须在第一次使用前调用
+         * 
+         * 优化：使用标志位和双重检查锁，避免异常开销
          */
         @JvmStatic
         fun initializeWorkManager(context: Context) {
-            try {
-                // 检查是否已经初始化
-                try {
-                    WorkManager.Companion.getInstance(context)
-                    Log.debug(TAG, "WorkManager 已经初始化")
+            // 快速路径：已初始化直接返回
+            if (isInitialized) {
+                Log.debug(TAG, "WorkManager 已经初始化（缓存）")
+                return
+            }
+            
+            // 双重检查锁
+            synchronized(initLock) {
+                if (isInitialized) {
+                    Log.debug(TAG, "WorkManager 已经初始化（同步）")
                     return
-                } catch (e: IllegalStateException) {
-                    // 未初始化，继续初始化
                 }
+                
+                try {
+                    // 使用 applicationContext 并包装以避免资源冲突
+                    val appContext = context.applicationContext
+                    val safeContext = SafeContextWrapper(appContext)
 
-                // 使用 applicationContext 并包装以避免资源冲突
-                val appContext = context.applicationContext
-                val safeContext = SafeContextWrapper(appContext)
+                    // 创建自定义配置 - 完全手动配置避免读取资源
+                    val configuration = Configuration.Builder()
+                        .setMinimumLoggingLevel(android.util.Log.INFO)
+                        .setExecutor(Executors.newFixedThreadPool(4))
+                        .setTaskExecutor(Executors.newSingleThreadExecutor())
+                        // 设置所有可能从资源读取的配置项
+                        .setJobSchedulerJobIdRange(0, 1000)
+                        .build()
 
-                // 创建自定义配置 - 完全手动配置避免读取资源
-                val configuration = Configuration.Builder()
-                    .setMinimumLoggingLevel(android.util.Log.INFO)
-                    .setExecutor(Executors.newFixedThreadPool(4))
-                    .setTaskExecutor(Executors.newSingleThreadExecutor())
-                    // 设置所有可能从资源读取的配置项
-                    .setJobSchedulerJobIdRange(0, 1000)
-                    .build()
-
-                // 手动初始化 WorkManager，使用安全包装的 Context
-                WorkManager.Companion.initialize(safeContext, configuration)
-                Log.record(TAG, "✅ WorkManager 已成功初始化")
-            } catch (e: Exception) {
-                Log.error(TAG, "❌ WorkManager 初始化失败: ${e.message}")
-                Log.printStackTrace(TAG, e)
-                throw e
+                    // 手动初始化 WorkManager，使用安全包装的 Context
+                    WorkManager.Companion.initialize(safeContext, configuration)
+                    isInitialized = true
+                    Log.record(TAG, "✅ WorkManager 已成功初始化")
+                } catch (e: Exception) {
+                    Log.error(TAG, "❌ WorkManager 初始化失败: ${e.message}")
+                    Log.printStackTrace(TAG, e)
+                    throw e
+                }
             }
         }
     }

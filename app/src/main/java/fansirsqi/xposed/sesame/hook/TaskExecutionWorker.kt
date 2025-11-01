@@ -10,6 +10,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import android.graphics.BitmapFactory
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
@@ -71,16 +72,24 @@ class TaskExecutionWorker(
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "芝麻粒后台任务执行通知"
+                // 禁用声音和震动
+                enableLights(false)
+                enableVibration(false)
+                setShowBadge(false)
             }
             notificationManager.createNotificationChannel(channel)
         }
 
         // 创建通知
         val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setSmallIcon(android.R.drawable.sym_def_app_icon)
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, android.R.drawable.sym_def_app_icon))
             .setContentTitle("芝麻粒")
             .setContentText("正在执行后台任务...")
-            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
+            .setAutoCancel(false)
             .build()
 
         return ForegroundInfo(NOTIFICATION_ID, notification)

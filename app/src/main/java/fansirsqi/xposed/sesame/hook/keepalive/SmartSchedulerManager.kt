@@ -55,6 +55,13 @@ object SmartSchedulerManager {
     // 当前补偿值（毫秒）
     @Volatile
     private var currentCompensation = 120000L // 初始 2 分钟
+    
+    // 性能优化：缓存平均延迟计算
+    @Volatile
+    private var totalDelay = 0L
+    
+    @Volatile
+    private var delayCount = 0
 
     // 最小/最大补偿值
     private const val MIN_COMPENSATION = 0L          // 0 秒
@@ -105,21 +112,32 @@ object SmartSchedulerManager {
     }
 
     /**
-     * 记录执行延迟
+     * 记录执行延迟（性能优化版）
      *
      * @param expectedTime 预期执行时间戳
      * @param actualTime 实际执行时间戳
+     * 
+     * 优化：维护累积和，平均值计算从 O(n) 降为 O(1)
      */
     fun recordDelay(expectedTime: Long, actualTime: Long) {
         val delayMs = actualTime - expectedTime
         val record = DelayRecord(expectedTime, actualTime, delayMs)
+
+        // 更新累积值（性能优化）
+        totalDelay += delayMs
+        delayCount++
 
         // 添加记录
         delayHistory.offer(record)
 
         // 限制历史记录数量
         while (delayHistory.size > MAX_HISTORY_SIZE) {
-            delayHistory.poll()
+            val removed = delayHistory.poll()
+            // 从累积值中减去移除的记录
+            removed?.let {
+                totalDelay -= it.delayMs
+                delayCount--
+            }
         }
 
         // 记录日志
@@ -194,11 +212,12 @@ object SmartSchedulerManager {
     }
 
     /**
-     * 计算平均延迟
+     * 计算平均延迟（性能优化版）
+     * 
+     * 优化：直接使用累积和计算，时间复杂度 O(n) → O(1)
      */
     private fun calculateAverageDelay(): Long {
-        if (delayHistory.isEmpty()) return 0L
-        return delayHistory.map { it.delayMs }.average().toLong()
+        return if (delayCount > 0) totalDelay / delayCount else 0L
     }
 
     /**
@@ -215,6 +234,8 @@ object SmartSchedulerManager {
 
         // 清空历史记录，重新统计
         delayHistory.clear()
+        totalDelay = 0L
+        delayCount = 0
     }
 
     /**
@@ -231,6 +252,8 @@ object SmartSchedulerManager {
 
         // 清空历史记录，重新统计
         delayHistory.clear()
+        totalDelay = 0L
+        delayCount = 0
     }
 
     /**
@@ -252,6 +275,9 @@ object SmartSchedulerManager {
         try {
             currentCompensation = 120000L // 重置为初始值 2 分钟
             delayHistory.clear() // 清空延迟历史
+            // 重置累积值
+            totalDelay = 0L
+            delayCount = 0
             Log.record(TAG, "✅ 补偿值已重置为: ${currentCompensation / 1000}s")
         } catch (e: Exception) {
             Log.error(TAG, "重置补偿值失败: ${e.message}")

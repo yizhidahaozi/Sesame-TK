@@ -57,6 +57,11 @@ class KeepAliveHelper(
     // 是否已启动
     @Volatile
     private var isRunning = false
+    
+    // 性能优化：TIME_TICK 节流（避免过度保活）
+    @Volatile
+    private var lastTimeTickHandled = 0L
+    private val TIME_TICK_THROTTLE = 60000L // 1分钟节流
 
     /**
      * 检查系统版本是否支持
@@ -108,12 +113,16 @@ class KeepAliveHelper(
     }
 
     /**
-     * 注册系统广播监听
+     * 注册系统广播监听（性能优化版）
+     * 
+     * 优化：只在已注册时才注销，避免不必要的操作
      */
     private fun registerSystemBroadcast() {
         try {
-            // 如果已经注册过，先注销
-            unregisterSystemBroadcast()
+            // 性能优化：只在已注册时才注销
+            if (systemBroadcastReceiver != null) {
+                unregisterSystemBroadcast()
+            }
 
             // 创建广播接收器
             systemBroadcastReceiver = object : BroadcastReceiver() {
@@ -177,7 +186,9 @@ class KeepAliveHelper(
     }
 
     /**
-     * 处理系统事件
+     * 处理系统事件（性能优化版）
+     * 
+     * 优化：TIME_TICK 添加节流和轻量级保活，降低耗电
      */
     private fun handleSystemEvent(action: String) {
         val currentTime = System.currentTimeMillis()
@@ -200,7 +211,15 @@ class KeepAliveHelper(
                 Log.debug(TAG, "📱 系统广播: 网络状态变化")
             }
             Intent.ACTION_TIME_TICK -> {
-                // 每分钟触发一次，静默保活
+                // 性能优化：TIME_TICK 节流 + 轻量级保活
+                // 每分钟触发一次，做最小必要的保活操作
+                if (currentTime - lastTimeTickHandled >= TIME_TICK_THROTTLE) {
+                    lastTimeTickHandled = currentTime
+                    // 轻量级保活：只调用一次唤醒，不做复杂操作
+                    AlipayMethodHelper.callWakeup()
+                    // 降低日志级别，避免日志刷屏
+                    Log.debug(TAG, "⏰ TIME_TICK 保活")
+                }
             }
         }
     }
@@ -332,6 +351,7 @@ class KeepAliveHelper(
      */
     fun cleanup() {
         stop()
+        lastTimeTickHandled = 0L
         Log.runtime(TAG, "保活助手资源已清理")
     }
 }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import java.util.PriorityQueue
 import kotlin.math.abs
 
 /**
@@ -80,6 +81,16 @@ class SchedulerMonitor(private val context: Context) {
 
     // 调度记录：任务ID -> 预期执行时间
     private val scheduledTasks = ConcurrentHashMap<String, ScheduleRecord>()
+    
+    // 性能优化：维护已排序的任务队列（避免重复filter+sort）
+    private val upcomingTasksQueue = PriorityQueue<ScheduleRecord>(
+        compareBy { it.expectedTime }
+    )
+    
+    // 性能优化：方法调用节流（避免频繁调用）
+    @Volatile
+    private var lastWakeupTime = 0L
+    private val MIN_WAKEUP_INTERVAL = 1000L // 最小间隔 1 秒
 
     // 当前补偿值（毫秒）
     @Volatile
@@ -154,6 +165,7 @@ class SchedulerMonitor(private val context: Context) {
         keepAliveHelper?.stop()
 
         scheduledTasks.clear()
+        upcomingTasksQueue.clear()
         Log.runtime(TAG, "监控器已停止")
     }
 
@@ -187,25 +199,33 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
-     * 处理即将执行的任务
+     * 处理即将执行的任务（性能优化版）
+     * 
+     * 优化：使用优先队列，避免每次都filter+sort整个集合
      */
     private fun handleUpcomingTask(timeUntilExecution: Long) {
         try {
             val currentTime = System.currentTimeMillis()
 
-            // 查找即将执行的任务（10 分钟内，扩大范围）
-            val upcomingTasks = scheduledTasks.values.filter { record ->
-                record.actualTime == null &&
-                record.expectedTime > currentTime &&
-                (record.expectedTime - currentTime) <= 600000L // 10 分钟
-            }.sortedBy { it.expectedTime }
-
-            if (upcomingTasks.isEmpty()) {
-                return
+            // 清理优先队列中的无效任务（已执行或已过期）
+            while (upcomingTasksQueue.isNotEmpty()) {
+                val peek = upcomingTasksQueue.peek()
+                if (peek == null || peek.actualTime != null || peek.expectedTime <= currentTime) {
+                    upcomingTasksQueue.poll() // 移除无效任务
+                } else {
+                    break
+                }
             }
 
-            val nearestTask = upcomingTasks.first()
+            // 获取最近的任务（O(1) 操作，无需遍历整个集合）
+            val nearestTask = upcomingTasksQueue.peek() ?: return
+
+            // 检查是否在10分钟内
             val timeUntil = nearestTask.expectedTime - currentTime
+            if (timeUntil > 600000L) {
+                return // 超过10分钟，不处理
+            }
+
             val minutesUntil = timeUntil / 60000
 
             Log.record(TAG, "🔔 检测到即将执行的任务")
@@ -213,36 +233,32 @@ class SchedulerMonitor(private val context: Context) {
             Log.record(TAG, "预期时间: ${TimeUtil.getCommonDate(nearestTask.expectedTime)}")
             Log.record(TAG, "距离执行: $minutesUntil 分钟")
 
-            // 根据时间决定操作（优化版：减少屏幕唤醒，节省电量）
+            // 根据时间决定操作（优化版：减少屏幕唤醒，节省电量 + 节流机制）
             when {
                 timeUntil <= 30000 -> { // 30 秒内 - 最高优先级（只在最后 30 秒保持屏幕）
                     Log.record(TAG, "⏰ 任务即将执行（30秒内），保持屏幕+CPU")
                     keepAliveHelper?.preventScreenOff() // 仅阻止息屏，不主动唤醒
                     keepAliveHelper?.keepCpuAwake(timeUntil + 60000)
-                    // 连续唤醒3次，确保进程活跃
-                    repeat(3) {
-                        AlipayMethodHelper.callWakeup()
-                        AlipayMethodHelper.callPushBerserkerSetup()
-                    }
+                    // 使用节流机制调用3次
+                    callWakeupWithThrottle(3)
                 }
                 timeUntil <= 120000 -> { // 30秒-2分钟内 - 高优先级（仅 CPU）
                     Log.record(TAG, "⏱️ 任务在 2 分钟内，保持 CPU 活跃")
                     keepAliveHelper?.keepCpuAwake(timeUntil + 30000)
-                    repeat(2) {
-                        AlipayMethodHelper.callWakeup()
-                        AlipayMethodHelper.callPushBerserkerSetup()
-                    }
+                    // 使用节流机制调用2次
+                    callWakeupWithThrottle(2)
                 }
                 timeUntil <= 300000 -> { // 2-5 分钟内 - 中优先级（仅 CPU）
                     Log.record(TAG, "📅 任务在 $minutesUntil 分钟内，保持 CPU")
                     keepAliveHelper?.keepCpuAwake(timeUntil)
-                    AlipayMethodHelper.callWakeup()
-                    AlipayMethodHelper.callPushBerserkerSetup()
+                    // 使用节流机制调用1次
+                    callWakeupWithThrottle(1)
                 }
                 timeUntil <= 600000 -> { // 5-10 分钟内 - 预防性唤醒（仅进程）
                     Log.record(TAG, "🔔 任务在 $minutesUntil 分钟内，预防性唤醒进程")
                     keepAliveHelper?.keepCpuAwake(300000L) // 保持5分钟 CPU
-                    AlipayMethodHelper.callWakeup()
+                    // 使用节流机制调用1次
+                    callWakeupWithThrottle(1)
                 }
             }
 
@@ -253,10 +269,12 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
-     * 记录任务调度
+     * 记录任务调度（性能优化版）
      *
      * @param taskId 任务唯一标识
      * @param expectedTime 预期执行时间戳
+     * 
+     * 优化：同时维护优先队列，避免后续重复filter+sort
      */
     fun recordSchedule(taskId: String, expectedTime: Long) {
         val record = ScheduleRecord(
@@ -265,6 +283,7 @@ class SchedulerMonitor(private val context: Context) {
             scheduleTime = System.currentTimeMillis()
         )
         scheduledTasks[taskId] = record
+        upcomingTasksQueue.offer(record) // 自动排序
         Log.debug(TAG, "记录调度: $taskId, 预期时间: ${TimeUtil.getCommonDate(expectedTime)}")
     }
 
@@ -488,30 +507,35 @@ class SchedulerMonitor(private val context: Context) {
      * 优化版：仅使用 CPU 唤醒，不强制屏幕常亮，减少电量消耗
      */
     private fun triggerEmergencyWakeup() {
-        try {
-            Log.record(TAG, "🚨 触发紧急唤醒模式（省电版）")
+        // 使用协程异步执行，避免阻塞主流程
+        monitorScope.launch {
+            try {
+                Log.record(TAG, "🚨 触发紧急唤醒模式（省电版）")
 
-            // 1. CPU 保持唤醒 10 分钟
-            keepAliveHelper?.keepCpuAwake(600000L)
-            Log.record(TAG, "✅ CPU 保持唤醒 10 分钟")
+                // 1. CPU 保持唤醒 10 分钟
+                keepAliveHelper?.keepCpuAwake(600000L)
+                Log.record(TAG, "✅ CPU 保持唤醒 10 分钟")
 
-            // 2. 连续调用支付宝唤醒方法 5 次
-            repeat(5) {
-                AlipayMethodHelper.callWakeup()
-                AlipayMethodHelper.callPushBerserkerSetup()
-                Thread.sleep(200) // 每次间隔 200ms
+                // 2. 连续调用支付宝唤醒方法 5 次（使用协程 delay）
+                repeat(5) { index ->
+                    AlipayMethodHelper.callWakeup()
+                    AlipayMethodHelper.callPushBerserkerSetup()
+                    if (index < 4) { // 最后一次不需要延迟
+                        delay(200) // 使用协程 delay，不阻塞线程
+                    }
+                }
+                Log.record(TAG, "✅ 已连续唤醒进程 5 次")
+
+                // 3. 启动所有推送服务
+                AlipayMethodHelper.startPushServices()
+                Log.record(TAG, "✅ 推送服务已启动")
+
+                Log.record(TAG, "✅ 紧急唤醒完成（未开启屏幕常亮，省电）")
+
+            } catch (e: Exception) {
+                Log.error(TAG, "紧急唤醒失败: ${e.message}")
+                Log.printStackTrace(TAG, e)
             }
-            Log.record(TAG, "✅ 已连续唤醒进程 5 次")
-
-            // 3. 启动所有推送服务
-            AlipayMethodHelper.startPushServices()
-            Log.record(TAG, "✅ 推送服务已启动")
-
-            Log.record(TAG, "✅ 紧急唤醒完成（未开启屏幕常亮，省电）")
-
-        } catch (e: Exception) {
-            Log.error(TAG, "紧急唤醒失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
         }
     }
 
@@ -541,6 +565,7 @@ class SchedulerMonitor(private val context: Context) {
 
                 // 2. 清空所有调度记录
                 scheduledTasks.clear()
+                upcomingTasksQueue.clear()
                 consecutiveDelayCount = 0
                 consecutiveNormalCount = 0
 
@@ -576,6 +601,39 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
+     * 带节流的唤醒调用（性能优化版）
+     * 
+     * 避免短时间内重复调用，减少对支付宝进程的压力，更省电
+     * 
+     * @param count 需要调用的次数
+     */
+    private fun callWakeupWithThrottle(count: Int) {
+        val now = System.currentTimeMillis()
+        
+        // 节流：如果上次调用在 1 秒内，跳过
+        if (now - lastWakeupTime < MIN_WAKEUP_INTERVAL) {
+            Log.debug(TAG, "唤醒调用过于频繁（${now - lastWakeupTime}ms），已节流跳过")
+            return
+        }
+        
+        // 立即执行一次
+        AlipayMethodHelper.callWakeup()
+        AlipayMethodHelper.callPushBerserkerSetup()
+        lastWakeupTime = now
+        
+        // 如果需要多次调用，使用协程异步执行（避免阻塞）
+        if (count > 1) {
+            monitorScope.launch {
+                repeat(count - 1) { index ->
+                    delay(200) // 每次间隔 200ms
+                    AlipayMethodHelper.callWakeup()
+                    AlipayMethodHelper.callPushBerserkerSetup()
+                }
+            }
+        }
+    }
+    
+    /**
      * 清理资源
      */
     fun cleanup() {
@@ -584,7 +642,9 @@ class SchedulerMonitor(private val context: Context) {
         keepAliveHelper = null
         monitorScope.cancel()
         scheduledTasks.clear()
+        upcomingTasksQueue.clear()
         consecutiveDelayCount = 0
+        lastWakeupTime = 0L
         Log.runtime(TAG, "监控器资源已清理")
     }
 }
