@@ -117,18 +117,6 @@ public class BaseModel extends Model {
     public static final BooleanModelField batteryPerm = new BooleanModelField("batteryPerm", "为支付宝申请后台运行权限", true);
     
     /**
-     * 验证码UI层拦截（阻止对话框显示）
-     */
-    @Getter
-    public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false);
-    
-    /**
-     * 验证码RPC层拦截（跳过验证处理）
-     */
-    @Getter
-    public static final BooleanModelField enableCaptchaRPCHook = new BooleanModelField("enableCaptchaRPCHook", "🔓拒绝访问VPN及滑块验证全拦截(谨慎开启！)", false);
-    
-    /**
      * 是否记录record日志
      */
     @Getter
@@ -184,20 +172,6 @@ public class BaseModel extends Model {
         return "启用模块";
     }
 
-    @Override
-    public void boot(ClassLoader classLoader) {
-        // 配置已加载，更新验证码Hook状态
-        try {
-            fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
-                enableCaptchaUIHook.getValue(), 
-                enableCaptchaRPCHook.getValue()
-            );
-            Log.runtime(TAG, "✅ 验证码Hook配置已同步");
-        } catch (Throwable t) {
-            Log.error(TAG, "❌ 验证码Hook配置同步失败");
-            Log.printStackTrace(TAG, t);
-        }
-    }
 
     @Override
     public ModelFields getFields() {
@@ -220,8 +194,6 @@ public class BaseModel extends Model {
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限
-        modelFields.addField(enableCaptchaUIHook);//验证码UI层拦截
-        modelFields.addField(enableCaptchaRPCHook);//验证码RPC层拦截
         modelFields.addField(recordLog);//是否记录record日志
         modelFields.addField(runtimeLog);//是否记录runtime日志
         modelFields.addField(showToast);//是否显示气泡提示
