@@ -156,9 +156,10 @@ object AlipayMethodHelper {
     }
 
     /**
-     * 启动支付宝推送服务
+     * 启动支付宝网络基础服务
      *
-     * 启动 NotificationService 和 NetworkStartMainProcService
+     * 仅启动 NetworkStartMainProcService（最省电方案）
+     * 已移除所有推送通知服务，减少电量消耗
      */
     @JvmStatic
     fun startPushServices() {
@@ -175,25 +176,21 @@ object AlipayMethodHelper {
                 return
             }
 
-            // 启动服务列表（不包括语音播报）
-            val services = listOf(
-                "com.alipay.android.phone.wallet.push.notification.NotificationService",
-                "com.alipay.android.phone.wallet.push.route.NetworkStartMainProcService",
-                "com.alipay.pushsdk.push.NotificationService",
-                "com.alipay.mobile.base.network.NetworkStartMainProcService"
-            ).mapNotNull { XposedHelpers.findClassIfExists(it, alipayClassLoader) }
-
-            services.forEach { service ->
-                try {
-                    val intent = android.content.Intent(alipayContext, service)
-                    alipayContext.startService(intent)
-                    Log.debug(TAG, "✅ 已启动服务: ${service.simpleName}")
-                } catch (e: Exception) {
-                    Log.debug(TAG, "启动服务 ${service.simpleName} 失败: ${e.message}")
-                }
+            // 启动网络基础服务
+            try {
+                val serviceClass = XposedHelpers.findClass(
+                    "com.alipay.mobile.base.network.NetworkStartMainProcService",
+                    alipayClassLoader
+                )
+                val intent = android.content.Intent(alipayContext, serviceClass)
+                alipayContext.startService(intent)
+                Log.debug(TAG, "✅ 已启动网络基础服务: NetworkStartMainProcService")
+            } catch (e: Exception) {
+                Log.debug(TAG, "启动网络基础服务失败: ${e.message}")
             }
+            
         } catch (e: Exception) {
-            Log.debug(TAG, "启动推送服务失败: ${e.message}")
+            Log.debug(TAG, "启动服务失败: ${e.message}")
         }
     }
 }

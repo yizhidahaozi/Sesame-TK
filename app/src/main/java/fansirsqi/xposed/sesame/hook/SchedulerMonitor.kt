@@ -206,32 +206,35 @@ class SchedulerMonitor(private val context: Context) {
             Log.record(TAG, "预期时间: ${TimeUtil.getCommonDate(nearestTask.expectedTime)}")
             Log.record(TAG, "距离执行: $minutesUntil 分钟")
             
-            // 根据时间决定操作（更激进的策略）
+            // 根据时间决定操作（优化版：减少屏幕唤醒，节省电量）
             when {
-                timeUntil <= 120000 -> { // 2 分钟内 - 最高优先级
-                    Log.record(TAG, "⏰ 任务即将执行（2 分钟内），全力防止息屏！")
-                    keepAliveHelper?.wakeUpScreen()
-                    keepAliveHelper?.preventScreenOff()
+                timeUntil <= 30000 -> { // 30 秒内 - 最高优先级（只在最后 30 秒保持屏幕）
+                    Log.record(TAG, "⏰ 任务即将执行（30秒内），保持屏幕+CPU")
+                    keepAliveHelper?.preventScreenOff() // 仅阻止息屏，不主动唤醒
                     keepAliveHelper?.keepCpuAwake(timeUntil + 60000)
                     // 连续唤醒3次，确保进程活跃
                     repeat(3) {
                         AlipayMethodHelper.callWakeup()
                         AlipayMethodHelper.callPushBerserkerSetup()
                     }
-                    AlipayMethodHelper.callKeepScreenOn(true)
                 }
-                timeUntil <= 300000 -> { // 2-5 分钟内 - 高优先级
-                    Log.record(TAG, "⏱️ 任务在 $minutesUntil 分钟内，保持进程活跃")
-                    keepAliveHelper?.keepCpuAwake(timeUntil)
-                    // 唤醒2次
+                timeUntil <= 120000 -> { // 30秒-2分钟内 - 高优先级（仅 CPU）
+                    Log.record(TAG, "⏱️ 任务在 2 分钟内，保持 CPU 活跃")
+                    keepAliveHelper?.keepCpuAwake(timeUntil + 30000)
                     repeat(2) {
                         AlipayMethodHelper.callWakeup()
+                        AlipayMethodHelper.callPushBerserkerSetup()
                     }
+                }
+                timeUntil <= 300000 -> { // 2-5 分钟内 - 中优先级（仅 CPU）
+                    Log.record(TAG, "📅 任务在 $minutesUntil 分钟内，保持 CPU")
+                    keepAliveHelper?.keepCpuAwake(timeUntil)
+                    AlipayMethodHelper.callWakeup()
                     AlipayMethodHelper.callPushBerserkerSetup()
                 }
-                timeUntil <= 600000 -> { // 5-10 分钟内 - 预防性唤醒
-                    Log.record(TAG, "📅 任务在 $minutesUntil 分钟内，预防性唤醒")
-                    keepAliveHelper?.keepCpuAwake(300000L) // 保持5分钟
+                timeUntil <= 600000 -> { // 5-10 分钟内 - 预防性唤醒（仅进程）
+                    Log.record(TAG, "🔔 任务在 $minutesUntil 分钟内，预防性唤醒进程")
+                    keepAliveHelper?.keepCpuAwake(300000L) // 保持5分钟 CPU
                     AlipayMethodHelper.callWakeup()
                 }
             }
@@ -474,27 +477,30 @@ class SchedulerMonitor(private val context: Context) {
     
     /**
      * 触发紧急唤醒（连续延迟时采取激进措施）
+     * 
+     * 优化版：仅使用 CPU 唤醒，不强制屏幕常亮，减少电量消耗
      */
     private fun triggerEmergencyWakeup() {
         try {
-            Log.record(TAG, "🚨 触发紧急唤醒模式")
-            // 1. 屏幕唤醒
-            keepAliveHelper?.wakeUpScreen()
-            keepAliveHelper?.preventScreenOff()
-            AlipayMethodHelper.callKeepScreenOn(true)
-            // 2. CPU 保持唤醒 10 分钟
+            Log.record(TAG, "🚨 触发紧急唤醒模式（省电版）")
+            
+            // 1. CPU 保持唤醒 10 分钟
             keepAliveHelper?.keepCpuAwake(600000L)
-            // 3. 连续调用支付宝唤醒方法 5 次
+            Log.record(TAG, "✅ CPU 保持唤醒 10 分钟")
+            
+            // 2. 连续调用支付宝唤醒方法 5 次
             repeat(5) {
                 AlipayMethodHelper.callWakeup()
                 AlipayMethodHelper.callPushBerserkerSetup()
                 Thread.sleep(200) // 每次间隔 200ms
             }
+            Log.record(TAG, "✅ 已连续唤醒进程 5 次")
             
-            // 4. 启动所有推送服务
+            // 3. 启动所有推送服务
             AlipayMethodHelper.startPushServices()
+            Log.record(TAG, "✅ 推送服务已启动")
             
-            Log.record(TAG, "✅ 紧急唤醒完成")
+            Log.record(TAG, "✅ 紧急唤醒完成（未开启屏幕常亮，省电）")
             
         } catch (e: Exception) {
             Log.error(TAG, "紧急唤醒失败: ${e.message}")

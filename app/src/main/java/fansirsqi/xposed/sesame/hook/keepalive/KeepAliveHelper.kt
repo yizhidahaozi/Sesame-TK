@@ -207,19 +207,19 @@ class KeepAliveHelper(
 
     /**
      * 检查并防止息屏（如果有即将执行的任务）
+     * 
+     * 优化版：仅通知外部检查任务，不主动阻止息屏
+     * 避免频繁开启屏幕保持导致费电
      */
     private fun checkAndPreventScreenOff() {
         try {
-            // 这里可以通过回调查询是否有即将执行的任务
-            // 如果有，则保持屏幕常亮
             Log.debug(TAG, "检查是否需要防止息屏...")
 
-            // 通知外部检查任务
+            // 通知外部检查任务（由外部决定是否需要保持屏幕）
             onUpcomingTask(0)
             
-            // 调用支付宝唤醒方法
+            // 仅调用进程唤醒，不强制屏幕常亮
             AlipayMethodHelper.callWakeup()
-            AlipayMethodHelper.callKeepScreenOn(true)
 
         } catch (e: Exception) {
             Log.error(TAG, "检查防止息屏异常: ${e.message}")
@@ -230,14 +230,22 @@ class KeepAliveHelper(
      * 防止息屏（保持屏幕常亮）
      * 
      * 使用支付宝的 keepScreenOn 方法
-     *
+     * 
+     * ⚠️ 注意：此方法会持续保持屏幕常亮，请谨慎使用！
+     * 仅在任务即将执行（30秒内）时调用
      */
     fun preventScreenOff() {
         try {
-            // 调用支付宝的 keepScreenOn 方法
-            AlipayMethodHelper.callKeepScreenOn(true)
-            
-            Log.record(TAG, "🔆 已调用支付宝防止息屏")
+            // 检查屏幕是否已经点亮
+            val isScreenOn = powerManager?.isInteractive ?: false
+
+            if (!isScreenOn) {
+                // 屏幕已息屏，调用支付宝的 keepScreenOn 方法
+                AlipayMethodHelper.callKeepScreenOn(true)
+                Log.record(TAG, "🔆 屏幕已息屏，调用支付宝防止息屏")
+            } else {
+                Log.debug(TAG, "屏幕已点亮，无需防止息屏")
+            }
 
         } catch (e: Exception) {
             Log.error(TAG, "防止息屏失败: ${e.message}")
@@ -248,7 +256,8 @@ class KeepAliveHelper(
     /**
      * 唤醒屏幕（立即点亮屏幕）
      * 
-     * 使用支付宝的 keepScreenOn 方法
+     * ⚠️ 已禁用：屏幕唤醒会严重费电
+     * 改为仅使用 CPU 唤醒，不主动点亮屏幕
      */
     fun wakeUpScreen() {
         try {
@@ -260,13 +269,12 @@ class KeepAliveHelper(
                 return
             }
 
-            // 调用支付宝的 keepScreenOn 方法
-            AlipayMethodHelper.callKeepScreenOn(true)
-            
-            Log.record(TAG, "💡 已调用支付宝唤醒屏幕")
+            // 优化：不主动唤醒屏幕，仅唤醒进程
+            AlipayMethodHelper.callWakeup()
+            Log.debug(TAG, "💡 已唤醒进程（未点亮屏幕，省电）")
 
         } catch (e: Exception) {
-            Log.error(TAG, "唤醒屏幕失败: ${e.message}")
+            Log.error(TAG, "唤醒进程失败: ${e.message}")
             Log.printStackTrace(TAG, e)
         }
     }
