@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import androidx.annotation.NonNull;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
+import fansirsqi.xposed.sesame.hook.keepalive.WakeLockManager;
 import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 import java.io.File;
@@ -100,7 +101,10 @@ public class ApplicationHook {
         
         if (!smartSchedulerInitialized) {
             try {
+                // 初始化智能调度器
                 SmartSchedulerManager.INSTANCE.initialize(appContext);
+                // 初始化统一唤醒锁管理器
+                WakeLockManager.INSTANCE.initialize(appContext);
                 smartSchedulerInitialized = true;
             } catch (Exception e) {
                 Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
@@ -166,8 +170,6 @@ public class ApplicationHook {
     @Getter
     private static RpcVersion rpcVersion;
 
-    private static PowerManager.WakeLock wakeLock;
-    
     // 任务执行互斥锁（防止任务重叠执行）
     private static volatile boolean isTaskRunning = false;
     private static final Object taskLock = new Object();
@@ -753,10 +755,9 @@ public class ApplicationHook {
 //                    Notify.setStatusTextDisabled();
 //                    return false;
 //                }
+                // 使用统一唤醒锁管理器（优化：10分钟 → 3分钟，降低电量消耗）
                 try {
-                    PowerManager pm = (PowerManager) service.getSystemService(Context.POWER_SERVICE);
-                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, service.getClass().getName());
-                    wakeLock.acquire(10 * 60 * 1000L); // 10分钟
+                    WakeLockManager.INSTANCE.acquire("应用初始化", 3 * 60 * 1000L);
                 } catch (Throwable t) {
                     Log.record(TAG, "唤醒锁申请失败:");
                     Log.printStackTrace(t);
@@ -827,9 +828,11 @@ public class ApplicationHook {
                 }
                 
 
-                if (wakeLock != null) {
-                    wakeLock.release();
-                    wakeLock = null;
+                // 释放统一唤醒锁
+                try {
+                    WakeLockManager.INSTANCE.release("应用销毁");
+                } catch (Exception e) {
+                    Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
                 }
                 synchronized (rpcBridgeLock) {
                     if (rpcBridge != null) {

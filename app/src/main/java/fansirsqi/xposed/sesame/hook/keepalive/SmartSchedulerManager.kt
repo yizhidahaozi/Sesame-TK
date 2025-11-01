@@ -398,6 +398,8 @@ object SmartSchedulerManager {
      */
     fun cleanup() {
         schedulerMonitor?.cleanup()
+        // 清理唤醒锁管理器
+        WakeLockManager.cleanup()
         Log.runtime(TAG, "智能调度器管理器已清理")
     }
 }

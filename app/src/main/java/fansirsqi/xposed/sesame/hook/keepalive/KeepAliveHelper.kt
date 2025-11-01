@@ -41,10 +41,7 @@ class KeepAliveHelper(
     // 系统广播接收器
     private var systemBroadcastReceiver: BroadcastReceiver? = null
 
-    // 部分唤醒锁（防止 CPU 休眠）
-    private var partialWakeLock: PowerManager.WakeLock? = null
-
-    // PowerManager
+    // PowerManager（用于屏幕状态检测）
     private val powerManager: PowerManager? by lazy {
         try {
             context.getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -103,8 +100,12 @@ class KeepAliveHelper(
         // 注销系统广播
         unregisterSystemBroadcast()
 
-        // 释放 CPU WakeLock（如果有）
-        releasePartialWakeLock()
+        // 释放唤醒锁（通过统一管理器）
+        try {
+            WakeLockManager.release("CPU保活-停止")
+        } catch (e: Exception) {
+            Log.debug(TAG, "释放唤醒锁失败: ${e.message}")
+        }
 
         // 取消支付宝的 keepScreenOn
         AlipayMethodHelper.callKeepScreenOn(false)
@@ -300,51 +301,24 @@ class KeepAliveHelper(
 
     /**
      * 保持 CPU 唤醒（防止深度休眠）
+     * 
+     * 优化：使用统一唤醒锁管理器，避免重复创建
+     * 默认持有时间：10分钟 → 5分钟
      *
      * @param durationMillis 保持时长（毫秒）
      */
     fun keepCpuAwake(durationMillis: Long = WAKELOCK_TIMEOUT) {
         try {
-            if (powerManager == null) {
-                Log.error(TAG, "PowerManager 为 null，无法保持 CPU 唤醒")
-                return
-            }
-
-            // 释放旧的 WakeLock
-            releasePartialWakeLock()
-
-            // 创建新的部分唤醒锁（仅保持 CPU，不点亮屏幕）
-            partialWakeLock = powerManager?.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "Sesame:KeepCpuAwake"
-            )?.apply {
-                setReferenceCounted(false)
-                acquire(durationMillis)
-                Log.record(TAG, "⚡ 已保持 CPU 唤醒 ${durationMillis / 1000}秒")
-            }
-
+            // 使用统一唤醒锁管理器（优化持有时间）
+            val safeDuration = durationMillis.coerceAtMost(5 * 60 * 1000L)
+            WakeLockManager.acquire("CPU保活", safeDuration)
+            Log.record(TAG, "⚡ 已保持 CPU 唤醒 ${safeDuration / 1000}秒（统一管理）")
         } catch (e: Exception) {
             Log.error(TAG, "保持 CPU 唤醒失败: ${e.message}")
             Log.printStackTrace(TAG, e)
         }
     }
 
-    /**
-     * 释放部分 WakeLock
-     */
-    private fun releasePartialWakeLock() {
-        try {
-            partialWakeLock?.let {
-                if (it.isHeld) {
-                    it.release()
-                    Log.debug(TAG, "已释放 CPU WakeLock")
-                }
-                partialWakeLock = null
-            }
-        } catch (e: Exception) {
-            Log.debug(TAG, "释放 CPU WakeLock 失败: ${e.message}")
-        }
-    }
 
     /**
      * 清理资源

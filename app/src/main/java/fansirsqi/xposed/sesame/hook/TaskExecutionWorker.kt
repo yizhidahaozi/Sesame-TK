@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.graphics.BitmapFactory
 import fansirsqi.xposed.sesame.data.General
+import fansirsqi.xposed.sesame.hook.keepalive.WakeLockManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 
@@ -97,14 +98,14 @@ class TaskExecutionWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            // 获取唤醒锁，确保任务完成
-            val wakeLock = acquireWakeLock()
+            // 使用统一唤醒锁管理器（优化：15分钟 → 5分钟，降低电量消耗）
+            val requestCode = inputData.getInt(KEY_REQUEST_CODE, -1)
+            WakeLockManager.acquire("WorkManager任务:$requestCode", 5 * 60 * 1000L)
             
             try {
                 // 获取任务参数
                 val taskType = inputData.getString(KEY_TASK_TYPE) ?: TASK_TYPE_DELAYED
                 val executionTime = inputData.getLong(KEY_EXECUTION_TIME, System.currentTimeMillis())
-                val requestCode = inputData.getInt(KEY_REQUEST_CODE, -1)
                 val isWakeupAlarm = inputData.getBoolean(KEY_IS_WAKEUP_ALARM, false)
                 
                 Log.record(TAG, "⏰ WorkManager 任务开始执行")
@@ -122,12 +123,19 @@ class TaskExecutionWorker(
                 
             } finally {
                 // 释放唤醒锁
-                releaseWakeLock(wakeLock)
+                WakeLockManager.release("WorkManager任务:$requestCode")
             }
             
         } catch (e: Exception) {
             Log.error(TAG, "❌ WorkManager 任务执行失败: ${e.message}")
             Log.printStackTrace(TAG, e)
+            
+            // 释放唤醒锁（确保异常时也能释放）
+            try {
+                WakeLockManager.release("WorkManager任务异常")
+            } catch (ex: Exception) {
+                Log.error(TAG, "释放唤醒锁失败: ${ex.message}")
+            }
             
             // 根据运行次数决定是否重试
             if (runAttemptCount < 3) {
@@ -188,40 +196,5 @@ class TaskExecutionWorker(
         }
     }
 
-    /**
-     * 获取唤醒锁
-     */
-    private fun acquireWakeLock(): PowerManager.WakeLock? {
-        return try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            val wakeLock = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "Sesame:WorkManager:${inputData.getInt(KEY_REQUEST_CODE, 0)}"
-            )
-            wakeLock.setReferenceCounted(false)
-            wakeLock.acquire(15 * 60 * 1000L) // 最长持有 15 分钟
-            
-            Log.record(TAG, "🔓 已获取唤醒锁")
-            wakeLock
-            
-        } catch (e: Exception) {
-            Log.error(TAG, "获取唤醒锁失败: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 释放唤醒锁
-     */
-    private fun releaseWakeLock(wakeLock: PowerManager.WakeLock?) {
-        try {
-            if (wakeLock?.isHeld == true) {
-                wakeLock.release()
-                Log.record(TAG, "🔒 已释放唤醒锁")
-            }
-        } catch (e: Exception) {
-            Log.error(TAG, "释放唤醒锁失败: ${e.message}")
-        }
-    }
 }
 
