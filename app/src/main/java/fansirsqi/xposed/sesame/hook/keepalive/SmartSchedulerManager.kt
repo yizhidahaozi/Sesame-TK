@@ -69,28 +69,41 @@ object SmartSchedulerManager {
     private var initialized = false
 
     /**
-     * 初始化调度器（优化版）
+     * 初始化调度器（优化版 v2 - 增强错误处理）
      * 
      * 优化：
      * 1. 使用 ApplicationContext 避免内存泄漏
-     * 2. 合并日志输出减少 I/O
+     * 2. 增强 null 检查和错误处理
+     * 3. 合并日志输出减少 I/O
      */
     @Synchronized
-    fun initialize(context: Context) {
+    fun initialize(context: Context?) {
         if (initialized) {
             Log.debug(TAG, "调度器已经初始化，跳过重复初始化")
             return
         }
 
+        if (context == null) {
+            Log.error(TAG, "❌ 初始化失败: context 为 null")
+            return
+        }
+
         try {
-            // ✅ 使用 ApplicationContext 避免内存泄漏
-            val appContext = context.applicationContext
+            Log.debug(TAG, "🔧 正在初始化调度器 (Context类型: ${context.javaClass.simpleName})")
+            
+            // ✅ 使用 ApplicationContext 避免内存泄漏（如果为 null 则使用原始 context）
+            val appContext = context.applicationContext ?: context
+            Log.debug(TAG, "使用 Context: ${appContext.javaClass.simpleName}")
             
             // 创建纯协程调度器
+            Log.debug(TAG, "正在创建协程调度器...")
             coroutineScheduler = CoroutineScheduler(appContext)
 
             // 创建并启动监控器
+            Log.debug(TAG, "正在创建监控器...")
             schedulerMonitor = SchedulerMonitor(appContext)
+            
+            Log.debug(TAG, "正在启动监控器...")
             schedulerMonitor?.startMonitoring()
 
             initialized = true
@@ -99,8 +112,11 @@ object SmartSchedulerManager {
             Log.runtime(TAG, "✅ 智能调度器管理器已初始化（纯协程 | 轻量高效）")
             Log.runtime(TAG, "初始补偿: ${currentCompensation.get() / 1000}s | 监控: 每10秒检测")
         } catch (e: Exception) {
-            Log.error(TAG, "初始化失败: ${e.message}")
+            Log.error(TAG, "❌ 初始化失败: ${e.message}")
             Log.printStackTrace(TAG, e)
+            // 确保初始化失败时清理部分初始化的对象
+            coroutineScheduler = null
+            schedulerMonitor = null
         }
     }
 

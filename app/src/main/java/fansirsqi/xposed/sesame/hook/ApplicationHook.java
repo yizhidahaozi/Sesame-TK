@@ -90,22 +90,25 @@ public class ApplicationHook {
     }
 
     /**
-     * 确保智能调度器已初始化
+     * 确保智能调度器已初始化（延迟初始化策略）
      */
     private static synchronized void ensureScheduler() {
         if (appContext == null) {
-            Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null (可能应用刚启动)");
+            Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
             return;
         }
         
         if (!smartSchedulerInitialized) {
             try {
+                Log.debug(TAG, "🔧 开始初始化智能调度器...");
                 // 初始化智能调度器（纯协程，无唤醒锁）
                 SmartSchedulerManager.INSTANCE.initialize(appContext);
                 smartSchedulerInitialized = true;
+                Log.debug(TAG, "✅ 智能调度器初始化成功");
             } catch (Exception e) {
                 Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
                 Log.printStackTrace(TAG, e);
+                // 重要：初始化失败时不设置 smartSchedulerInitialized = true，允许下次重试
             }
         }
     }
@@ -341,8 +344,7 @@ public class ApplicationHook {
                     appContext = (Context) param.args[0];
 
                     registerBroadcastReceiver(appContext);
-                    // 初始化调度器（协程或 WorkManager）
-                    ensureScheduler();
+                    // 注意：调度器将在首次使用时延迟初始化（避免 Application.attach 阶段初始化过早）
 
                     PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                     Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
