@@ -13,7 +13,6 @@ lifecycleLivedataKtx = "2.9.4"
 mmkv = "2.2.3"
 nanohttpd = "2.3.1"
 shizukuVersion = "13.1.5"
-work = "2.10.0"
 hiddenapi = "4.4.0"
 slf4j = "2.1.0-alpha1"
 logback-android = "3.0.0"
@@ -53,7 +52,6 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 mmkv = { module = "com.tencent:mmkv", version.ref = "mmkv" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
-androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 rikka-shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizukuVersion" }
 rikka-shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizukuVersion" }
 rikka-refine = { module = "dev.rikka.tools.refine:runtime", version.ref = "hiddenapi" }

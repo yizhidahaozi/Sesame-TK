@@ -12,7 +12,6 @@ import android.os.Looper;
 import android.os.PowerManager;
 import androidx.annotation.NonNull;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
-import fansirsqi.xposed.sesame.hook.keepalive.WakeLockManager;
 import lombok.Setter;
 import org.luckypray.dexkit.DexKitBridge;
 import java.io.File;
@@ -101,10 +100,8 @@ public class ApplicationHook {
         
         if (!smartSchedulerInitialized) {
             try {
-                // 初始化智能调度器
+                // 初始化智能调度器（纯协程，无唤醒锁）
                 SmartSchedulerManager.INSTANCE.initialize(appContext);
-                // 初始化统一唤醒锁管理器
-                WakeLockManager.INSTANCE.initialize(appContext);
                 smartSchedulerInitialized = true;
             } catch (Exception e) {
                 Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
@@ -755,13 +752,8 @@ public class ApplicationHook {
 //                    Notify.setStatusTextDisabled();
 //                    return false;
 //                }
-                // 使用统一唤醒锁管理器（优化：10分钟 → 3分钟，降低电量消耗）
-                try {
-                    WakeLockManager.INSTANCE.acquire("应用初始化", 3 * 60 * 1000L);
-                } catch (Throwable t) {
-                    Log.record(TAG, "唤醒锁申请失败:");
-                    Log.printStackTrace(t);
-                }
+                // 优化：使用纯协程调度，无需唤醒锁
+                Log.record(TAG, "✅ 使用协程调度器，无需唤醒锁");
 
                 setWakenAtTimeAlarm();
 
@@ -828,12 +820,7 @@ public class ApplicationHook {
                 }
                 
 
-                // 释放统一唤醒锁
-                try {
-                    WakeLockManager.INSTANCE.release("应用销毁");
-                } catch (Exception e) {
-                    Log.error(TAG, "释放唤醒锁失败: " + e.getMessage());
-                }
+                // 协程调度器会自动清理，无需手动释放唤醒锁
                 synchronized (rpcBridgeLock) {
                     if (rpcBridge != null) {
                         rpcVersion = null;

@@ -15,22 +15,23 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.PriorityQueue
-import kotlin.math.abs
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
- * 调度器监控器
+ * 调度器监控器（纯协程版）
  *
  * 功能：
  * 1. 每 10 秒检测任务执行延迟
  * 2. 实时动态调整补偿值
- * 3. 自动切换调度器（协程 ↔ WorkManager）
- * 4. 异常检测与自动恢复
+ * 3. 异常检测与自动恢复
  *
  * 监控策略：
  * - 记录每次调度的预期时间
  * - 对比实际执行时间
  * - 计算实时延迟
- * - 动态调整补偿或切换调度器
+ * - 动态调整补偿值
  */
 class SchedulerMonitor(private val context: Context) {
 
@@ -39,24 +40,6 @@ class SchedulerMonitor(private val context: Context) {
 
         // 监控间隔：10 秒
         private const val MONITOR_INTERVAL = 10000L
-
-        // 支付宝唤醒间隔：60 秒
-        private const val ALIPAY_WAKEUP_INTERVAL = 60000L
-
-        // 提前唤醒阈值：5 分钟
-        private const val EARLY_WAKEUP_THRESHOLD = 300000L // 5 分钟内的任务会被提前唤醒
-
-        // 补偿调整步长
-        private const val COMPENSATION_STEP = 15000L // 每次调整 15 秒
-
-        // 延迟阈值
-        private const val THRESHOLD_SMALL = 30000L    // 30 秒
-        private const val THRESHOLD_MEDIUM = 90000L   // 90 秒
-        private const val THRESHOLD_LARGE = 180000L   // 3 分钟
-
-        // 最小/最大补偿
-        private const val MIN_COMPENSATION = 0L
-        private const val MAX_COMPENSATION = 600000L  // 10 分钟（提高上限应对大延迟）
     }
 
     // 协程作用域
@@ -65,13 +48,7 @@ class SchedulerMonitor(private val context: Context) {
     // 监控任务
     private var monitorJob: Job? = null
 
-    // 支付宝唤醒任务
-    private var alipayWakeupJob: Job? = null
-
-    // 保活助手（Android 9+）
-    private var keepAliveHelper: KeepAliveHelper? = null
-
-    // 连续延迟计数器（用于动态调整唤醒策略）
+    // 连续延迟计数器（用于动态调整补偿策略）
     @Volatile
     private var consecutiveDelayCount = 0
 
@@ -83,33 +60,36 @@ class SchedulerMonitor(private val context: Context) {
     private val scheduledTasks = ConcurrentHashMap<String, ScheduleRecord>()
     
     // 性能优化：维护已排序的任务队列（避免重复filter+sort）
+    // ✅ 修复：使用读写锁保护 PriorityQueue 的并发访问
+    private val queueLock = ReentrantReadWriteLock()
     private val upcomingTasksQueue = PriorityQueue<ScheduleRecord>(
         compareBy { it.expectedTime }
     )
-    
-    // 性能优化：方法调用节流（避免频繁调用）
-    @Volatile
-    private var lastWakeupTime = 0L
-    private val MIN_WAKEUP_INTERVAL = 1000L // 最小间隔 1 秒
-
-    // 当前补偿值（毫秒）
-    @Volatile
-    private var currentCompensation = 120000L // 初始 2 分钟
-
-    // 连续正常执行计数（用于减少补偿）
-    @Volatile
-    private var consecutiveNormalCount = 0
 
     /**
-     * 调度记录
+     * 调度记录（内存优化版）
+     * 
+     * 优化：使用位标志减少内存占用
+     * - 原始: ~88 bytes (String + 4xLong + Boolean)
+     * - 优化: ~56 bytes (String + 3xLong + Byte)
+     * - 内存节省: ~36%
      */
     data class ScheduleRecord(
         val taskId: String,
         val expectedTime: Long,     // 预期执行时间
         val scheduleTime: Long,      // 调度时间
-        var actualTime: Long? = null, // 实际执行时间（null 表示未执行）
-        var checked: Boolean = false  // 是否已检查
-    )
+        var actualTime: Long = 0L,   // 实际执行时间（0 表示未执行）
+        var status: Byte = 0         // 位标志: bit0=checked, bit1=executed
+    ) {
+        val isChecked: Boolean get() = (status.toInt() and 1) != 0
+        val isExecuted: Boolean get() = actualTime > 0
+        
+        fun markChecked() { status = (status.toInt() or 1).toByte() }
+        fun markExecuted(time: Long) { 
+            actualTime = time
+            status = (status.toInt() or 2).toByte()
+        }
+    }
 
     /**
      * 启动监控
@@ -142,15 +122,12 @@ class SchedulerMonitor(private val context: Context) {
             Log.runtime(TAG, "🔍 调度器监控器已停止")
         }
 
-        // 启动支付宝唤醒任务
-        startAlipayWakeup()
-
         // 启动保活助手（Android 9+）
         startKeepAliveHelper()
     }
 
     /**
-     * 停止监控
+     * 停止监控（并发安全版）
      */
     fun stopMonitoring() {
         if (!isRunning) return
@@ -158,14 +135,12 @@ class SchedulerMonitor(private val context: Context) {
         isRunning = false
         monitorJob?.cancel()
         monitorJob = null
-        alipayWakeupJob?.cancel()
-        alipayWakeupJob = null
 
-        // 停止保活助手
-        keepAliveHelper?.stop()
-
-        scheduledTasks.clear()
-        upcomingTasksQueue.clear()
+        // ✅ 使用写锁保护清理操作
+        queueLock.write {
+            scheduledTasks.clear()
+            upcomingTasksQueue.clear()
+        }
         Log.runtime(TAG, "监控器已停止")
     }
 
@@ -180,17 +155,7 @@ class SchedulerMonitor(private val context: Context) {
                 return
             }
 
-            keepAliveHelper = KeepAliveHelper(alipayContext) { timeUntilExecution ->
-                // 回调：当检测到即将执行的任务时
-                handleUpcomingTask(timeUntilExecution)
-            }
-
-            if (keepAliveHelper?.isSupported() == true) {
-                keepAliveHelper?.start()
-            } else {
-                Log.record(TAG, "⚠️ 当前系统版本不支持保活助手（需要 Android 9+）")
-                keepAliveHelper = null
-            }
+            Log.record(TAG, "✅ 使用纯协程调度，无需保活助手")
 
         } catch (e: Exception) {
             Log.error(TAG, "启动保活助手失败: ${e.message}")
@@ -199,82 +164,15 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
-     * 处理即将执行的任务（性能优化版）
-     * 
-     * 优化：使用优先队列，避免每次都filter+sort整个集合
-     */
-    private fun handleUpcomingTask(timeUntilExecution: Long) {
-        try {
-            val currentTime = System.currentTimeMillis()
-
-            // 清理优先队列中的无效任务（已执行或已过期）
-            while (upcomingTasksQueue.isNotEmpty()) {
-                val peek = upcomingTasksQueue.peek()
-                if (peek == null || peek.actualTime != null || peek.expectedTime <= currentTime) {
-                    upcomingTasksQueue.poll() // 移除无效任务
-                } else {
-                    break
-                }
-            }
-
-            // 获取最近的任务（O(1) 操作，无需遍历整个集合）
-            val nearestTask = upcomingTasksQueue.peek() ?: return
-
-            // 检查是否在10分钟内
-            val timeUntil = nearestTask.expectedTime - currentTime
-            if (timeUntil > 600000L) {
-                return // 超过10分钟，不处理
-            }
-
-            val minutesUntil = timeUntil / 60000
-
-            Log.record(TAG, "🔔 检测到即将执行的任务")
-            Log.record(TAG, "任务 ID: ${nearestTask.taskId}")
-            Log.record(TAG, "预期时间: ${TimeUtil.getCommonDate(nearestTask.expectedTime)}")
-            Log.record(TAG, "距离执行: $minutesUntil 分钟")
-
-            // 根据时间决定操作（优化版：减少屏幕唤醒，节省电量 + 节流机制）
-            when {
-                timeUntil <= 30000 -> { // 30 秒内 - 最高优先级（只在最后 30 秒保持屏幕）
-                    Log.record(TAG, "⏰ 任务即将执行（30秒内），保持屏幕+CPU")
-                    keepAliveHelper?.preventScreenOff() // 仅阻止息屏，不主动唤醒
-                    keepAliveHelper?.keepCpuAwake(timeUntil + 60000)
-                    // 使用节流机制调用3次
-                    callWakeupWithThrottle(3)
-                }
-                timeUntil <= 120000 -> { // 30秒-2分钟内 - 高优先级（仅 CPU）
-                    Log.record(TAG, "⏱️ 任务在 2 分钟内，保持 CPU 活跃")
-                    keepAliveHelper?.keepCpuAwake(timeUntil + 30000)
-                    // 使用节流机制调用2次
-                    callWakeupWithThrottle(2)
-                }
-                timeUntil <= 300000 -> { // 2-5 分钟内 - 中优先级（仅 CPU）
-                    Log.record(TAG, "📅 任务在 $minutesUntil 分钟内，保持 CPU")
-                    keepAliveHelper?.keepCpuAwake(timeUntil)
-                    // 使用节流机制调用1次
-                    callWakeupWithThrottle(1)
-                }
-                timeUntil <= 600000 -> { // 5-10 分钟内 - 预防性唤醒（仅进程）
-                    Log.record(TAG, "🔔 任务在 $minutesUntil 分钟内，预防性唤醒进程")
-                    keepAliveHelper?.keepCpuAwake(300000L) // 保持5分钟 CPU
-                    // 使用节流机制调用1次
-                    callWakeupWithThrottle(1)
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.error(TAG, "处理即将执行的任务异常: ${e.message}")
-            Log.printStackTrace(TAG, e)
-        }
-    }
-
-    /**
-     * 记录任务调度（性能优化版）
+     * 记录任务调度（性能优化版 v3 - 并发安全）
      *
      * @param taskId 任务唯一标识
      * @param expectedTime 预期执行时间戳
      * 
-     * 优化：同时维护优先队列，避免后续重复filter+sort
+     * 优化：
+     * 1. 同时维护 HashMap 和 PriorityQueue
+     * 2. 使用读写锁保证并发安全
+     * 3. 合并日志输出减少 I/O
      */
     fun recordSchedule(taskId: String, expectedTime: Long) {
         val record = ScheduleRecord(
@@ -282,34 +180,38 @@ class SchedulerMonitor(private val context: Context) {
             expectedTime = expectedTime,
             scheduleTime = System.currentTimeMillis()
         )
-        scheduledTasks[taskId] = record
-        upcomingTasksQueue.offer(record) // 自动排序
-        Log.debug(TAG, "记录调度: $taskId, 预期时间: ${TimeUtil.getCommonDate(expectedTime)}")
+        
+        // ✅ 使用写锁保护并发访问
+        queueLock.write {
+            scheduledTasks[taskId] = record
+            upcomingTasksQueue.offer(record) // O(log n) 自动排序
+        }
+        
+        // 日志优化：使用 debug 级别输出
+        Log.debug(TAG, "记录调度: $taskId @ ${TimeUtil.getCommonDate(expectedTime)}")
     }
 
     /**
-     * 记录任务实际执行
+     * 记录任务实际执行（性能优化版）
      *
      * @param taskId 任务唯一标识
+     * 
+     * 优化：合并日志输出，减少 I/O 次数 75%（4行 → 1行）
      */
     fun recordExecution(taskId: String) {
         val record = scheduledTasks[taskId]
         if (record != null) {
             val actualTime = System.currentTimeMillis()
-            record.actualTime = actualTime
+            record.markExecuted(actualTime)
 
             val delayMs = actualTime - record.expectedTime
             val delaySeconds = delayMs / 1000
 
-            Log.record(TAG, "📊 任务执行: $taskId")
-            Log.record(TAG, "预期: ${TimeUtil.getCommonDate(record.expectedTime)}")
-            Log.record(TAG, "实际: ${TimeUtil.getCommonDate(actualTime)}")
-            Log.record(TAG, "延迟: ${delaySeconds}s ${if (delayMs > 0) "⏰" else "✅"}")
+            // ✅ 日志优化：合并为一行，减少 I/O 开销
+            Log.record(TAG, "📊 任务执行: $taskId | 延迟: ${delaySeconds}s ${if (delayMs > 0) "⏰" else "✅"} | " +
+                "预期: ${TimeUtil.getCommonDate(record.expectedTime)}")
 
-            // 立即触发调整（不等下次检测）
-            adjustCompensation(delayMs)
-
-            // 通知 SmartSchedulerManager
+            // 通知 SmartSchedulerManager 记录并调整
             SmartSchedulerManager.recordDelay(record.expectedTime, actualTime)
         } else {
             Log.debug(TAG, "未找到调度记录: $taskId")
@@ -317,282 +219,128 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
-     * 检查已调度的任务
+     * 检查已调度的任务（性能优化版 v2 - 并发安全）
+     * 
+     * 优化：
+     * 1. 使用 PriorityQueue 只检查即将过期的任务（O(k) 而非 O(n)）
+     * 2. 使用读写锁保证并发安全
+     * 3. 合并日志输出减少 I/O
      */
     private fun checkScheduledTasks() {
         val currentTime = System.currentTimeMillis()
-        val iterator = scheduledTasks.entries.iterator()
+        var checkedCount = 0
+        var timeoutCount = 0
 
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            val record = entry.value
+        // ✅ 使用写锁保护队列操作
+        queueLock.write {
+            // 使用 PriorityQueue 只检查即将过期的任务
+            while (upcomingTasksQueue.isNotEmpty()) {
+                val record = upcomingTasksQueue.peek() ?: break
+                
+                // 如果最早的任务还没到检查时间，后面的任务更不需要检查
+                // 过期时间 = 预期时间 + 5 分钟
+                if (record.expectedTime + 300000 > currentTime) {
+                    break // 剩余任务都不需要检查
+                }
+                
+                // 移除已到检查时间的任务
+                upcomingTasksQueue.poll()
+                checkedCount++
+                
+                // 跳过已检查或已执行的记录
+                if (record.isChecked || record.isExecuted) {
+                    continue
+                }
+                
+                // 处理超时未执行的任务
+                val delayMinutes = (currentTime - record.expectedTime) / 60000
+                
+                // ✅ 日志优化：合并为一行
+                Log.runtime(TAG, "❌ 任务超时: ${record.taskId} | 延迟: ${delayMinutes}分钟 | " +
+                    "预期: ${TimeUtil.getCommonDate(record.expectedTime)}")
+                
+                timeoutCount++
+                consecutiveDelayCount++
 
-            // 跳过已检查的记录
-            if (record.checked) continue
+                // 通知 SmartSchedulerManager 记录延迟
+                val expiryTime = record.expectedTime + 300000
+                SmartSchedulerManager.recordDelay(record.expectedTime, expiryTime)
 
-            // 检查是否已过期（预期时间 + 5 分钟）
-            val expiryTime = record.expectedTime + 300000
-            if (currentTime > expiryTime) {
-                if (record.actualTime == null) {
-                    val delayMinutes = (currentTime - record.expectedTime) / 60000
-                    Log.runtime(TAG, "❌ 任务超时未执行: ${record.taskId}")
-                    Log.runtime(TAG, "预期时间: ${TimeUtil.getCommonDate(record.expectedTime)}")
-                    Log.runtime(TAG, "延迟时间: ${delayMinutes}分钟")
-
-                    // 标记为异常延迟
-                    adjustCompensation(expiryTime - record.expectedTime)
-
-                    // 连续延迟时，立即采取激进措施
-                    if (consecutiveDelayCount >= 2) {
-                        Log.record(TAG, "⚠️ 检测到连续延迟 $consecutiveDelayCount 次，触发紧急恢复！")
-                        triggerEmergencyWakeup()
-
-                        // 强制重新初始化系统
-                        if (consecutiveDelayCount >= 3) {
-                            Log.record(TAG, "🔄 连续超时 $consecutiveDelayCount 次，强制重新初始化！")
-                            forceReinitialize()
-                        }
-                    }
+                // 连续延迟时，强制重新初始化
+                if (consecutiveDelayCount >= 3) {
+                    Log.record(TAG, "🔄 连续超时 $consecutiveDelayCount 次，强制重新初始化！")
+                    forceReinitialize()
+                    break
                 }
 
-                record.checked = true
-                // 清理旧记录（保留最近 10 条用于分析）
-                if (scheduledTasks.size > 10) {
-                    iterator.remove()
-                }
-            } else if (record.actualTime != null) {
-                // 已执行但未标记检查
-                record.checked = true
+                record.markChecked()
             }
-        }
-
-        // 输出监控状态
-        if (scheduledTasks.isNotEmpty()) {
-            Log.debug(TAG, "📈 当前监控任务数: ${scheduledTasks.size}, 补偿: ${currentCompensation / 1000}s")
-        }
-    }
-
-    /**
-     * 动态调整补偿值
-     *
-     * @param delayMs 实际延迟（毫秒）
-     */
-    private fun adjustCompensation(delayMs: Long) {
-        val oldCompensation = currentCompensation
-
-        when {
-            // 延迟很小（< 30 秒）：减少补偿
-            delayMs < THRESHOLD_SMALL -> {
-                consecutiveNormalCount++
-                consecutiveDelayCount = 0
-
-                // 连续 3 次正常执行才减少补偿
-                if (consecutiveNormalCount >= 3) {
-                    currentCompensation = (currentCompensation - COMPENSATION_STEP)
-                        .coerceAtLeast(MIN_COMPENSATION)
-                    consecutiveNormalCount = 0
-
-                    if (currentCompensation != oldCompensation) {
-                        Log.record(TAG, "✅ 延迟很小，减少补偿: ${oldCompensation / 1000}s → ${currentCompensation / 1000}s")
-
+            
+            // 清理 HashMap 中的旧记录（保留最近 10 条）
+            if (scheduledTasks.size > 10) {
+                val iterator = scheduledTasks.entries.iterator()
+                var removed = 0
+                while (iterator.hasNext() && scheduledTasks.size - removed > 10) {
+                    val entry = iterator.next()
+                    if (entry.value.isChecked || entry.value.isExecuted) {
+                        iterator.remove()
+                        removed++
                     }
                 }
             }
+        }
 
-            // 延迟适中（30-90 秒）：微调补偿
-            delayMs in THRESHOLD_SMALL until THRESHOLD_MEDIUM -> {
-                consecutiveNormalCount = 0
-                consecutiveDelayCount = 0
-
-                // 根据实际延迟计算理想补偿：延迟 * 1.2（留 20% 缓冲）
-                val idealCompensation = (delayMs * 1.2).toLong()
-                val targetCompensation = idealCompensation.coerceIn(MIN_COMPENSATION, MAX_COMPENSATION)
-
-                // 逐步调整到目标值
-                currentCompensation = if (currentCompensation < targetCompensation) {
-                    (currentCompensation + COMPENSATION_STEP).coerceAtMost(targetCompensation)
-                } else {
-                    (currentCompensation - COMPENSATION_STEP).coerceAtLeast(targetCompensation)
-                }
-
-                if (abs(currentCompensation - oldCompensation) >= COMPENSATION_STEP) {
-                    Log.record(TAG, "⚙️ 微调补偿: ${oldCompensation / 1000}s → ${currentCompensation / 1000}s")
-
-                }
-            }
-
-            // 延迟较大（90-180 秒）：快速增加补偿
-            delayMs in THRESHOLD_MEDIUM until THRESHOLD_LARGE -> {
-                consecutiveNormalCount = 0
-                consecutiveDelayCount++
-
-                currentCompensation = (currentCompensation + COMPENSATION_STEP * 2)
-                    .coerceAtMost(MAX_COMPENSATION)
-
-                if (currentCompensation != oldCompensation) {
-                    Log.record(TAG, "⚠️ 延迟较大，快速增加补偿: ${oldCompensation / 1000}s → ${currentCompensation / 1000}s")
-
-                }
-            }
-
-            // 延迟很大（> 3 分钟）：建议切换 WorkManager
-            else -> {
-                consecutiveNormalCount = 0
-                consecutiveDelayCount++
-
-                if (currentCompensation < MAX_COMPENSATION) {
-                    currentCompensation = MAX_COMPENSATION
-                    Log.record(TAG, "❗ 延迟超过 3 分钟，使用最大补偿: ${currentCompensation / 1000}s")
-
-                }
-
-                // 连续 2 次大延迟，建议切换
-                if (consecutiveDelayCount >= 2) {
-                    Log.record(TAG, "🔄 连续大延迟，建议切换到 WorkManager")
-                    // SmartSchedulerManager 会自动处理切换
-                }
+        // 输出监控状态（性能优化：只在有内容时输出）
+        if (checkedCount > 0 || scheduledTasks.isNotEmpty()) {
+            val compensation = SmartSchedulerManager.getCurrentCompensation()
+            // ✅ 日志优化：合并为一行
+            if (checkedCount > 0 || scheduledTasks.isNotEmpty()) {
+                Log.debug(TAG, "📈 监控: 检查=$checkedCount, 超时=$timeoutCount, " +
+                    "任务数=${scheduledTasks.size}, 补偿=${compensation / 1000}s")
             }
         }
-    }
-
-    /**
-     * 获取当前补偿值
-     */
-    fun getCurrentCompensation(): Long {
-        return currentCompensation
     }
 
     /**
      * 获取监控统计
      */
     fun getStatistics(): String {
+        val compensation = SmartSchedulerManager.getCurrentCompensation()
         return buildString {
             append("监控状态: ${if (isRunning) "运行中" else "已停止"}")
             append(", 任务数: ${scheduledTasks.size}")
-            append(", 补偿: ${currentCompensation / 1000}s")
-            append(", 正常计数: $consecutiveNormalCount")
-            append(", 延迟计数: $consecutiveDelayCount")
+            append(", 补偿: ${compensation / 1000}s")
+            append(", 连续延迟: $consecutiveDelayCount 次")
         }
     }
 
     /**
-     * 启动支付宝唤醒任务
-     */
-    private fun startAlipayWakeup() {
-        alipayWakeupJob = monitorScope.launch {
-            Log.runtime(TAG, "🔔 支付宝唤醒任务已启动")
-            Log.runtime(TAG, "唤醒间隔: ${ALIPAY_WAKEUP_INTERVAL / 1000}s")
-
-            while (isActive && isRunning) {
-                try {
-                    AlipayMethodHelper.callWakeup()
-                    AlipayMethodHelper.callPushBerserkerSetup()
-                    AlipayMethodHelper.startPushServices()
-                    delay(ALIPAY_WAKEUP_INTERVAL)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.error(TAG, "支付宝唤醒异常: ${e.message}")
-                    Log.printStackTrace(TAG, e)
-                }
-            }
-
-            Log.runtime(TAG, "🔔 支付宝唤醒任务已停止")
-        }
-    }
-
-    /**
-     * 触发紧急唤醒（连续延迟时采取激进措施）
-     *
-     * 优化版：仅使用 CPU 唤醒，不强制屏幕常亮，减少电量消耗
-     */
-    private fun triggerEmergencyWakeup() {
-        // 使用协程异步执行，避免阻塞主流程
-        monitorScope.launch {
-            try {
-                Log.record(TAG, "🚨 触发紧急唤醒模式（省电版）")
-
-                // 1. CPU 保持唤醒 10 分钟
-                keepAliveHelper?.keepCpuAwake(600000L)
-                Log.record(TAG, "✅ CPU 保持唤醒 10 分钟")
-
-                // 2. 连续调用支付宝唤醒方法 5 次（使用协程 delay）
-                repeat(5) { index ->
-                    AlipayMethodHelper.callWakeup()
-                    AlipayMethodHelper.callPushBerserkerSetup()
-                    if (index < 4) { // 最后一次不需要延迟
-                        delay(200) // 使用协程 delay，不阻塞线程
-                    }
-                }
-                Log.record(TAG, "✅ 已连续唤醒进程 5 次")
-
-                // 3. 启动所有推送服务
-                AlipayMethodHelper.startPushServices()
-                Log.record(TAG, "✅ 推送服务已启动")
-
-                Log.record(TAG, "✅ 紧急唤醒完成（未开启屏幕常亮，省电）")
-
-            } catch (e: Exception) {
-                Log.error(TAG, "紧急唤醒失败: ${e.message}")
-                Log.printStackTrace(TAG, e)
-            }
-        }
-    }
-
-    /**
-     * 强制重新初始化（连续超时3次时触发）
+     * 强制重新初始化（连续超时3次时触发，并发安全版）
      */
     private fun forceReinitialize() {
         monitorScope.launch {
             try {
-                Log.record(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                Log.record(TAG, "🔄 开始强制重新初始化系统...")
-                Log.record(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                var waitCount = 0
-                while (ApplicationHook.getIsTaskRunning() && waitCount < 60) {
-                    delay(1000)
-                    waitCount++
+                Log.record(TAG, "🚨 强制重新初始化调度器（纯协程）")
+
+                // ✅ 使用写锁清空所有调度记录
+                queueLock.write {
+                    scheduledTasks.clear()
+                    upcomingTasksQueue.clear()
                 }
-
-                if (waitCount >= 60) {
-                    Log.record(TAG, "⚠️ 等待超时，强制继续初始化")
-                } else if (waitCount > 0) {
-                    Log.record(TAG, "✅ 任务已完成，继续初始化")
-                }
-
-                triggerEmergencyWakeup()
-                delay(1000) // 等待1秒
-
-                // 2. 清空所有调度记录
-                scheduledTasks.clear()
-                upcomingTasksQueue.clear()
                 consecutiveDelayCount = 0
-                consecutiveNormalCount = 0
 
-                // 3. 重置补偿值
-                currentCompensation = 120000L // 重置为2分钟
+                // 重置补偿值
                 SmartSchedulerManager.resetCompensation()
 
-                // 4. 立即执行任务并重新调度
+                // 重新调度任务
                 try {
-                    // 4.1 立即执行一次任务
-                    ApplicationHook.executeByBroadcast()
-                    delay(2000) // 等待2秒让任务执行
-
-                    // 4.2 重新调度下一次任务
                     ApplicationHook.scheduleNextExecution()
+                    Log.record(TAG, "✅ 重新调度完成")
                 } catch (e: Exception) {
-                    Log.error(TAG, "执行任务或重新调度失败: ${e.message}")
+                    Log.error(TAG, "重新调度失败: ${e.message}")
                     Log.printStackTrace(TAG, e)
                 }
-                // 5. 重新启动保活机制
-                keepAliveHelper?.stop()
-                delay(500)
-                keepAliveHelper?.start()
 
-                Log.record(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                Log.record(TAG, "✅ 系统重新初始化完成！")
-                Log.record(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             } catch (e: Exception) {
                 Log.error(TAG, "强制重新初始化失败: ${e.message}")
                 Log.printStackTrace(TAG, e)
@@ -601,50 +349,18 @@ class SchedulerMonitor(private val context: Context) {
     }
 
     /**
-     * 带节流的唤醒调用（性能优化版）
-     * 
-     * 避免短时间内重复调用，减少对支付宝进程的压力，更省电
-     * 
-     * @param count 需要调用的次数
-     */
-    private fun callWakeupWithThrottle(count: Int) {
-        val now = System.currentTimeMillis()
-        
-        // 节流：如果上次调用在 1 秒内，跳过
-        if (now - lastWakeupTime < MIN_WAKEUP_INTERVAL) {
-            Log.debug(TAG, "唤醒调用过于频繁（${now - lastWakeupTime}ms），已节流跳过")
-            return
-        }
-        
-        // 立即执行一次
-        AlipayMethodHelper.callWakeup()
-        AlipayMethodHelper.callPushBerserkerSetup()
-        lastWakeupTime = now
-        
-        // 如果需要多次调用，使用协程异步执行（避免阻塞）
-        if (count > 1) {
-            monitorScope.launch {
-                repeat(count - 1) { index ->
-                    delay(200) // 每次间隔 200ms
-                    AlipayMethodHelper.callWakeup()
-                    AlipayMethodHelper.callPushBerserkerSetup()
-                }
-            }
-        }
-    }
-    
-    /**
-     * 清理资源
+     * 清理资源（并发安全版）
      */
     fun cleanup() {
         stopMonitoring()
-        keepAliveHelper?.cleanup()
-        keepAliveHelper = null
         monitorScope.cancel()
-        scheduledTasks.clear()
-        upcomingTasksQueue.clear()
+        
+        // ✅ 使用写锁保护清理操作
+        queueLock.write {
+            scheduledTasks.clear()
+            upcomingTasksQueue.clear()
+        }
         consecutiveDelayCount = 0
-        lastWakeupTime = 0L
         Log.runtime(TAG, "监控器资源已清理")
     }
 }
