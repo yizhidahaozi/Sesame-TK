@@ -403,10 +403,14 @@ public class AntMember extends ModelTask {
     "去AQ提问",               // 需要下载APP
     "坚持看直播领福利",        // 需要淘宝直播
     "去淘金币逛一逛",          // 需要淘宝操作
-    "坚持攒保障金",
-    "芝麻租赁下单得芝麻粒",
-     "浏览租赁商家小程序"        // 需要小程序操作
-    
+    "坚持攒保障金",            // 参数错误：promiseActivityExtCheck
+    "芝麻租赁下单得芝麻粒",     // 需要租赁操作
+    "去玩小游戏",              // 参数错误：promiseActivityExtCheck
+    "浏览租赁商家小程序",       // 需要小程序操作
+    "订阅小组件",              // 参数错误：promiseActivityExtCheck
+    "租1笔图书",               // 参数错误：promiseActivityExtCheck
+    "去订阅芝麻小组件",         // 参数错误：promiseActivityExtCheck
+    "坚持攒保障"               // 参数错误：promiseActivityExtCheck（与"坚持攒保障金"类似，防止匹配遗漏）
   };
 
   /**
