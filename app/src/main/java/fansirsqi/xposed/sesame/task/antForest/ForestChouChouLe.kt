@@ -33,11 +33,11 @@ class ForestChouChouLe {
         private const val SOURCE = "task_entry"
         
         // 屏蔽的任务类型（邀请好友类任务不执行）
-        private val BLOCKED = setOf("FOREST_NORMAL_DRAW_SHARE", 
+        private val BLOCKED_TYPES = setOf("FOREST_NORMAL_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_SHARE",
-                                    "FOREST_ACTIVITY_DRAW_XSSLXCC",
-                                    "FOREST_ACTIVITY_DRAW_XSSLLXX") //玩游戏得新机会
-        
+                                    "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
+        private val BLOCKED_NAMES = setOf("玩游戏得新机会") // 屏蔽的任务名称关键词
+
         /**
          * 抽奖场景数据类
          * @param id 活动ID（用于RPC调用）
@@ -147,7 +147,7 @@ class ForestChouChouLe {
                 val baseInfo = task.getJSONObject("taskBaseInfo")
                 val taskType = baseInfo.getString("taskType")
                 val taskStatus = baseInfo.getString("taskStatus")
-                if (taskType in BLOCKED) continue  // 跳过屏蔽任务
+                if (BLOCKED_TYPES.any { it in taskType }) continue  // 跳过屏蔽任务
                 
                 total++
                 
@@ -195,8 +195,8 @@ class ForestChouChouLe {
         Log.record("${s.name} 任务: $taskName [$taskType] 状态: $taskStatus 进度: $current/$limit")
         
         // 跳过屏蔽任务（邀请好友类）
-        if (taskType in BLOCKED) {
-            Log.record("${s.name} 已屏蔽任务，跳过：$taskName")
+        if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }) {
+            Log.record("${s.name} 已屏蔽任务，跳过：$taskName (类型: $taskType)")
             return false
         }
         
