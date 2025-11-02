@@ -9,39 +9,29 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.*;
 
-/**
- * 源码来自：Apache Commons Collections 4.4
- * 少量定制
- */
+/** 源码来自：Apache Commons Collections 4.4 少量定制 */
 public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue<E>, Serializable {
-    /**
-     * Serialization version.
-     */
-    @Serial
-    private static final long serialVersionUID = -8423413834657610406L;
-    /**
-     * Underlying storage array.
-     */
+    /** Serialization version. */
+    @Serial private static final long serialVersionUID = -8423413834657610406L;
+
+    /** Underlying storage array. */
     private transient E[] elements;
-    /**
-     * Array index of first (oldest) queue element.
-     */
+
+    /** Array index of first (oldest) queue element. */
     private transient int start = 0;
+
     /**
-     * Index mod maxElements of the array position following the last queue
-     * element.  Queue elements start at elements[start] and "wrap around"
-     * elements[maxElements-1], ending at elements[decrement(end)].
-     * For example, elements = {c,a,b}, start=1, end=1 corresponds to
-     * the queue [a,b,c].
+     * Index mod maxElements of the array position following the last queue element. Queue elements
+     * start at elements[start] and "wrap around" elements[maxElements-1], ending at
+     * elements[decrement(end)]. For example, elements = {c,a,b}, start=1, end=1 corresponds to the
+     * queue [a,b,c].
      */
     private transient int end = 0;
-    /**
-     * Flag to indicate if the queue is currently full.
-     */
+
+    /** Flag to indicate if the queue is currently full. */
     private transient boolean full = false;
-    /**
-     * Capacity of the queue.
-     */
+
+    /** Capacity of the queue. */
     private final int maxElements;
 
     /**
@@ -59,7 +49,7 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         maxElements = elements.length;
     }
 
-    //-----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     /**
      * Write the queue out using a custom routine.
@@ -80,7 +70,7 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
      * Read the queue in using a custom routine.
      *
      * @param in the input stream
-     * @throws IOException            if an I/O error occurs while writing to the output stream
+     * @throws IOException if an I/O error occurs while writing to the output stream
      * @throws ClassNotFoundException if the class of a serialized object can not be found
      */
     @Serial
@@ -100,7 +90,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
             end = size;
         }
     }
-    //-----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
 
     /**
      * Returns the number of elements stored in the queue.
@@ -132,9 +123,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
 
     /**
      * {@inheritDoc}
-     * <p>
-     * A {@code CircularFifoQueue} can never be full, thus this returns always
-     * {@code false}.
+     *
+     * <p>A {@code CircularFifoQueue} can never be full, thus this returns always {@code false}.
      *
      * @return always returns {@code false}
      */
@@ -143,8 +133,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
     }
 
     /**
-     * Returns {@code true} if the capacity limit of this queue has been reached,
-     * i.e. the number of elements stored in the queue equals its maximum size.
+     * Returns {@code true} if the capacity limit of this queue has been reached, i.e. the number of
+     * elements stored in the queue equals its maximum size.
      *
      * @return {@code true} if the capacity limit has been reached, {@code false} otherwise
      * @since 4.1
@@ -153,9 +143,7 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         return size() == maxElements;
     }
 
-    /**
-     * Clears this queue.
-     */
+    /** Clears this queue. */
     @Override
     public void clear() {
         full = false;
@@ -174,10 +162,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         } else {
             oldElement = null;
         }
-        elements[end++] = element;
-        if (end >= maxElements) {
-            end = 0;
-        }
+        elements[end] = element; // 先写入
+        end = increment(end); // 再移动 end（自动回绕）
         if (end == start) {
             full = true;
         }
@@ -185,8 +171,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
     }
 
     /**
-     * Adds the given element to this queue. If the queue is full, the least recently added
-     * element is discarded so that a new element can be inserted.
+     * Adds the given element to this queue. If the queue is full, the least recently added element
+     * is discarded so that a new element can be inserted.
      *
      * @param element the element to add
      * @return true, always
@@ -200,10 +186,10 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         if (isAtFullCapacity()) {
             remove();
         }
-        elements[end++] = element;
-        if (end >= maxElements) {
-            end = 0;
-        }
+
+        elements[end] = element;
+        end = increment(end); // 使用 increment 方法
+
         if (end == start) {
             full = true;
         }
@@ -221,17 +207,18 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         final int sz = size();
         if (index < 0 || index >= sz) {
             throw new NoSuchElementException(
-                    String.format("The specified index (%1$d) is outside the available range [0, %2$d)",
-                            index, sz));
+            String.format("The specified index (%1$d) is outside the available range [0, %2$d)",
+                    index, sz));
         }
         final int idx = (start + index) % maxElements;
         return elements[idx];
     }
-    //-----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
 
     /**
-     * Adds the given element to this queue. If the queue is full, the least recently added
-     * element is discarded so that a new element can be inserted.
+     * Adds the given element to this queue. If the queue is full, the least recently added element
+     * is discarded so that a new element can be inserted.
      *
      * @param element the element to add
      * @return true, always
@@ -281,7 +268,8 @@ public class CircularFifoQueue<E> extends AbstractCollection<E> implements Queue
         }
         return element;
     }
-    //-----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
 
     /**
      * Increments the internal index.
