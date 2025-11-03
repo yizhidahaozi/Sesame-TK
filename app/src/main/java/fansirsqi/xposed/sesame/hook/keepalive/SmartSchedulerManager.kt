@@ -43,7 +43,7 @@ object SmartSchedulerManager {
     private const val MAX_HISTORY_SIZE = 10
 
     // 当前补偿值（毫秒）- 使用原子操作提升性能
-    private val currentCompensation = AtomicLong(120000L) // 初始 2 分钟
+    private val currentCompensation = AtomicLong(150000L) // 初始 2.5 分钟（优化：提高初始值）
     
     // ✅ 性能优化：使用原子类型，无需 synchronized
     private val totalDelay = AtomicLong(0L)
@@ -121,15 +121,15 @@ object SmartSchedulerManager {
     }
 
     /**
-     * 记录执行延迟（性能优化版 v3 - 无锁并发）
+     * 记录执行延迟（性能优化版 v4 - 即时补偿）
      *
      * @param expectedTime 预期执行时间戳
      * @param actualTime 实际执行时间戳
      * 
      * 优化：
      * 1. 使用原子操作，完全无锁（性能提升 ~50%）
-     * 2. 降低调整频率：每 5 次记录才调整一次（减少 CPU 开销）
-     * 3. 延迟日志输出，避免阻塞主流程
+     * 2. 即时补偿：延迟超过60秒立即调整（提升响应速度）
+     * 3. 智能调整频率：正常延迟每5次调整，大延迟立即调整
      */
     fun recordDelay(expectedTime: Long, actualTime: Long) {
         val delayMs = actualTime - expectedTime
@@ -150,8 +150,13 @@ object SmartSchedulerManager {
         val delaySeconds = delayMs / 1000
         Log.debug(TAG, "📊 记录延迟: ${delaySeconds}s (${if (delayMs > 0) "延迟" else "提前"})")
 
-        // ✅ 性能优化：每 5 次记录才调整一次（降低 CPU 开销 80%）
-        if (currentCount % 5 == 0) {
+        // ✅ 智能调整策略：
+        // 1. 延迟超过60秒：立即调整（即时响应）
+        // 2. 正常延迟：每5次调整一次（节省CPU）
+        if (abs(delayMs) > 60000) {
+            Log.record(TAG, "⚡ 检测到大延迟 ${delaySeconds}s，立即调整补偿")
+            adjustStrategy()
+        } else if (currentCount % 5 == 0) {
             adjustStrategy()
         }
     }
@@ -169,12 +174,15 @@ object SmartSchedulerManager {
     }
 
     /**
-     * 智能调整策略（优化版）
+     * 智能调整策略（优化版 v2 - 线性补偿算法）
      * 
-     * 优化：使用原子操作 CAS 更新补偿值
+     * 改进：
+     * 1. 使用线性补偿：补偿 = 平均延迟 × 1.2（多补偿20%缓冲）
+     * 2. 更激进的调整策略，快速响应延迟变化
+     * 3. 保留区间判断作为安全边界
      */
     private fun adjustStrategy() {
-        if (delayHistory.size < 3) {
+        if (delayHistory.size < 2) {
             Log.debug(TAG, "历史记录不足，暂不调整策略")
             return
         }
@@ -182,46 +190,50 @@ object SmartSchedulerManager {
         // 计算平均延迟
         val averageDelay = calculateAverageDelay()
         val averageDelaySeconds = averageDelay / 1000
+        val oldComp = currentCompensation.get()
 
         Log.record(TAG, "📈 最近 ${delayHistory.size} 次平均延迟: ${averageDelaySeconds}s")
 
-        // 根据延迟调整策略（纯协程版）
+        // ✅ 新策略：线性补偿算法
         when {
-            // 延迟很小（< 30 秒）：减少补偿
+            // 延迟很小（< 30 秒）：使用线性补偿但有下限
             averageDelay < 30000 -> {
-                val oldComp = currentCompensation.get()
-                val newComp = (oldComp - 30000).coerceAtLeast(MIN_COMPENSATION)
-                if (newComp != oldComp && currentCompensation.compareAndSet(oldComp, newComp)) {
-                    Log.record(TAG, "✅ 延迟很小，减少补偿: ${oldComp / 1000}s → ${newComp / 1000}s")
+                // 补偿 = 平均延迟 × 1.2，最小0秒
+                val targetComp = (averageDelay * 1.2).toLong().coerceAtLeast(MIN_COMPENSATION)
+                val newComp = targetComp.coerceIn(MIN_COMPENSATION, MAX_COMPENSATION)
+                
+                if (abs(newComp - oldComp) > 5000 && currentCompensation.compareAndSet(oldComp, newComp)) {
+                    Log.record(TAG, "✅ 延迟很小，线性补偿: ${oldComp / 1000}s → ${newComp / 1000}s")
                 }
             }
 
-            // 延迟适中（30秒 - 90秒）：微调补偿
-            averageDelay in 30000..90000 -> {
-                val oldComp = currentCompensation.get()
-                // 根据实际延迟微调：补偿 = 当前补偿 + (平均延迟 - 60秒) * 0.8
-                val adjustment = ((averageDelay - 60000) * 0.8).toLong()
-                val newComp = (oldComp + adjustment).coerceIn(MIN_COMPENSATION, MAX_COMPENSATION)
-                if (abs(newComp - oldComp) > 10000 && currentCompensation.compareAndSet(oldComp, newComp)) {
-                    Log.record(TAG, "⚙️ 微调补偿: ${oldComp / 1000}s → ${newComp / 1000}s")
+            // 延迟适中（30秒 - 120秒）：使用线性补偿
+            averageDelay in 30000..120000 -> {
+                // 补偿 = 平均延迟 × 1.2（多补偿20%作为缓冲）
+                val targetComp = (averageDelay * 1.2).toLong()
+                val newComp = targetComp.coerceIn(MIN_COMPENSATION, MAX_COMPENSATION)
+                
+                if (abs(newComp - oldComp) > 5000 && currentCompensation.compareAndSet(oldComp, newComp)) {
+                    Log.record(TAG, "⚙️ 线性补偿（×1.2）: ${oldComp / 1000}s → ${newComp / 1000}s | 延迟: ${averageDelaySeconds}s")
                 }
             }
 
-            // 延迟较大（90秒 - 180秒）：增加补偿
-            averageDelay in 90000..180000 -> {
-                val oldComp = currentCompensation.get()
-                val newComp = (oldComp + 30000).coerceAtMost(MAX_COMPENSATION)
-                if (newComp != oldComp && currentCompensation.compareAndSet(oldComp, newComp)) {
-                    Log.record(TAG, "⚠️ 延迟较大，增加补偿: ${oldComp / 1000}s → ${newComp / 1000}s")
+            // 延迟较大（120秒 - 300秒）：增加缓冲系数
+            averageDelay in 120000..300000 -> {
+                // 补偿 = 平均延迟 × 1.5（增加缓冲）
+                val targetComp = (averageDelay * 1.5).toLong()
+                val newComp = targetComp.coerceIn(MIN_COMPENSATION, MAX_COMPENSATION)
+                
+                if (abs(newComp - oldComp) > 5000 && currentCompensation.compareAndSet(oldComp, newComp)) {
+                    Log.record(TAG, "⚠️ 延迟较大，增强补偿（×1.5）: ${oldComp / 1000}s → ${newComp / 1000}s | 延迟: ${averageDelaySeconds}s")
                 }
             }
 
-            // 延迟超过 3 分钟：使用最大补偿
+            // 延迟超过 5 分钟：使用最大补偿
             true -> {
-                val oldComp = currentCompensation.get()
                 if (oldComp < MAX_COMPENSATION) {
                     if (currentCompensation.compareAndSet(oldComp, MAX_COMPENSATION)) {
-                        Log.record(TAG, "❗ 平均延迟 > 3 分钟，使用最大补偿: ${oldComp / 1000}s → ${MAX_COMPENSATION / 1000}s")
+                        Log.record(TAG, "❗ 平均延迟 > 5 分钟，使用最大补偿: ${oldComp / 1000}s → ${MAX_COMPENSATION / 1000}s")
                     }
                 } else {
                     Log.runtime(TAG, "📊 已使用最大补偿 ${MAX_COMPENSATION / 1000}s，平均延迟: ${averageDelaySeconds}s")
@@ -255,7 +267,7 @@ object SmartSchedulerManager {
      */
     fun resetCompensation() {
         try {
-            currentCompensation.set(120000L) // 重置为初始值 2 分钟
+            currentCompensation.set(150000L) // 重置为初始值 2.5 分钟
             delayHistory.clear() // 清空延迟历史
             
             // ✅ 原子操作重置累积值
