@@ -1240,26 +1240,23 @@ public class ApplicationHook {
                            }
                            break;
                         case BroadcastActions.PRE_WAKEUP:
-                            Log.record(TAG, "⏰ 收到预唤醒广播，获取2分钟唤醒锁并准备执行");
+                            Log.record(TAG, "⏰ 收到唤醒广播，准备执行任务");
                             WakeLockManager.INSTANCE.acquire(context, 120_000L); // 2 minute wakelock
                             alarmTriggeredFlag = true;
-                            if (mainHandler != null) {
-                                mainHandler.postDelayed(() -> {
-                                    Log.record(TAG, "⏰ 预唤醒延时结束，开始执行任务");
-                                    if (init) {
+
+                            // 立即执行，不再延迟
+                            if (init) {
+                                execHandler();
+                            } else {
+                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
+                                GlobalThreadPools.INSTANCE.execute(() -> {
+                                    if (initHandler(false)) {
+                                        Log.record(TAG, "✅ 初始化成功，开始执行任务");
                                         execHandler();
                                     } else {
-                                        Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
-                                        GlobalThreadPools.INSTANCE.execute(() -> {
-                                            if (initHandler(false)) {
-                                                Log.record(TAG, "✅ 初始化成功，开始执行任务");
-                                                execHandler();
-                                            } else {
-                                                Log.error(TAG, "❌ 初始化失败，任务无法执行");
-                                            }
-                                        });
+                                        Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                     }
-                                }, 60_000L); // 延迟1分钟执行
+                                });
                             }
                             break;
                         case BroadcastActions.RE_LOGIN:
