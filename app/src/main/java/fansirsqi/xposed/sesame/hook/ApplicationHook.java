@@ -504,8 +504,8 @@ public class ApplicationHook {
                     mainHandler = new Handler(Looper.getMainLooper());
                     appContext = (Context) param.args[0];
 
-                    // 仅在主进程注册广播接收器，避免多进程重复接收
-                    if (General.PACKAGE_NAME.equals(finalProcessName)) {
+                    // 在主进程和小组件进程中注册广播接收器
+                    if (General.PACKAGE_NAME.equals(finalProcessName) || (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
                         registerBroadcastReceiver(appContext);
                     }
                     // 注意：调度器将在首次使用时延迟初始化（避免 Application.attach 阶段初始化过早）
