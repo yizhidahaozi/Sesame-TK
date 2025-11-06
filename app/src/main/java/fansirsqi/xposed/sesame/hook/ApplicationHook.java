@@ -9,7 +9,6 @@ import android.content.pm.PackageInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
 import androidx.annotation.NonNull;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import lombok.Setter;
@@ -74,7 +73,95 @@ public class ApplicationHook {
      * 智能调度器管理器
      * 自动切换调度器 + 自动补偿延迟
      */
-    private static boolean smartSchedulerInitialized = false;
+    private static volatile boolean smartSchedulerInitialized = false;
+    private static final Object schedulerInitLock = new Object();
+    
+    /**
+     * 广播动作常量
+     */
+    private static class BroadcastActions {
+        static final String RESTART = "com.eg.android.AlipayGphone.sesame.restart";
+        static final String EXECUTE = "com.eg.android.AlipayGphone.sesame.execute";
+        static final String RE_LOGIN = "com.eg.android.AlipayGphone.sesame.reLogin";
+        static final String STATUS = "com.eg.android.AlipayGphone.sesame.status";
+        static final String RPC_TEST = "com.eg.android.AlipayGphone.sesame.rpctest";
+    }
+    
+    /**
+     * 支付宝类名常量
+     */
+    private static class AlipayClasses {
+        static final String APPLICATION = "com.alipay.mobile.framework.AlipayApplication";
+        static final String SOCIAL_SDK = "com.alipay.mobile.personalbase.service.SocialSdkContactService";
+    }
+    
+    /**
+     * 反射缓存 - 避免重复反射查找，提升性能
+     * 优化策略：只缓存 Class，不缓存 Method（避免方法签名变化导致的问题）
+     */
+    private static class ReflectionCache {
+        private static Class<?> alipayApplicationClass;
+        private static Class<?> socialSdkContactServiceClass;
+        private static volatile boolean initialized = false;
+        
+        /**
+         * 初始化反射缓存（安全版本：只缓存类）
+         */
+        static void initialize(ClassLoader loader) {
+            if (initialized) return;
+            
+            try {
+                // 缓存支付宝应用类
+                alipayApplicationClass = XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
+                
+                // 缓存社交SDK类
+                socialSdkContactServiceClass = XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
+                
+                initialized = true;
+                Log.runtime(TAG, "✅ 反射缓存初始化成功");
+            } catch (Throwable t) {
+                Log.runtime(TAG, "⚠️ 反射缓存初始化部分失败，将使用传统反射");
+                Log.printStackTrace(TAG, t);
+                // 部分失败不影响使用，后续会回退到传统反射
+            }
+        }
+        
+        /**
+         * 获取支付宝应用类（带异常处理）
+         */
+        static Class<?> getAlipayApplicationClass(ClassLoader loader) {
+            if (!initialized) initialize(loader);
+            
+            try {
+                if (alipayApplicationClass != null) {
+                    return alipayApplicationClass;
+                }
+                // 缓存未命中，使用传统反射
+                return XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return null;
+            }
+        }
+        
+        /**
+         * 获取社交SDK类（带异常处理）
+         */
+        static Class<?> getSocialSdkClass(ClassLoader loader) {
+            if (!initialized) initialize(loader);
+            
+            try {
+                if (socialSdkContactServiceClass != null) {
+                    return socialSdkContactServiceClass;
+                }
+                // 缓存未命中，使用传统反射
+                return XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return null;
+            }
+        }
+    }
 
     @Getter
     private static ClassLoader classLoader = null;
@@ -90,20 +177,35 @@ public class ApplicationHook {
     }
 
     /**
-     * 确保智能调度器已初始化（延迟初始化策略）
+     * 确保智能调度器已初始化（双重检查锁优化）
+     * 优化点：
+     * 1. 快速路径完全无锁（已初始化的情况）
+     * 2. 慢路径使用双重检查防止重复初始化
+     * 3. volatile 保证可见性
      */
-    private static synchronized void ensureScheduler() {
-        if (appContext == null) {
-            Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
-            return;
+    private static void ensureScheduler() {
+        // 第一次检查（无锁，快速路径）
+        if (smartSchedulerInitialized) {
+            return; // 最常见情况：已初始化，直接返回
         }
         
-        if (!smartSchedulerInitialized) {
+        // 慢路径：需要初始化
+        synchronized (schedulerInitLock) {
+            // 双重检查：防止多线程重复初始化
+            if (smartSchedulerInitialized) {
+                return;
+            }
+            
+            if (appContext == null) {
+                Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
+                return;
+            }
+            
             try {
                 Log.debug(TAG, "🔧 开始初始化智能调度器...");
                 // 初始化智能调度器（纯协程，无唤醒锁）
                 SmartSchedulerManager.INSTANCE.initialize(appContext);
-                smartSchedulerInitialized = true;
+                smartSchedulerInitialized = true; // volatile 写，保证其他线程可见
                 Log.debug(TAG, "✅ 智能调度器初始化成功");
             } catch (Exception e) {
                 Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
@@ -131,6 +233,41 @@ public class ApplicationHook {
         
         static void cancelAllWakeupAlarms() {
             SmartSchedulerManager.INSTANCE.cancelAllWakeupAlarms();
+        }
+    }
+    
+    /**
+     * 任务锁管理器 - 实现 AutoCloseable 自动释放锁
+     * 优势：使用 try-with-resources 自动管理锁生命周期，防止遗漏释放
+     */
+    private static class TaskLock implements AutoCloseable {
+        private final boolean acquired;
+        
+        /**
+         * 构造函数：尝试获取任务锁
+         * @throws IllegalStateException 如果任务已在运行中
+         */
+        TaskLock() {
+            synchronized (taskLock) {
+                if (isTaskRunning) {
+                    acquired = false;
+                    throw new IllegalStateException("任务已在运行中");
+                }
+                isTaskRunning = true;
+                acquired = true;
+            }
+        }
+        
+        /**
+         * 释放任务锁
+         */
+        @Override
+        public void close() {
+            if (acquired) {
+                synchronized (taskLock) {
+                    isTaskRunning = false;
+                }
+            }
         }
     }
 
@@ -328,6 +465,10 @@ public class ApplicationHook {
         if (hooked) return;
         hooked = true;
 
+        // 初始化反射缓存（提前缓存，提升后续性能）
+        // 注意：初始化失败不影响正常功能，会自动回退到传统反射
+        ReflectionCache.initialize(classLoader);
+
         // Hook验证码关闭功能（需要在应用初始化之前就Hook配置写入）
         try {
             CaptchaHook.INSTANCE.setupHook(classLoader);
@@ -462,16 +603,8 @@ public class ApplicationHook {
                             }
                             service = appService;
                             mainTask = MainTask.newInstance("MAIN_TASK", () -> {
-                                try {
-                                    // 🔒 检查任务是否正在执行（防止重叠）
-                                    synchronized (taskLock) {
-                                        if (isTaskRunning) {
-                                            Log.record(TAG, "⚠️ 上一个任务还在执行中，跳过本次触发");
-                                            return;
-                                        }
-                                        isTaskRunning = true;
-                                    }
-                                    
+                                // 使用 TaskLock 自动管理锁生命周期（重构：防止遗漏释放）
+                                try (TaskLock lock = new TaskLock()) {
                                     boolean isAlarmTriggered = alarmTriggeredFlag;
                                     if (isAlarmTriggered) {
                                         alarmTriggeredFlag = false; // Consume the flag
@@ -479,12 +612,10 @@ public class ApplicationHook {
 
                                     if (!init) {
                                         Log.record(TAG, "️🐣跳过执行-未初始化");
-                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     if (!Config.isLoaded()) {
                                         Log.record(TAG, "️⚙跳过执行-用户模块配置未加载");
-                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
 
@@ -500,7 +631,6 @@ public class ApplicationHook {
                                                 adapter.run();
                                             }
                                             Log.record(TAG, "手动APP触发，已关闭");
-                                            synchronized (taskLock) { isTaskRunning = false; }
                                             return;
                                         }
                                     }
@@ -522,7 +652,6 @@ public class ApplicationHook {
                                         Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
                                         ensureScheduler();
                                         SchedulerAdapter.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
-                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     String currentUid = UserMap.getCurrentUid();
@@ -530,7 +659,6 @@ public class ApplicationHook {
                                     if (targetUid == null || !targetUid.equals(currentUid)) {
                                         Log.record(TAG, "用户切换或为空，重新登录");
                                         reLogin();
-                                        synchronized (taskLock) { isTaskRunning = false; }
                                         return;
                                     }
                                     lastExecTime = currentTime; // 更新最后执行时间
@@ -538,14 +666,11 @@ public class ApplicationHook {
                                     TaskRunnerAdapter adapter = new TaskRunnerAdapter();
                                     adapter.run();
                                     scheduleNextExecutionInternal(lastExecTime);
+                                } catch (IllegalStateException e) {
+                                    Log.record(TAG, "⚠️ " + e.getMessage());
                                 } catch (Exception e) {
                                     Log.record(TAG, "❌执行异常");
                                     Log.printStackTrace(TAG, e);
-                                } finally {
-                                    // 🔓 释放任务锁
-                                    synchronized (taskLock) {
-                                        isTaskRunning = false;
-                                    }
                                 }
                             });
                             dayCalendar = Calendar.getInstance();
@@ -630,10 +755,7 @@ public class ApplicationHook {
             // 设置0点唤醒
             Calendar calendar = Calendar.getInstance();
             calendar.add(Calendar.DAY_OF_MONTH, 1);
-            calendar.set(Calendar.HOUR_OF_DAY, 0);
-            calendar.set(Calendar.MINUTE, 0);
-            calendar.set(Calendar.SECOND, 0);
-            calendar.set(Calendar.MILLISECOND, 0);
+            resetToMidnight(calendar);
 
             boolean success = SchedulerAdapter.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
             if (success) {
@@ -891,9 +1013,7 @@ public class ApplicationHook {
         try {
             if (dayCalendar == null) {
                 dayCalendar = (Calendar) nowCalendar.clone();
-                dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
-                dayCalendar.set(Calendar.MINUTE, 0);
-                dayCalendar.set(Calendar.SECOND, 0);
+                resetToMidnight(dayCalendar);
                 Log.record(TAG, "初始化日期为：" + dayCalendar.get(Calendar.YEAR) + "-" + (dayCalendar.get(Calendar.MONTH) + 1) + "-" + dayCalendar.get(Calendar.DAY_OF_MONTH));
                 setWakenAtTimeAlarm();
                 return;
@@ -904,9 +1024,7 @@ public class ApplicationHook {
             int nowDay = nowCalendar.get(Calendar.DAY_OF_MONTH);
             if (dayCalendar.get(Calendar.YEAR) != nowYear || dayCalendar.get(Calendar.MONTH) != nowMonth || dayCalendar.get(Calendar.DAY_OF_MONTH) != nowDay) {
                 dayCalendar = (Calendar) nowCalendar.clone();
-                dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
-                dayCalendar.set(Calendar.MINUTE, 0);
-                dayCalendar.set(Calendar.SECOND, 0);
+                resetToMidnight(dayCalendar);
                 Log.record(TAG, "日期更新为：" + nowYear + "-" + (nowMonth + 1) + "-" + nowDay);
                 setWakenAtTimeAlarm();
             }
@@ -922,46 +1040,68 @@ public class ApplicationHook {
     }
 
 
-    public static void reLoginByBroadcast() {
+    /**
+     * 通用广播发送方法（重构：消除重复代码）
+     * 
+     * @param action 广播动作
+     * @param errorMsg 错误日志消息
+     */
+    private static void sendBroadcast(String action, String errorMsg) {
         try {
-            appContext.sendBroadcast(new Intent("com.eg.android.AlipayGphone.sesame.reLogin"));
+            appContext.sendBroadcast(new Intent(action));
         } catch (Throwable th) {
-            Log.runtime(TAG, "sesame sendBroadcast reLogin err:");
+            Log.runtime(TAG, errorMsg);
             Log.printStackTrace(TAG, th);
         }
     }
+    
+    /**
+     * 通过广播发送重新登录的指令
+     */
+    public static void reLoginByBroadcast() {
+        sendBroadcast(BroadcastActions.RE_LOGIN, "sesame sendBroadcast reLogin err:");
+    }
 
     /**
-     * 通过广播发送重启模块服务的指令。
+     * 通过广播发送重启模块服务的指令
      */
     public static void restartByBroadcast() {
-        try {
-            appContext.sendBroadcast(new Intent("com.eg.android.AlipayGphone.sesame.restart"));
-        } catch (Throwable th) {
-            Log.runtime(TAG, "发送重启广播时出错:");
-            Log.printStackTrace(TAG, th);
-        }
+        sendBroadcast(BroadcastActions.RESTART, "发送重启广播时出错:");
     }
 
     /**
-     * 通过广播发送立即执行一次任务的指令。
+     * 通过广播发送立即执行一次任务的指令
      */
     public static void executeByBroadcast() {
-        try {
-            appContext.sendBroadcast(new Intent("com.eg.android.AlipayGphone.sesame.execute"));
-        } catch (Throwable th) {
-            Log.runtime(TAG, "发送执行广播时出错:");
-            Log.printStackTrace(TAG, th);
-        }
+        sendBroadcast(BroadcastActions.EXECUTE, "发送执行广播时出错:");
     }
 
 
+    /**
+     * 工具方法：将 Calendar 重置为当天午夜 0 点
+     * 重构：消除重复代码
+     * 
+     * @param calendar 要重置的 Calendar 对象
+     */
+    private static void resetToMidnight(Calendar calendar) {
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+    }
+
+    /**
+     * 获取支付宝微应用上下文（优化：使用反射缓存）
+     */
     public static Object getMicroApplicationContext() {
         if (microApplicationContextObject == null) {
             try {
-                Class<?> alipayApplicationClass = XposedHelpers.findClass(
-                        "com.alipay.mobile.framework.AlipayApplication", classLoader
-                );
+                Class<?> alipayApplicationClass = ReflectionCache.getAlipayApplicationClass(classLoader);
+                if (alipayApplicationClass == null) {
+                    Log.runtime(TAG, "⚠️ 无法获取 AlipayApplication 类");
+                    return null;
+                }
+                
                 Object alipayApplicationInstance = XposedHelpers.callStaticMethod(
                         alipayApplicationClass, "getInstance"
                 );
@@ -978,22 +1118,32 @@ public class ApplicationHook {
         return microApplicationContextObject;
     }
 
+    /**
+     * 获取服务对象
+     */
     public static Object getServiceObject(String service) {
         try {
             return XposedHelpers.callMethod(getMicroApplicationContext(), "findServiceByInterface", service);
         } catch (Throwable th) {
-            Log.runtime(TAG, "getUserObject err");
+            Log.runtime(TAG, "getServiceObject err");
             Log.printStackTrace(TAG, th);
         }
         return null;
     }
 
+    /**
+     * 获取用户对象（优化：使用反射缓存）
+     */
     public static Object getUserObject() {
         try {
+            Class<?> socialSdkClass = ReflectionCache.getSocialSdkClass(classLoader);
+            if (socialSdkClass == null) {
+                Log.runtime(TAG, "⚠️ 无法获取 SocialSdkContactService 类");
+                return null;
+            }
+            
             return XposedHelpers.callMethod(
-                    getServiceObject(
-                            XposedHelpers.findClass("com.alipay.mobile.personalbase.service.SocialSdkContactService", classLoader).getName()
-                    ),
+                    getServiceObject(socialSdkClass.getName()),
                     "getMyAccountInfoModelByLocal");
         } catch (Throwable th) {
             Log.runtime(TAG, "getUserObject err");
@@ -1002,6 +1152,9 @@ public class ApplicationHook {
         return null;
     }
 
+    /**
+     * 获取用户ID
+     */
     public static String getUserId() {
         try {
             Object userObject = getUserObject();
@@ -1046,11 +1199,11 @@ public class ApplicationHook {
                 Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
                 if (action != null) {
                     switch (action) {
-                        case "com.eg.android.AlipayGphone.sesame.restart":
+                        case BroadcastActions.RESTART:
                             Log.printStack(TAG);
                             GlobalThreadPools.INSTANCE.execute(() -> initHandler(true));
                             break;
-                       case "com.eg.android.AlipayGphone.sesame.execute":
+                       case BroadcastActions.EXECUTE:
                            Log.printStack(TAG);
                            if (intent.getBooleanExtra("alarm_triggered", false)) {
                                alarmTriggeredFlag = true;
@@ -1076,11 +1229,11 @@ public class ApplicationHook {
                                Log.runtime(TAG, "⏳ Service 未就绪，等待初始化（将由 initHandler 自动重试）");
                            }
                            break;
-                        case "com.eg.android.AlipayGphone.sesame.reLogin":
+                        case BroadcastActions.RE_LOGIN:
                             Log.printStack(TAG);
                             GlobalThreadPools.INSTANCE.execute(ApplicationHook::reLogin);
                             break;
-                        case "com.eg.android.AlipayGphone.sesame.status":
+                        case BroadcastActions.STATUS:
                             // 状态查询处理
                             Log.printStack(TAG);
                             if (ViewAppInfo.getRunType() == RunType.DISABLE) {
@@ -1091,7 +1244,7 @@ public class ApplicationHook {
                                 Log.system(TAG, "Replied with status: " + RunType.ACTIVE.getNickName());
                             }
                             break;
-                        case "com.eg.android.AlipayGphone.sesame.rpctest":
+                        case BroadcastActions.RPC_TEST:
                             GlobalThreadPools.INSTANCE.execute(() -> {
                                 try {
                                     String method = intent.getStringExtra("method");
@@ -1150,11 +1303,11 @@ public class ApplicationHook {
     @NonNull
     private static IntentFilter getIntentFilter() {
         IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.restart"); // 重启支付宝服务的动作
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.execute"); // 执行特定命令的动作
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.reLogin"); // 重新登录支付宝的动作
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.status"); // 查询支付宝状态的动作
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rpctest"); // 调试RPC的动作
+        intentFilter.addAction(BroadcastActions.RESTART); // 重启支付宝服务的动作
+        intentFilter.addAction(BroadcastActions.EXECUTE); // 执行特定命令的动作
+        intentFilter.addAction(BroadcastActions.RE_LOGIN); // 重新登录支付宝的动作
+        intentFilter.addAction(BroadcastActions.STATUS); // 查询支付宝状态的动作
+        intentFilter.addAction(BroadcastActions.RPC_TEST); // 调试RPC的动作
         return intentFilter;
     }
 
