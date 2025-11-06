@@ -1,172 +1,136 @@
 package fansirsqi.xposed.sesame.hook
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import fansirsqi.xposed.sesame.data.General
-import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
-import kotlinx.coroutines.*
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 协程调度器 - 使用协程实现精确定时（纯协程版）
- * 
+ * 调度器 - 基于 AlarmManager 实现
+ *
  * 优势：
- * 1. 精确到毫秒级 - 不受系统省电策略影响
- * 2. 轻量高效 - 无系统调度开销
- * 3. 灵活控制 - 可随时调整间隔
- * 4. 零唤醒锁 - 极低功耗
- * 
- * 注意：
- * 1. 需要进程保活（前台服务）
- * 2. 建议加入电池优化白名单
+ * 1. 精确唤醒 - 使用 setExactAndAllowWhileIdle 确保在 Doze 模式下也能准时执行。
+ * 2. 系统级调度 - 可靠性高，由 Android 系统保证。
+ * 3. 功耗优化 - 任务执行完后设备可以立刻返回休眠状态。
+ *
+ * 替换了原有的 CoroutineScheduler，以解决 Doze 模式下的执行延迟问题。
  */
 class CoroutineScheduler(private val context: Context) {
 
     companion object {
-        private const val TAG = "CoroutineScheduler"
+        private const val TAG = "AlarmScheduler" // 更名为 AlarmScheduler 以反映实现
+        private const val MAIN_TASK_REQUEST_CODE = 12345
+        private const val WAKEUP_REQUEST_CODE_OFFSET = 20000
+        private const val MAX_WAKEUP_ALARMS = 30 // 假设最多有30个唤醒闹钟
     }
 
-    // 调度器协程作用域
-    private val schedulerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    
-    // 主任务调度 Job
-    private var mainTaskJob: Job? = null
-    
-    // ✅ 唤醒任务调度 Jobs（线程安全版）
-    private val wakeupJobs = ConcurrentHashMap<Int, Job>()
-    
-    // 调度器运行状态
-    private val isRunning = AtomicBoolean(false)
-    
-    // 下次执行时间
-    private val nextExecutionTime = AtomicLong(0)
+    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    private fun getPendingIntent(requestCode: Int, intent: Intent, flags: Int): PendingIntent? {
+        // 由于 minSdk >= 24 (Android N)，我们总是在 API 23 (M) 或更高版本上运行。
+        // FLAG_IMMUTABLE 是在 API 23 中添加的，并且在应用目标为 API 31 (S) 或更高版本时是必需的。
+        // 因此，在这里始终添加此标志是安全且正确的。
+        val finalFlags = flags or PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getBroadcast(context, requestCode, intent, finalFlags)
+    }
 
     /**
-     * 启动主任务调度（优化版）
-     * 
-     * @param initialDelay 初始延迟（毫秒）
-     * @param targetTime 目标执行时间戳（0表示使用间隔）
-     * 
-     * 优化：合并日志输出减少 I/O
+     * 检查应用是否具有调度精确闹钟的权限。
+     * 从 Android 12 (S) 开始需要此权限。
+     * @return 如果可以调度精确闹钟，则返回 true；否则返回 false。
      */
-    fun scheduleMainTask(initialDelay: Long, targetTime: Long = 0) {
-        // 取消旧任务
-        mainTaskJob?.cancel()
-        
-        // 使用传入的目标时间，如果没有则使用当前时间+延迟
-        val actualTargetTime = if (targetTime > 0) targetTime else (System.currentTimeMillis() + initialDelay)
-        nextExecutionTime.set(actualTargetTime)
-        
-        mainTaskJob = schedulerScope.launch {
-            try {
-                // 初始延迟
-                if (initialDelay > 0) {
-                    // ✅ 日志优化：合并为一行
-                    Log.record(TAG, "⏰ 主任务将在 ${initialDelay / 1000}s 后执行 | 预定: ${TimeUtil.getCommonDate(actualTargetTime)}")
-                    delay(initialDelay)
-                }
-                
-                // 执行任务
-                if (isActive) {
-                    executeMainTask()
-                }
-                
-            } catch (e: CancellationException) {
-                Log.debug(TAG, "主任务调度已取消")
-                throw e
-            } catch (e: Exception) {
-                Log.error(TAG, "主任务调度异常: ${e.message}")
-                Log.printStackTrace(TAG, e)
-            }
+    private fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            // 在 Android 12 以下版本，此权限不是必需的。
+            true
         }
-        
-        isRunning.set(true)
     }
 
     /**
-     * 调度精确时间执行（优化版）
-     * 
-     * @param delayMillis 延迟时间（毫秒，已在外层补偿）
-     * @param exactTimeMillis 精确执行时间戳
-     * 
-     * 优化：合并日志输出减少 I/O（3行 → 1行）
+     * 调度精确时间执行
      */
     fun scheduleExactExecution(delayMillis: Long, exactTimeMillis: Long) {
-        scheduleMainTask(delayMillis, exactTimeMillis)
-        
-        // ✅ 日志优化：合并为一行
-        Log.record(TAG, "⏰ 已调度精确执行（协程）| 预定: ${TimeUtil.getCommonDate(exactTimeMillis)} | 延迟: ${delayMillis / 1000}s")
+        if (!canScheduleExactAlarms()) {
+            Log.error(TAG, "❌ 无法调度精确执行任务：缺少 SCHEDULE_EXACT_ALARM 权限。请在系统设置中为应用开启“闹钟和提醒”权限。")
+            return
+        }
+        val intent = Intent("com.eg.android.AlipayGphone.sesame.execute").apply {
+            putExtra("alarm_triggered", true)
+            putExtra("execution_time", exactTimeMillis)
+            setPackage(General.PACKAGE_NAME)
+        }
+        val pendingIntent = getPendingIntent(MAIN_TASK_REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+
+        if (pendingIntent == null) {
+            Log.error(TAG, "❌ 无法创建用于调度任务的 PendingIntent")
+            return
+        }
+
+        // 由于 minSdk >= 24，因此 Build.VERSION.SDK_INT 总是 >= Build.VERSION_CODES.M (23)。
+        // 因此，可以直接使用 setExactAndAllowWhileIdle。
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent)
+
+        Log.record(
+            TAG,
+            "⏰ 已调度精确执行 (闹钟调度器) | 预定: ${TimeUtil.getCommonDate(exactTimeMillis)} | 延迟: ${delayMillis / 1000}s"
+        )
     }
 
     /**
      * 调度延迟执行
-     * 
-     * @param delayMillis 延迟时间（毫秒）
      */
     fun scheduleDelayedExecution(delayMillis: Long) {
-        scheduleMainTask(delayMillis)
+        val targetTime = System.currentTimeMillis() + delayMillis
+        scheduleExactExecution(delayMillis, targetTime)
     }
 
     /**
-     * 调度唤醒任务（0点定时，优化版）
-     * 
-     * @param triggerAtMillis 触发时间戳
-     * @param requestCode 请求码
-     * @param isMainAlarm 是否为主任务
-     * @return 是否调度成功
-     * 
-     * 优化：
-     * 1. 使用 ConcurrentHashMap（线程安全）
-     * 2. 合并日志输出
+     * 调度唤醒任务（例如0点定时）
      */
     fun scheduleWakeupAlarm(
         triggerAtMillis: Long,
         requestCode: Int,
         isMainAlarm: Boolean
     ): Boolean {
+        if (!canScheduleExactAlarms()) {
+            Log.error(TAG, "❌ 无法调度唤醒任务：缺少 SCHEDULE_EXACT_ALARM 权限。请在系统设置中为应用开启“闹钟和提醒”权限。")
+            return false
+        }
         return try {
-            // ✅ ConcurrentHashMap 线程安全，可直接操作
-            wakeupJobs[requestCode]?.cancel()
-            
-            val currentTime = System.currentTimeMillis()
-            val delayMillis = (triggerAtMillis - currentTime).coerceAtLeast(0)
-            
-            val job = schedulerScope.launch {
-                try {
-                    // 延迟到指定时间
-                    if (delayMillis > 0) {
-                        delay(delayMillis)
-                    }
-                    
-                    // 执行唤醒任务
-                    if (isActive) {
-                        executeWakeupTask(triggerAtMillis, isMainAlarm)
-                    }
-                    
-                } catch (e: CancellationException) {
-                    Log.debug(TAG, "唤醒任务[$requestCode]已取消")
-                    throw e
-                } catch (e: Exception) {
-                    Log.error(TAG, "唤醒任务[$requestCode]异常: ${e.message}")
-                    Log.printStackTrace(TAG, e)
-                } finally {
-                    // 执行完成后移除
-                    wakeupJobs.remove(requestCode)
+            val intent = Intent("com.eg.android.AlipayGphone.sesame.execute").apply {
+                putExtra("alarm_triggered", true)
+                putExtra("waken_at_time", true)
+                if (!isMainAlarm) {
+                    putExtra("waken_time", TimeUtil.getTimeStr(triggerAtMillis))
                 }
+                setPackage(General.PACKAGE_NAME)
             }
-            
-            wakeupJobs[requestCode] = job
-            
-            // ✅ 日志优化：合并为一行
+            val pendingIntent = getPendingIntent(
+                WAKEUP_REQUEST_CODE_OFFSET + requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            if (pendingIntent == null) {
+                Log.error(TAG, "❌ 无法创建用于调度唤醒任务的 PendingIntent")
+                return false
+            }
+
+            // 由于 minSdk >= 24，因此可以直接使用 setExactAndAllowWhileIdle。
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+
             val taskType = if (isMainAlarm) "主定时" else "自定义定时"
-            Log.record(TAG, "⏰ ${taskType}任务调度成功（协程）| ID=$requestCode | 触发: ${TimeUtil.getCommonDate(triggerAtMillis)}")
-            
+            Log.record(
+                TAG,
+                "⏰ ${taskType}任务调度成功 (闹钟调度器) | ID=$requestCode | 触发: ${TimeUtil.getCommonDate(triggerAtMillis)}"
+            )
             true
-            
         } catch (e: Exception) {
             Log.error(TAG, "调度唤醒任务失败: ${e.message}")
             Log.printStackTrace(TAG, e)
@@ -175,109 +139,46 @@ class CoroutineScheduler(private val context: Context) {
     }
 
     /**
-     * 执行主任务（优化版）
-     * 
-     * 优化：合并日志输出减少 I/O（4行 → 1行）
-     */
-    private fun executeMainTask() {
-        try {
-            val actualTime = System.currentTimeMillis()
-            val expectedTime = nextExecutionTime.get()
-            val deviation = actualTime - expectedTime
-            
-            // 记录延迟到智能管理器
-            if (expectedTime > 0) {
-                SmartSchedulerManager.recordDelay(expectedTime, actualTime)
-            }
-            
-            val intent = Intent(TaskConstants.ACTION_EXECUTE).apply {
-                putExtra("alarm_triggered", true)
-                putExtra("execution_time", expectedTime)
-                putExtra("scheduled_at", actualTime)
-                putExtra("from_coroutine_scheduler", true)
-                setPackage(General.PACKAGE_NAME)
-            }
-            
-            context.sendBroadcast(intent)
-            
-            // ✅ 日志优化：合并为一行
-            val deviationStatus = if (deviation > 0) "延迟" else "提前"
-            Log.record(TAG, "⏰ 主任务已触发（协程）| 预定: ${TimeUtil.getCommonDate(expectedTime)} | " +
-                "偏差: ${deviation}ms ($deviationStatus)")
-            
-        } catch (e: Exception) {
-            Log.error(TAG, "执行主任务失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
-        }
-    }
-
-    /**
-     * 执行唤醒任务（优化版）
-     * 
-     * 优化：合并日志输出减少 I/O（4行 → 1行）
-     */
-    private fun executeWakeupTask(triggerTime: Long, isMainAlarm: Boolean) {
-        try {
-            val intent = Intent(TaskConstants.ACTION_EXECUTE).apply {
-                putExtra("alarm_triggered", true)
-                putExtra("waken_at_time", true)
-                if (!isMainAlarm) {
-                    putExtra("waken_time", TimeUtil.getTimeStr(triggerTime))
-                }
-                putExtra("from_coroutine_scheduler", true)
-                setPackage(General.PACKAGE_NAME)
-            }
-            
-            context.sendBroadcast(intent)
-            
-            val taskType = if (isMainAlarm) "0点唤醒" else "自定义唤醒"
-            val actualTime = System.currentTimeMillis()
-            val deviation = actualTime - triggerTime
-            
-            // ✅ 日志优化：合并为一行
-            val deviationStatus = if (deviation > 0) "延迟" else "提前"
-            Log.record(TAG, "⏰ ${taskType}任务已触发（协程）| 预定: ${TimeUtil.getCommonDate(triggerTime)} | " +
-                "偏差: ${deviation}ms ($deviationStatus)")
-            
-        } catch (e: Exception) {
-            Log.error(TAG, "执行唤醒任务失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
-        }
-    }
-
-    /**
      * 取消所有唤醒任务
      */
     fun cancelAllWakeupAlarms() {
-        wakeupJobs.values.forEach { it.cancel() }
-        wakeupJobs.clear()
-        Log.record(TAG, "已取消所有唤醒任务")
+        Log.record(TAG, "正在取消所有唤醒任务...")
+        for (i in 0..MAX_WAKEUP_ALARMS) {
+            val intent = Intent("com.eg.android.AlipayGphone.sesame.execute")
+            intent.setPackage(General.PACKAGE_NAME)
+            val pendingIntent = getPendingIntent(
+                WAKEUP_REQUEST_CODE_OFFSET + i,
+                intent,
+                PendingIntent.FLAG_NO_CREATE
+            )
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+            }
+        }
+        Log.record(TAG, "已尝试取消所有唤醒任务")
     }
 
     /**
      * 取消所有任务
      */
     fun cancelAll() {
-        mainTaskJob?.cancel()
-        mainTaskJob = null
+        val intent = Intent("com.eg.android.AlipayGphone.sesame.execute")
+        intent.setPackage(General.PACKAGE_NAME)
+        val pendingIntent = getPendingIntent(MAIN_TASK_REQUEST_CODE, intent, PendingIntent.FLAG_NO_CREATE)
+        if (pendingIntent != null) {
+            alarmManager.cancel(pendingIntent)
+        }
         cancelAllWakeupAlarms()
-        isRunning.set(false)
-        Log.record(TAG, "已取消所有协程调度任务")
+        Log.record(TAG, "已取消所有调度任务")
     }
 
     /**
      * 清理资源
      */
     fun cleanup() {
-        try {
-            Log.record(TAG, "🧹 开始清理协程调度器资源")
-            cancelAll()
-            schedulerScope.cancel()
-            Log.record(TAG, "✅ 协程调度器资源清理完成")
-        } catch (e: Exception) {
-            Log.error(TAG, "❌ 清理协程调度器资源失败: ${e.message}")
-        }
+        Log.record(TAG, "🧹 开始清理调度器资源")
+        cancelAll()
+        Log.record(TAG, "✅ 调度器资源清理完成")
     }
-
 }
 

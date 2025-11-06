@@ -247,7 +247,6 @@ abstract class ModelTask : Model() {
         
         for (round in 1..rounds) {
             Log.record(TAG, "开始执行第${round}轮任务: ${getName()}")
-            
             // 无论什么模式，都使用顺序执行
             executeSequential(round, stats)
             

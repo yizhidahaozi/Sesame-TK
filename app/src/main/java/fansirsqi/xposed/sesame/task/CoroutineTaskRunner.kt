@@ -6,6 +6,7 @@ import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.WakeLockManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -105,7 +106,10 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 printExecutionSummary(startTime, endTime)
                 // 清空恢复尝试计数
                 recoveryAttempts.clear()
-                
+
+                // 释放唤醒锁
+                WakeLockManager.release()
+
                 // 调度下次执行
                 try {
                     ApplicationHook.scheduleNextExecution()

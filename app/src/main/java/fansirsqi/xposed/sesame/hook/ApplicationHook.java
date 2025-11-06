@@ -52,6 +52,7 @@ import fansirsqi.xposed.sesame.util.NetworkUtils;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.WakeLockManager;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
@@ -70,8 +71,8 @@ public class ApplicationHook {
     
 
     /**
-     * 智能调度器管理器
-     * 自动切换调度器 + 自动补偿延迟
+     * 调度器管理器
+     * 用于确保调度器在使用前已正确初始化。
      */
     private static volatile boolean smartSchedulerInitialized = false;
     private static final Object schedulerInitLock = new Object();
@@ -442,7 +443,7 @@ public class ApplicationHook {
         Log.runtime(TAG, "xposed start loadPackage: " + lpparam.getPackageName());
         if (!General.PACKAGE_NAME.equals(lpparam.getPackageName())) return;
         classLoader = lpparam.getClassLoader();
-        handleHookLogic(classLoader, lpparam.getPackageName(), lpparam.getApplicationInfo().sourceDir, null);
+        handleHookLogic(classLoader, lpparam.getPackageName(), lpparam.getApplicationInfo().sourceDir, lpparam);
     }
 
     /**
@@ -464,6 +465,16 @@ public class ApplicationHook {
         XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
         if (hooked) return;
         hooked = true;
+
+        String processName = null;
+        if (rawParam instanceof XC_LoadPackage.LoadPackageParam) {
+            processName = ((XC_LoadPackage.LoadPackageParam) rawParam).processName;
+        } else if (rawParam instanceof XposedModuleInterface.PackageLoadedParam) {
+            processName = XposedEnv.INSTANCE.getProcessName();
+        }
+        final String finalProcessName = processName;
+
+        Log.runtime(TAG, "🔀 当前进程: " + finalProcessName);
 
         // 初始化反射缓存（提前缓存，提升后续性能）
         // 注意：初始化失败不影响正常功能，会自动回退到传统反射
@@ -492,7 +503,10 @@ public class ApplicationHook {
                     mainHandler = new Handler(Looper.getMainLooper());
                     appContext = (Context) param.args[0];
 
-                    registerBroadcastReceiver(appContext);
+                    // 仅在主进程注册广播接收器，避免多进程重复接收
+                    if (General.PACKAGE_NAME.equals(finalProcessName)) {
+                        registerBroadcastReceiver(appContext);
+                    }
                     // 注意：调度器将在首次使用时延迟初始化（避免 Application.attach 阶段初始化过早）
 
                     PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
@@ -636,13 +650,7 @@ public class ApplicationHook {
                                     }
 
                                     long currentTime = System.currentTimeMillis();
-                                    
-                                    // 通知监控器：任务开始执行
-                                    if (nextExecutionTime > 0) {
-                                        String taskId = "task_" + nextExecutionTime;
-                                        SmartSchedulerManager.INSTANCE.notifyTaskExecution(taskId);
-                                    }
-                                    
+
                                     // 获取最小执行间隔（2秒）
                                     final long MIN_EXEC_INTERVAL = 2000;
                                     // 计算距离上次执行的时间间隔
@@ -885,7 +893,7 @@ public class ApplicationHook {
 //                    return false;
 //                }
                 // 优化：使用纯协程调度，无需唤醒锁
-                Log.record(TAG, "✅ 使用协程调度器，无需唤醒锁");
+                Log.record(TAG, "✅ 使用 AlarmManager 进行精确调度，任务执行时将使用唤醒锁");
 
                 setWakenAtTimeAlarm();
 
@@ -1207,7 +1215,8 @@ public class ApplicationHook {
                            Log.printStack(TAG);
                            if (intent.getBooleanExtra("alarm_triggered", false)) {
                                alarmTriggeredFlag = true;
-                               Log.record(TAG, "⏰ 收到定时任务触发广播 (协程调度器)");
+                               Log.record(TAG, "⏰ 收到定时任务触发广播 (闹钟调度器)");
+                               WakeLockManager.INSTANCE.acquire(context, 600_000L); // 获取10分钟的唤醒锁
                            }
                            // 如果已初始化，直接执行任务；否则先初始化
                            if (init) {
