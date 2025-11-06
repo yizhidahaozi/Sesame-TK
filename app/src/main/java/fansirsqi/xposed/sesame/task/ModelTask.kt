@@ -246,7 +246,9 @@ abstract class ModelTask : Model() {
         val stats = TaskExecutionStats()
         
         for (round in 1..rounds) {
-            Log.record(TAG, "开始执行第${round}轮任务: ${getName()}")
+            if (getName() != "MAIN_TASK") {
+                Log.record(TAG, "开始执行第${round}轮任务: ${getName()}")
+            }
             // 无论什么模式，都使用顺序执行
             executeSequential(round, stats)
             
@@ -259,8 +261,10 @@ abstract class ModelTask : Model() {
         val endTime = System.currentTimeMillis()
         // 完成统计，补充结束时间
         stats.complete()
-        Log.record(TAG, "任务 ${getName()} 完成，总耗时: ${endTime - startTime}ms")
-        Log.record(TAG, stats.summary)
+        if (getName() != "MAIN_TASK") {
+            Log.record(TAG, "任务 ${getName()} 完成，总耗时: ${endTime - startTime}ms")
+            Log.record(TAG, stats.summary)
+        }
     }
 
     /**
