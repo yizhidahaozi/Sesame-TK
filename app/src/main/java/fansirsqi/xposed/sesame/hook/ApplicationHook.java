@@ -83,6 +83,7 @@ public class ApplicationHook {
     private static class BroadcastActions {
         static final String RESTART = "com.eg.android.AlipayGphone.sesame.restart";
         static final String EXECUTE = "com.eg.android.AlipayGphone.sesame.execute";
+        static final String PRE_WAKEUP = "com.eg.android.AlipayGphone.sesame.prewakeup";
         static final String RE_LOGIN = "com.eg.android.AlipayGphone.sesame.reLogin";
         static final String STATUS = "com.eg.android.AlipayGphone.sesame.status";
         static final String RPC_TEST = "com.eg.android.AlipayGphone.sesame.rpctest";
@@ -1238,6 +1239,29 @@ public class ApplicationHook {
                                Log.runtime(TAG, "⏳ Service 未就绪，等待初始化（将由 initHandler 自动重试）");
                            }
                            break;
+                        case BroadcastActions.PRE_WAKEUP:
+                            Log.record(TAG, "⏰ 收到预唤醒广播，获取2分钟唤醒锁并准备执行");
+                            WakeLockManager.INSTANCE.acquire(context, 120_000L); // 2 minute wakelock
+                            alarmTriggeredFlag = true;
+                            if (mainHandler != null) {
+                                mainHandler.postDelayed(() -> {
+                                    Log.record(TAG, "⏰ 预唤醒延时结束，开始执行任务");
+                                    if (init) {
+                                        execHandler();
+                                    } else {
+                                        Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
+                                        GlobalThreadPools.INSTANCE.execute(() -> {
+                                            if (initHandler(false)) {
+                                                Log.record(TAG, "✅ 初始化成功，开始执行任务");
+                                                execHandler();
+                                            } else {
+                                                Log.error(TAG, "❌ 初始化失败，任务无法执行");
+                                            }
+                                        });
+                                    }
+                                }, 60_000L); // 延迟1分钟执行
+                            }
+                            break;
                         case BroadcastActions.RE_LOGIN:
                             Log.printStack(TAG);
                             GlobalThreadPools.INSTANCE.execute(ApplicationHook::reLogin);
@@ -1314,6 +1338,7 @@ public class ApplicationHook {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(BroadcastActions.RESTART); // 重启支付宝服务的动作
         intentFilter.addAction(BroadcastActions.EXECUTE); // 执行特定命令的动作
+        intentFilter.addAction(BroadcastActions.PRE_WAKEUP); // 预唤醒
         intentFilter.addAction(BroadcastActions.RE_LOGIN); // 重新登录支付宝的动作
         intentFilter.addAction(BroadcastActions.STATUS); // 查询支付宝状态的动作
         intentFilter.addAction(BroadcastActions.RPC_TEST); // 调试RPC的动作

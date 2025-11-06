@@ -24,6 +24,7 @@ class CoroutineScheduler(private val context: Context) {
     companion object {
         private const val TAG = "AlarmScheduler" // 更名为 AlarmScheduler 以反映实现
         private const val MAIN_TASK_REQUEST_CODE = 12345
+        private const val PRE_WAKEUP_REQUEST_CODE = 12346
         private const val WAKEUP_REQUEST_CODE_OFFSET = 20000
         private const val MAX_WAKEUP_ALARMS = 30 // 假设最多有30个唤醒闹钟
     }
@@ -60,25 +61,33 @@ class CoroutineScheduler(private val context: Context) {
             Log.error(TAG, "❌ 无法调度精确执行任务：缺少 SCHEDULE_EXACT_ALARM 权限。请在系统设置中为应用开启“闹钟和提醒”权限。")
             return
         }
-        val intent = Intent("com.eg.android.AlipayGphone.sesame.execute").apply {
-            putExtra("alarm_triggered", true)
+        // 计划在任务执行前1分钟触发预唤醒
+        val preWakeupTime = exactTimeMillis - 60 * 1000
+        if (preWakeupTime <= System.currentTimeMillis()) {
+            Log.record(TAG, "预唤醒时间已过，立即执行")
+            // 如果预唤醒时间已过，直接发送广播立即执行
+            val intent = Intent("com.eg.android.AlipayGphone.sesame.execute").apply {
+                putExtra("alarm_triggered", true)
+                setPackage(General.PACKAGE_NAME)
+            }
+            context.sendBroadcast(intent)
+            return
+        }
+
+        val intent = Intent("com.eg.android.AlipayGphone.sesame.prewakeup").apply {
             putExtra("execution_time", exactTimeMillis)
             setPackage(General.PACKAGE_NAME)
         }
-        val pendingIntent = getPendingIntent(MAIN_TASK_REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val pendingIntent = getPendingIntent(PRE_WAKEUP_REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT)
 
         if (pendingIntent == null) {
             Log.error(TAG, "❌ 无法创建用于调度任务的 PendingIntent")
             return
         }
-
-        // 由于 minSdk >= 24，因此 Build.VERSION.SDK_INT 总是 >= Build.VERSION_CODES.M (23)。
-        // 因此，可以直接使用 setExactAndAllowWhileIdle。
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, exactTimeMillis, pendingIntent)
-
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, preWakeupTime, pendingIntent)
         Log.record(
             TAG,
-            "⏰ 已调度精确执行 (闹钟调度器) | 预定: ${TimeUtil.getCommonDate(exactTimeMillis)} | 延迟: ${delayMillis / 1000}s"
+            "⏰ 已调度预唤醒任务 (主任务) | 预定: ${TimeUtil.getCommonDate(preWakeupTime)}"
         )
     }
 
@@ -88,6 +97,32 @@ class CoroutineScheduler(private val context: Context) {
     fun scheduleDelayedExecution(delayMillis: Long) {
         val targetTime = System.currentTimeMillis() + delayMillis
         scheduleExactExecution(delayMillis, targetTime)
+    }
+
+    /**
+     * 调度预唤醒任务，在主任务执行前1分钟触发
+     */
+    private fun schedulePreWakeup(exactTimeMillis: Long) {
+        // 在主任务前1分钟唤醒
+        val preWakeupTime = exactTimeMillis - 60 * 1000
+        if (preWakeupTime > System.currentTimeMillis()) {
+            val intent = Intent("com.eg.android.AlipayGphone.sesame.prewakeup").apply {
+                setPackage(General.PACKAGE_NAME)
+            }
+            val pendingIntent = getPendingIntent(
+                PRE_WAKEUP_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            if (pendingIntent != null) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    preWakeupTime,
+                    pendingIntent
+                )
+                Log.record(TAG, "⏰ 已调度预唤醒任务 | 预定: ${TimeUtil.getCommonDate(preWakeupTime)}")
+            }
+        }
     }
 
     /**
@@ -167,6 +202,14 @@ class CoroutineScheduler(private val context: Context) {
         val pendingIntent = getPendingIntent(MAIN_TASK_REQUEST_CODE, intent, PendingIntent.FLAG_NO_CREATE)
         if (pendingIntent != null) {
             alarmManager.cancel(pendingIntent)
+        }
+        val preWakeupIntent = Intent("com.eg.android.AlipayGphone.sesame.prewakeup")
+        preWakeupIntent.setPackage(General.PACKAGE_NAME)
+        val preWakeupPendingIntent =
+            getPendingIntent(PRE_WAKEUP_REQUEST_CODE, preWakeupIntent, PendingIntent.FLAG_NO_CREATE)
+        if (preWakeupPendingIntent != null) {
+            alarmManager.cancel(preWakeupPendingIntent)
+            Log.record(TAG, "已取消预唤醒任务")
         }
         cancelAllWakeupAlarms()
         Log.record(TAG, "已取消所有调度任务")
