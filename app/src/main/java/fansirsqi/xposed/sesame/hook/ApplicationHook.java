@@ -291,6 +291,7 @@ public class ApplicationHook {
     @Getter
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
 
+    private static volatile boolean batteryPermissionChecked = false;
 
 
     @SuppressLint("StaticFieldLeak")
@@ -537,6 +538,21 @@ public class ApplicationHook {
                         }
                     } else {
                         Log.runtime(TAG, "need not start service for debug rpc");
+                    }
+
+                    // 后台运行权限检查，确保只在主进程执行一次
+                    if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
+                        if (BaseModel.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
+                            Log.record(TAG, "支付宝无始终在后台运行权限，准备申请");
+                            mainHandler.postDelayed(
+                                    () -> {
+                                        if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
+                                            Toast.show("请授予支付宝始终在后台运行权限");
+                                        }
+                                    },
+                                    2000);
+                        }
+                        batteryPermissionChecked = true; // 标记为已检查，无论是否需要申请
                     }
                     super.afterHookedMethod(param);
                 }
@@ -827,20 +843,6 @@ public class ApplicationHook {
             Model.initAllModel(); // 在所有服务启动前装模块配置
             if (service == null) {
                 Log.runtime(TAG, "⚠️ Service 未就绪，无法初始化");
-                // 如果是非强制初始化（来自 execute 广播），延迟重试
-                if (!force && mainHandler != null) {
-                    Log.runtime(TAG, "将在 5 秒后重试初始化");
-                    mainHandler.postDelayed(() -> {
-                        GlobalThreadPools.INSTANCE.execute(() -> {
-                            if (initHandler(false)) {
-                                Log.record(TAG, "✅ 延迟初始化成功，开始执行任务");
-                                execHandler();
-                            } else {
-                                Log.error(TAG, "❌ 延迟初始化仍然失败");
-                            }
-                        });
-                    }, 5000);
-                }
                 return false;
             }
 
@@ -864,18 +866,6 @@ public class ApplicationHook {
                     Log.record(TAG, "用户模块配置加载失败");
                     Toast.show("用户模块配置加载失败");
                     return false;
-                }
-
-                // 后台运行权限检查 (WorkManager 不需要精确闹钟权限)
-                if (!init && !PermissionUtil.checkBatteryPermissions()) {
-                    Log.record(TAG, "支付宝无始终在后台运行权限");
-                    mainHandler.postDelayed(
-                            () -> {
-                                if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
-                                    Toast.show("请授予支付宝始终在后台运行权限");
-                                }
-                            },
-                            2000);
                 }
 
                 Notify.start(service);
@@ -959,7 +949,7 @@ public class ApplicationHook {
                     Config.unload();
                     UserMap.unload();
                 }
-                
+
 
                 // 协程调度器会自动清理，无需手动释放唤醒锁
                 synchronized (rpcBridgeLock) {
@@ -969,6 +959,8 @@ public class ApplicationHook {
                         rpcBridge = null;
                     }
                 }
+                init = false;
+                service = null;
             } else {
                 ModelTask.stopAllTask();
             }
@@ -1223,7 +1215,7 @@ public class ApplicationHook {
                            if (init) {
                                Log.record(TAG, "✅ 模块已初始化，开始执行任务");
                                execHandler();
-                           } else if (service != null) {
+                           } else {
                                // Service 已就绪，可以初始化
                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
                                GlobalThreadPools.INSTANCE.execute(() -> {
@@ -1234,9 +1226,6 @@ public class ApplicationHook {
                                        Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                    }
                                });
-                           } else {
-                               // Service 未就绪，等待 Service 初始化
-                               Log.runtime(TAG, "⏳ Service 未就绪，等待初始化（将由 initHandler 自动重试）");
                            }
                            break;
                         case BroadcastActions.PRE_WAKEUP:

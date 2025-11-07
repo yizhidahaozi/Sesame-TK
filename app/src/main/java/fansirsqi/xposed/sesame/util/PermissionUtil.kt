@@ -118,8 +118,7 @@ object PermissionUtil {
      */
     @JvmStatic
     fun checkBatteryPermissions(): Boolean {
-        val context: Context? = contextSafely
-        if (context == null) return false
+        val context: Context = contextSafely ?: return false
         // 检查是否被豁免电池优化
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager?
         return powerManager != null && powerManager.isIgnoringBatteryOptimizations(General.PACKAGE_NAME)
