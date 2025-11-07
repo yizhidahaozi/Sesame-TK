@@ -842,7 +842,7 @@ public class ApplicationHook {
 
             Model.initAllModel(); // 在所有服务启动前装模块配置
             if (service == null) {
-                Log.runtime(TAG, "⚠️ Service 未就绪，无法初始化");
+                Log.runtime(TAG, "⚠️ Service 未就绪，初始化将推迟到 Service 启动");
                 return false;
             }
 
@@ -1222,8 +1222,6 @@ public class ApplicationHook {
                                    if (initHandler(false)) {
                                        Log.record(TAG, "✅ 初始化成功，开始执行任务");
                                        execHandler();
-                                   } else {
-                                       Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                    }
                                });
                            }
@@ -1242,8 +1240,6 @@ public class ApplicationHook {
                                     if (initHandler(false)) {
                                         Log.record(TAG, "✅ 初始化成功，开始执行任务");
                                         execHandler();
-                                    } else {
-                                        Log.error(TAG, "❌ 初始化失败，任务无法执行");
                                     }
                                 });
                             }
