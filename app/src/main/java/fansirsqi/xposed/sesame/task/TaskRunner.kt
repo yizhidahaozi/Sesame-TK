@@ -95,9 +95,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 val endTime = System.currentTimeMillis()
                 printExecutionSummary(startTime, endTime)
 
-                // 释放唤醒锁
-                WakeLockManager.release()
-
                 // 调度下次执行
                 try {
                     ApplicationHook.scheduleNextExecution()
