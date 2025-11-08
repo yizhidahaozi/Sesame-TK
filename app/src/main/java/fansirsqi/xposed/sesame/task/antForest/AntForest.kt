@@ -3201,7 +3201,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     if (needBubbleBoostCard) useCardBoot(
                         bubbleBoostTime!!.value,
                         "加速卡"
-                    ) { this.useBubbleBoostCard() } // 使用加速卡
+                    ) {
+                        this.useBubbleBoostCard()
+                    } // 使用加速卡
                     if (needShield) {
                         Log.runtime(TAG, "尝试使用保护罩罩")
                         useShieldCard(bagObject)
@@ -4233,6 +4235,36 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun useBubbleBoostCard(bag: JSONObject? = queryPropList()) {
         try {
+            // 先检查自己是否有未成熟的能量球
+            val selfHomeObj = querySelfHome()
+            if (selfHomeObj == null) {
+                Log.record(TAG, "无法获取自己主页信息，跳过使用加速卡")
+                return
+            }
+            // 检查是否有未来才会成熟的能量球（bubbleCount > 0且produceTime > serverTime）
+            val serverTime = selfHomeObj.optLong("now", System.currentTimeMillis())
+            val bubbles = selfHomeObj.optJSONArray("bubbles")
+            var hasWaitingBubbles = false
+            if (bubbles != null && bubbles.length() > 0) {
+                for (i in 0..<bubbles.length()) {
+                    val bubble = bubbles.getJSONObject(i)
+                    val bubbleCount = bubble.getInt("fullEnergy")
+                    if (bubbleCount <= 0) {
+                        continue // 跳过能量为0的能量球
+                    }
+                    val produceTime = bubble.optLong("produceTime", 0L)
+                    // 判断是否有未来才会成熟的能量球（produceTime > 0 且 > serverTime）
+                    if (produceTime > 0 && produceTime > serverTime) {
+                        hasWaitingBubbles = true
+                        break
+                    }
+                }
+            }
+            if (!hasWaitingBubbles) {
+                Log.record(TAG, "自己当前没有未来才会成熟的能量球，不使用加速卡")
+                return
+            }
+            
             // 在背包中查询限时加速器
             var jo = findPropBag(bag, "LIMIT_TIME_ENERGY_BUBBLE_BOOST")
             if (jo == null) {

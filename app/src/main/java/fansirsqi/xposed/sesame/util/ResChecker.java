@@ -42,7 +42,7 @@ public class ResChecker {
                 "当前参与人数过多", "请稍后再试", "手速太快", "频繁", "操作过于频繁",
                 "我的小鸡在睡觉中", "小鸡在睡觉", "无法操作", "有人抢在你",
                 "饲料槽已满", "当日达到上限", "适可而止", "不支持rpc完成的任务",
-                "庄园的小鸡太多了","同一好友新村，只能摆一个小摊哦","今日助力次数已用完",
+                "庄园的小鸡太多了","同一好友新村，只能摆一个小摊哦","今日助力次数已用完","收摊成功",
             };
             for (String keyword : ignoreKeywords) {
                 if (resultDesc.contains(keyword) || memo.contains(keyword)) {
