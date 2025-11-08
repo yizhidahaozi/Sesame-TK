@@ -188,8 +188,9 @@ abstract class ModelTask : Model() {
     fun addChildTask(childTask: ChildModelTask): Boolean {
         // 确保任务作用域已初始化
         ensureTaskScope()
-        // 使用协程作用域启动一个新的协程来处理子任务添加
-        taskScope!!.launch {
+        // 优化：使用 UNDISPATCHED 启动模式减少协程调度开销
+        // UNDISPATCHED 会立即在当前线程开始执行，直到第一个挂起点
+        taskScope!!.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             addChildTaskSuspend(childTask)
         }
         return true
@@ -288,24 +289,31 @@ abstract class ModelTask : Model() {
 
     /**
      * 停止任务（协程版本）
+     * 注意：此方法是非阻塞的，会异步取消任务
      */
     open fun stopTask() {
-        runBlocking {
-            // 取消所有子任务
-            childTaskMap.values.forEach { childTask ->
-                try {
-                    childTask.cancel()
-                } catch (e: Exception) {
-                    Log.printStackTrace("取消子任务异常", e)
+        // 立即标记为非运行状态
+        isRunning = false
+        
+        // 取消协程作用域（这会自动取消所有子协程）
+        taskScope?.cancel()
+        taskScope = null
+        
+        // 异步清理子任务映射
+        // 使用 GlobalScope 确保清理逻辑能够完成，即使父作用域已被取消
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) {
+            try {
+                childTaskMap.values.forEach { childTask ->
+                    try {
+                        childTask.cancel()
+                    } catch (e: Exception) {
+                        Log.printStackTrace("取消子任务异常", e)
+                    }
                 }
+                childTaskMap.clear()
+            } catch (e: Exception) {
+                Log.printStackTrace("清理子任务映射异常", e)
             }
-            childTaskMap.clear()
-            
-            // 取消协程作用域
-            taskScope?.cancel()
-            taskScope = null
-            
-            isRunning = false
         }
     }
 
