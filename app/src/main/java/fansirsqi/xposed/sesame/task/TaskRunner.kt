@@ -44,6 +44,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
          * 优化后的固定超时时间，足够各类任务完成
          * - 森林：主任务完成后，蹲点在后台独立运行，不占用主流程
          * - 庄园：主任务完成后，定时任务在后台独立运行
+         * - 运动：任务执行时间较长，超时后继续在后台运行
          * - 其他：一般任务都能在此时间内完成
          */
         private const val DEFAULT_TASK_TIMEOUT = 10 * 60 * 1000L // 10分钟统一超时
@@ -54,6 +55,8 @@ class CoroutineTaskRunner(allModels: List<Model>) {
          */
         private val TIMEOUT_WHITELIST = setOf(
             "森林",      // 森林有蹲点功能，需要长期运行
+            "庄园",      // 庄园有定时任务，需要长期运行
+            "运动"       // 运动任务执行时间较长
         )
         
         // 恢复任务的超时设置（毫秒）- 只用于日志提示，不会取消恢复任务
@@ -156,8 +159,13 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             Log.record(TAG, "🔄 开始顺序执行第${round}/${rounds}轮任务，共${enabledTasksInRound.size}个启用任务")
             
             for ((index, task) in enabledTasksInRound.withIndex()) {
-                Log.record(TAG, "📍 第${round}轮任务进度: ${index + 1}/${enabledTasksInRound.size} - ${task.getName()}")
+                val taskName = task.getName()
+                Log.record(TAG, "📍 第${round}轮任务进度: ${index + 1}/${enabledTasksInRound.size} - ${taskName}")
                 executeTaskWithTimeout(task, round)
+                // 任务执行完成（白名单任务可能在后台继续运行），继续下一个
+                if (index < enabledTasksInRound.size - 1) {
+                    Log.runtime(TAG, "➡️ 任务[$taskName]处理完成，准备执行下一任务...")
+                }
             }
             
             val roundTime = System.currentTimeMillis() - roundStartTime
@@ -180,9 +188,20 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         Log.record(TAG, "🚀 开始执行任务[$taskId]，超时设置: ${effectiveTimeout/1000}秒")
         try {
             // 使用智能超时机制
+            val taskName = task.getName() ?: ""
+            val isWhitelistTask = TIMEOUT_WHITELIST.contains(taskName)
             executeTaskWithGracefulTimeout(task, round, taskStartTime, taskId, effectiveTimeout)
             val executionTime = System.currentTimeMillis() - taskStartTime
-            Log.record(TAG, "✅ 任务[$taskId]执行完成，耗时: ${executionTime}ms")
+            
+            // 根据任务类型输出不同的完成日志
+            if (isWhitelistTask && executionTime >= effectiveTimeout) {
+                // 白名单任务超时但继续在后台运行
+                successCount.incrementAndGet()
+                Log.record(TAG, "✅ 任务[$taskId]主流程完成（耗时: ${executionTime}ms），后台任务继续运行")
+            } else {
+                // 正常完成
+                Log.record(TAG, "✅ 任务[$taskId]执行完成，耗时: ${executionTime}ms")
+            }
         } catch (_: TimeoutCancellationException) {
             // 超时异常：说明任务在宽限期后仍未完成（白名单任务已在内层处理）
             val executionTime = System.currentTimeMillis() - taskStartTime
@@ -310,8 +329,9 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             
             // 白名单任务：超时后直接跳过，不进入宽限期
             if (TIMEOUT_WHITELIST.contains(taskName)) {
-                Log.record(TAG, "⏰ 任务[$taskId]达到超时(${runningTime}ms)，但在白名单中，跳过宽限期直接继续运行")
-                // 不抛出异常，让外层认为任务正常完成
+                Log.record(TAG, "⏰ 任务[$taskId]达到超时(${runningTime}ms)，在白名单中，跳过宽限期")
+                Log.record(TAG, "📌 ${taskName}模块后台任务继续运行，主流程将继续执行下一任务")
+                // 不抛出异常，让外层正常处理（会标记为成功并继续下一任务）
                 return
             }
             
