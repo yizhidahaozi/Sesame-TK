@@ -43,21 +43,26 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew assembleNormalRelease assembleCompatibleRelease -Pversion=${{ github.ref_name }}
+        run: ./gradlew assembleRelease -Pversion=${{ github.ref_name }}
 
       - name: Locate APKs and Set Outputs
         id: locate_apks
         run: |
-          normal_apk=$(find app/build/outputs/apk/normal/release -name "*.apk" | head -n 1)
-          compatible_apk=$(find app/build/outputs/apk/compatible/release -name "*.apk" | head -n 1)
-          echo "normal_apk=$normal_apk" >> $GITHUB_OUTPUT
-          echo "compatible_apk=$compatible_apk" >> $GITHUB_OUTPUT
+          # APKs现在位于release目录下，按架构命名
+          release_dir="app/build/outputs/apk/release"
+          arm64_apk=$(find "$release_dir" -name "*-arm64-v8a-*.apk" | head -n 1)
+          armv7_apk=$(find "$release_dir" -name "*-armeabi-v7a-*.apk" | head -n 1)
+          universal_apk=$(find "$release_dir" -name "*-universal-*.apk" | head -n 1)
+          echo "arm64_apk=$arm64_apk" >> $GITHUB_OUTPUT
+          echo "armv7_apk=$armv7_apk" >> $GITHUB_OUTPUT
+          echo "universal_apk=universal_apk" >> $GITHUB_OUTPUT
 
       - name: Copy APKs to staging for signing
         run: |
           mkdir -p app/build/outputs/apk/all
           cp "${{ steps.locate_apks.outputs.normal_apk }}" app/build/outputs/apk/all/
           cp "${{ steps.locate_apks.outputs.compatible_apk }}" app/build/outputs/apk/all/
+          cp "${{ steps.locate_apks.outputs.universal_apk }}" app/build/outputs/apk/all/
 
       - name: Sign APKs
         id: sign_apks
@@ -73,42 +78,55 @@ jobs:
       - name: Extract Signed APK Paths
         id: extract_apks
         run: |
+          # 匹配新的架构名称
           IFS=':' read -r -a files <<< "${{ steps.sign_apks.outputs.signedFiles }}"
           for file in "${files[@]}"; do
-            if [[ "$file" == *Normal* ]]; then
-              echo "signed_normal=$file" >> $GITHUB_OUTPUT
-            elif [[ "$file" == *Compatible* ]]; then
-              echo "signed_compatible=$file" >> $GITHUB_OUTPUT
+            if [[ "$file" == *arm64-v8a* ]]; then
+              echo "signed_arm64=$file" >> $GITHUB_OUTPUT
+            elif [[ "$file" == *armeabi-v7a* ]]; then
+              echo "signed_armv7=$file" >> $GITHUB_OUTPUT
+            elif [[ "$file" == *universal* ]]; then
+              echo "signed_universal=$file" >> $GITHUB_OUTPUT
             fi
           done
 
-      - name: Upload APK - Compatible
+      - name: Upload APK - arm64-v8a
         uses: actions/upload-artifact@v4
         with:
-          name: apk-compatible
-          path: ${{ steps.extract_apks.outputs.signed_compatible }}
+            name: apk-arm64-v8a
+            path: ${{ steps.extract_apks.outputs.signed_arm64 }}
 
-      - name: Upload APK - Normal
+      - name: Upload APK - armeabi-v7a
         uses: actions/upload-artifact@v4
         with:
-          name: apk-normal
-          path: ${{ steps.extract_apks.outputs.signed_normal }}
+          name: apk-armeabi-v7a
+          path: ${{ steps.extract_apks.outputs.signed_armv7 }}
 
-      - name: Extract file names
+      - name: Upload APK - universal
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-universal
+          path: ${{ steps.extract_apks.outputs.signed_universal }}
+
+      - name: Extract file names and version
         id: extract_info
         run: |
-          normal_file=$(basename "${{ steps.extract_apks.outputs.signed_normal }}")
-          compatible_file=$(basename "${{ steps.extract_apks.outputs.signed_compatible }}")
-          # 提取版本号（以"Normal-"或"Compatible-"之后的部分为起点，以"-signed"之前的内容为终点）
-          version=$(echo "$normal_file" | sed -E 's/.*-(Normal|Compatible)-(v[^-]+).*-signed\.apk/\2/')
-          echo "normal_file=$normal_file" >> $GITHUB_OUTPUT
-          echo "compatible_file=$compatible_file" >> $GITHUB_OUTPUT
+          arm64_file=$(basename "${{ steps.extract_apks.outputs.signed_arm64 }}")
+          armv7_file=$(basename "${{ steps.extract_apks.outputs.signed_armv7 }}")
+          universal_file=$(basename "${{ steps.extract_apks.outputs.signed_universal }}")
+          # 更新版本号提取逻辑
+          version=$(echo "$arm64_file" | sed -E 's/.*-(arm64-v8a)-(v[^-]+).*-signed\.apk/\2/')
+          echo "arm64_file=$arm64_file" >> $GITHUB_OUTPUT
+          echo "armv7_file=$armv7_file" >> $GITHUB_OUTPUT
+          echo "universal_file=$universal_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Generate APKS Checksum
         run: |
-          sha256sum ${{ steps.extract_apks.outputs.signed_normal }} > CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-          sha256sum ${{ steps.extract_apks.outputs.signed_compatible }} > CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
+          # 更新Checksum文件名
+          sha256sum ${{ steps.extract_apks.outputs.signed_arm64 }} > CHECKSUMS-Sesame-arm64-v8a-${{ steps.extract_info.outputs.version }}.apk.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_armv7 }} > CHECKSUMS-Sesame-armeabi-v7a-${{ steps.extract_info.outputs.version }}.apk.sha256
+          sha256sum ${{ steps.extract_apks.outputs.signed_universal }} > CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
 
       - name: Create Tag from Version
         if: startsWith(github.ref, 'refs/heads/n') && github.event_name == 'push'
@@ -118,15 +136,16 @@ jobs:
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
 
-      - name: Post to channel
+      - name: Post to Telegram channel
         if: github.ref == 'refs/heads/n'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          NORMAL_FILE: ${{ steps.extract_apks.outputs.signed_normal }}
-          COMPATIBLE_FILE: ${{ steps.extract_apks.outputs.signed_compatible }}
+          ARM64_FILE: ${{ steps.extract_apks.outputs.signed_arm64 }}
+          ARMV7_FILE: ${{ steps.extract_apks.outputs.signed_armv7 }}
+          UNIVERSAL_FILE: ${{ steps.extract_apks.outputs.signed_universal }}
           COMMIT_MESSAGE: |
-            <b>🎉 New Test Version Build Success!</b>
+            <b>🎉 New Test Version Build Success! b>${{ steps.extract_info.outputs.version }}<</b>
             
             Target by <a href="${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }}">${{ github.event.pull_request.user.login || github.actor }}</a>
 
@@ -135,6 +154,10 @@ jobs:
             <pre>
             ${{ github.event.head_commit.message || github.event.pull_request.title || '手动触发构建' }}
             </pre>
+            
+            <b>- arm64-v8a:</b> 适用于64位ARM设备
+            <b>- armeabi-v7a:</b> 适用于32位ARM设备
+            <b>- universal:</b> 适用于所有设备
 
             参考配置文件：<a href="https://t.me/Sesame_TK_Channel/306">魔改版-config_v2.json</a>
 
@@ -146,23 +169,27 @@ jobs:
           print(json.dumps(msg))
           ')
           
+          # 更新Telegram上传逻辑
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
           -F "chat_id=${CHANNEL_ID}" \
-          -F "media=[{\"type\":\"document\",\"media\":\"attach://normal.apk\",\"parse_mode\":\"HTML\",\"caption\":${ESCAPED}},{\"type\":\"document\",\"media\":\"attach://compatible.apk\"}]" \
-          -F "normal.apk=@${NORMAL_FILE}" \
-          -F "compatible.apk=@${COMPATIBLE_FILE}"
-
+          -F "media=[{\"type\":\"document\",\"media\":\"attach://arm64.apk\",\"parse_mode\":\"HTML\",\"caption\":${ESCAPED}},{\"type\":\"document\",\"media\":\"attach://armv7.apk\"}]" \
+          -F "arm64.apk=@${ARM64_FILE}" \
+          -F "armv7.apk=@${ARMV7_FILE}" \
+          -F "universal.apk=@${UNIVERSAL_FILE}"
 
       - name: Upload Assets to Source Release
         if: github.event_name == 'release' && github.event.action == 'published'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
+          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
+          # 更新上传的文件列表和发布说明
           files: |
-            ${{ steps.extract_apks.outputs.signed_compatible }}
-            ${{ steps.extract_apks.outputs.signed_normal }}
-            CHECKSUMS-Sesame-Normal-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
-            CHECKSUMS-Sesame-Compatible-${{ steps.extract_info.outputs.version }}.${{ env.SHORT_SHA }}-signed.apk.sha256
+            ${{ steps.extract_apks.outputs.signed_arm64 }}
+            ${{ steps.extract_apks.outputs.signed_armv7 }}
+            ${{ steps.extract_apks.outputs.signed_universal }}
+            CHECKSUMS-Sesame-arm64-v8a-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-armeabi-v7a-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           append_body: true
@@ -171,7 +198,11 @@ jobs:
             ## ✨What's Changed
 
             ${{ github.event.head_commit.message || github.event.pull_request.title }}
+
             > ## 下载说明
-              * Normal 为正常版本,适用于`Android 8.0`及以上的系统
-              * Compatible 为兼容版本,适用于`Android 7.0`不再向下兼容 参考minSDK24后续不再兼容`
+            > - **Sesame-TK-arm64-v8a-...apk**: 适用于64位ARM设备。
+            > - **Sesame-TK-armeabi-v7a-...apk**: 适用于32位ARM设备。
+            >
+            > **如果不确定，请下载 `universal` 版本。**
+            
             > 倒卖必死全家
