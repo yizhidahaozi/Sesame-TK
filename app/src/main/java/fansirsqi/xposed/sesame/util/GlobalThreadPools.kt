@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
@@ -39,11 +41,30 @@ object GlobalThreadPools {
      * 用于启动不绑定到特定生命周期的长寿命协程
      * 使用SupervisorJob确保一个协程的失败不会影响其他协程
      */
-    private val globalScope = CoroutineScope(
-        SupervisorJob() + 
-        Dispatchers.Default + 
+//    private val globalScope = CoroutineScope(
+//        SupervisorJob() +
+//        Dispatchers.Default +
+//        CoroutineName("SesameGlobalScope")
+//    )
+
+    /**
+     * 创建一个新的协程作用域。
+     * 这是一个私有辅助函数，用于在初始化和重置时创建作用域。
+     */
+    private fun createScope(): CoroutineScope = CoroutineScope(
+        SupervisorJob() +
+        Dispatchers.Default +
         CoroutineName("SesameGlobalScope")
     )
+
+    /**
+     * 全局协程作用域
+     * 用于启动不绑定到特定生命周期的长寿命协程
+     * 使用SupervisorJob确保一个协程的失败不会影响其他协程
+     * 改为 var 并使用 @Volatile 以支持在会话切换时进行重置
+     */
+    @Volatile
+    private var globalScope = createScope()
 
     /**
      * 计算密集型任务调度器
@@ -120,6 +141,27 @@ object GlobalThreadPools {
 
 
     /**
+     * 关闭并重启全局协程作用域。
+     *
+     * 此方法会立即取消当前作用域中的所有正在运行的协程，
+     * 然后创建一个全新的、干净的作用域以供后续任务使用。
+     *
+     * 主要用于用户切换账号等需要彻底清理会话资源的场景。
+     *
+     * 此方法是线程安全的。
+     */
+    @Synchronized
+    fun shutdownAndRestart() {
+        Log.record(TAG, "正在关闭并重启全局协程池...")
+        if (globalScope.isActive) {
+            globalScope.cancel("User session changed. Resetting coroutine scope.")
+        }
+        globalScope = createScope()
+        Log.record(TAG, "全局协程池已重置。")
+    }
+
+
+    /**
      * 协程兼容的暂停方法
      * 优先使用协程delay，在非协程环境中降级到Thread.sleep
      *
@@ -129,5 +171,7 @@ object GlobalThreadPools {
     fun sleepCompat(millis: Long) {
         CoroutineUtils.sleepCompat(millis)
     }
+
+
 
 }
