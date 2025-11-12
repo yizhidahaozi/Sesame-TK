@@ -9,10 +9,14 @@ import android.content.pm.PackageInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+
 import androidx.annotation.NonNull;
+
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import lombok.Setter;
+
 import org.luckypray.dexkit.DexKitBridge;
+
 import java.io.File;
 import java.util.Calendar;
 import java.util.List;
@@ -68,7 +72,7 @@ public class ApplicationHook {
     @Setter
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
-    
+
 
     /**
      * 调度器管理器
@@ -76,7 +80,7 @@ public class ApplicationHook {
      */
     private static volatile boolean smartSchedulerInitialized = false;
     private static final Object schedulerInitLock = new Object();
-    
+
     /**
      * 广播动作常量
      */
@@ -88,7 +92,7 @@ public class ApplicationHook {
         static final String STATUS = "com.eg.android.AlipayGphone.sesame.status";
         static final String RPC_TEST = "com.eg.android.AlipayGphone.sesame.rpctest";
     }
-    
+
     /**
      * 支付宝类名常量
      */
@@ -96,7 +100,7 @@ public class ApplicationHook {
         static final String APPLICATION = "com.alipay.mobile.framework.AlipayApplication";
         static final String SOCIAL_SDK = "com.alipay.mobile.personalbase.service.SocialSdkContactService";
     }
-    
+
     /**
      * 反射缓存 - 避免重复反射查找，提升性能
      * 优化策略：只缓存 Class，不缓存 Method（避免方法签名变化导致的问题）
@@ -105,20 +109,20 @@ public class ApplicationHook {
         private static Class<?> alipayApplicationClass;
         private static Class<?> socialSdkContactServiceClass;
         private static volatile boolean initialized = false;
-        
+
         /**
          * 初始化反射缓存（安全版本：只缓存类）
          */
         static void initialize(ClassLoader loader) {
             if (initialized) return;
-            
+
             try {
                 // 缓存支付宝应用类
                 alipayApplicationClass = XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
-                
+
                 // 缓存社交SDK类
                 socialSdkContactServiceClass = XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
-                
+
                 initialized = true;
                 Log.runtime(TAG, "✅ 反射缓存初始化成功");
             } catch (Throwable t) {
@@ -127,13 +131,13 @@ public class ApplicationHook {
                 // 部分失败不影响使用，后续会回退到传统反射
             }
         }
-        
+
         /**
          * 获取支付宝应用类（带异常处理）
          */
         static Class<?> getAlipayApplicationClass(ClassLoader loader) {
             if (!initialized) initialize(loader);
-            
+
             try {
                 if (alipayApplicationClass != null) {
                     return alipayApplicationClass;
@@ -145,13 +149,13 @@ public class ApplicationHook {
                 return null;
             }
         }
-        
+
         /**
          * 获取社交SDK类（带异常处理）
          */
         static Class<?> getSocialSdkClass(ClassLoader loader) {
             if (!initialized) initialize(loader);
-            
+
             try {
                 if (socialSdkContactServiceClass != null) {
                     return socialSdkContactServiceClass;
@@ -190,19 +194,19 @@ public class ApplicationHook {
         if (smartSchedulerInitialized) {
             return; // 最常见情况：已初始化，直接返回
         }
-        
+
         // 慢路径：需要初始化
         synchronized (schedulerInitLock) {
             // 双重检查：防止多线程重复初始化
             if (smartSchedulerInitialized) {
                 return;
             }
-            
+
             if (appContext == null) {
                 Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
                 return;
             }
-            
+
             try {
                 Log.debug(TAG, "🔧 开始初始化智能调度器...");
                 // 初始化智能调度器（纯协程，无唤醒锁）
@@ -216,7 +220,7 @@ public class ApplicationHook {
             }
         }
     }
-    
+
     /**
      * 调度器适配器 - 使用智能管理器
      */
@@ -224,29 +228,30 @@ public class ApplicationHook {
         static void scheduleExactExecution(long delayMillis, long nextExecutionTime) {
             SmartSchedulerManager.INSTANCE.scheduleExactExecution(delayMillis, nextExecutionTime);
         }
-        
+
         static void scheduleDelayedExecution(long delayMillis) {
             SmartSchedulerManager.INSTANCE.scheduleDelayedExecution(delayMillis);
         }
-        
+
         static boolean scheduleWakeupAlarm(long triggerAtMillis, int requestCode, boolean isMainAlarm) {
             return SmartSchedulerManager.INSTANCE.scheduleWakeupAlarm(triggerAtMillis, requestCode, isMainAlarm);
         }
-        
+
         static void cancelAllWakeupAlarms() {
             SmartSchedulerManager.INSTANCE.cancelAllWakeupAlarms();
         }
     }
-    
+
     /**
      * 任务锁管理器 - 实现 AutoCloseable 自动释放锁
      * 优势：使用 try-with-resources 自动管理锁生命周期，防止遗漏释放
      */
     private static class TaskLock implements AutoCloseable {
         private final boolean acquired;
-        
+
         /**
          * 构造函数：尝试获取任务锁
+         *
          * @throws IllegalStateException 如果任务已在运行中
          */
         TaskLock() {
@@ -259,7 +264,7 @@ public class ApplicationHook {
                 acquired = true;
             }
         }
-        
+
         /**
          * 释放任务锁
          */
@@ -320,7 +325,7 @@ public class ApplicationHook {
 
     /**
      * 检查任务是否正在运行
-     * 
+     *
      * @return true: 任务正在运行, false: 任务未运行
      */
     public static boolean getIsTaskRunning() {
@@ -408,12 +413,12 @@ public class ApplicationHook {
 
             // 使用调度器（协程或 WorkManager）
             nextExecutionTime = targetTime > 0 ? targetTime : (lastExecTime + delayMillis);
-            
+
             if (appContext == null) {
                 Log.error(TAG, "❌ 无法调度任务：appContext 为 null");
                 return;
             }
-            
+
             ensureScheduler();
             SchedulerAdapter.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
@@ -587,8 +592,8 @@ public class ApplicationHook {
                                 if (currentUid != null) {
                                     initHandler(true);  // 重新初始化
                                     lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
-                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-                                    adapter.run(); // 立即执行任务
+//                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
+//                                    adapter.run(); // 立即执行任务
                                     Log.record(TAG, "用户已切换");
                                     Toast.show("用户已切换");
                                     return;
@@ -764,7 +769,7 @@ public class ApplicationHook {
                 }
                 return;
             }
-            
+
             // 确保调度器已初始化
             ensureScheduler();
 
@@ -870,19 +875,6 @@ public class ApplicationHook {
 
                 Notify.start(service);
 
-//                BaseModel baseModel = Model.getModel(BaseModel.class);
-//                if (baseModel == null) {
-//                    Log.error(TAG, "BaseModel 未找到 初始化失败");
-//                    Notify.setStatusTextDisabled();
-//                    return false;
-//                }
-//
-//                if (!baseModel.getEnableField().getValue()) {
-//                    Log.record(TAG, "❌ 芝麻粒已禁用");
-//                    Toast.show("❌ 芝麻粒已禁用");
-//                    Notify.setStatusTextDisabled();
-//                    return false;
-//                }
                 // 优化：使用纯协程调度，无需唤醒锁
                 Log.record(TAG, "✅ 使用 AlarmManager 进行精确调度，任务执行时将使用唤醒锁");
 
@@ -907,29 +899,25 @@ public class ApplicationHook {
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
                 }
 
-                   Model.bootAllModel(classLoader);
-                   Status.load(userId);
-                   DataStore.INSTANCE.init(Files.CONFIG_DIR);
-                   updateDay(userId);
-                   String successMsg = "芝麻粒-TK 加载成功✨";
-                   Log.record(successMsg);
-                   Toast.show(successMsg);
-               }
-
-               offline = false;
-               init = true;
-               
-               // 首次初始化后，立即执行一次任务并调度下次执行
-               execHandler();
-               
-               return true;
+                Model.bootAllModel(classLoader);
+                Status.load(userId);
+                DataStore.INSTANCE.init(Files.CONFIG_DIR);
+                updateDay(userId);
+                String successMsg = "芝麻粒-TK 加载成功✨";
+                Log.record(successMsg);
+                Toast.show(successMsg);
+            }
+            offline = false;
+            init = true;
+            // 首次初始化后，立即执行一次任务并调度下次执行
+            execHandler();
+            return true;
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "startHandler", th);
             Toast.show("芝麻粒加载失败 🎃");
             return false;
         }
     }
-
 
 
     /**
@@ -940,6 +928,7 @@ public class ApplicationHook {
     static synchronized void destroyHandler(Boolean force) {
         try {
             if (force) {
+                GlobalThreadPools.INSTANCE.shutdownAndRestart();
                 if (service != null) {
                     stopHandler();
                     BaseModel.destroyData();
@@ -949,8 +938,6 @@ public class ApplicationHook {
                     Config.unload();
                     UserMap.unload();
                 }
-
-
                 // 协程调度器会自动清理，无需手动释放唤醒锁
                 synchronized (rpcBridgeLock) {
                     if (rpcBridge != null) {
@@ -959,8 +946,8 @@ public class ApplicationHook {
                         rpcBridge = null;
                     }
                 }
-                init = false;
-                service = null;
+//                init = false;
+//                service = null;
             } else {
                 ModelTask.stopAllTask();
             }
@@ -1043,8 +1030,8 @@ public class ApplicationHook {
 
     /**
      * 通用广播发送方法（重构：消除重复代码）
-     * 
-     * @param action 广播动作
+     *
+     * @param action   广播动作
      * @param errorMsg 错误日志消息
      */
     private static void sendBroadcast(String action, String errorMsg) {
@@ -1055,7 +1042,7 @@ public class ApplicationHook {
             Log.printStackTrace(TAG, th);
         }
     }
-    
+
     /**
      * 通过广播发送重新登录的指令
      */
@@ -1081,7 +1068,7 @@ public class ApplicationHook {
     /**
      * 工具方法：将 Calendar 重置为当天午夜 0 点
      * 重构：消除重复代码
-     * 
+     *
      * @param calendar 要重置的 Calendar 对象
      */
     private static void resetToMidnight(Calendar calendar) {
@@ -1102,7 +1089,7 @@ public class ApplicationHook {
                     Log.runtime(TAG, "⚠️ 无法获取 AlipayApplication 类");
                     return null;
                 }
-                
+
                 Object alipayApplicationInstance = XposedHelpers.callStaticMethod(
                         alipayApplicationClass, "getInstance"
                 );
@@ -1142,7 +1129,7 @@ public class ApplicationHook {
                 Log.runtime(TAG, "⚠️ 无法获取 SocialSdkContactService 类");
                 return null;
             }
-            
+
             return XposedHelpers.callMethod(
                     getServiceObject(socialSdkClass.getName()),
                     "getMyAccountInfoModelByLocal");
@@ -1204,30 +1191,30 @@ public class ApplicationHook {
                             Log.printStack(TAG);
                             GlobalThreadPools.INSTANCE.execute(() -> initHandler(true));
                             break;
-                       case BroadcastActions.EXECUTE:
-                           Log.printStack(TAG);
-                           if (intent.getBooleanExtra("alarm_triggered", false)) {
-                               alarmTriggeredFlag = true;
-                               Log.record(TAG, "⏰ 收到定时任务触发广播 (闹钟调度器)");
-                               WakeLockManager.INSTANCE.acquire(context, 600_000L); // 获取10分钟的唤醒锁
-                           }
-                           // 如果已初始化，直接执行任务；否则先初始化
-                           if (init) {
-                               Log.record(TAG, "✅ 模块已初始化，开始执行任务");
-                               execHandler();
-                           } else {
-                               // Service 已就绪，可以初始化
-                               Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
-                               GlobalThreadPools.INSTANCE.execute(() -> {
-                                   if (initHandler(false)) {
-                                       Log.record(TAG, "✅ 初始化成功，开始执行任务");
-                                       execHandler();
-                                   }
-                               });
-                           }
-                           break;
+                        case BroadcastActions.EXECUTE:
+                            Log.printStack(TAG);
+                            if (intent.getBooleanExtra("alarm_triggered", false)) {
+                                alarmTriggeredFlag = true;
+                                Log.record(TAG, "⏰ 收到定时任务触发广播 (闹钟调度器)EXECUTE");
+                                WakeLockManager.INSTANCE.acquire(context, 600_000L); // 获取10分钟的唤醒锁
+                            }
+                            // 如果已初始化，直接执行任务；否则先初始化
+                            if (init) {
+                                Log.record(TAG, "✅ 模块已初始化，开始执行任务EXECUTE");
+                                execHandler();
+                            } else {
+                                // Service 已就绪，可以初始化
+                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程EXECUTE");
+                                GlobalThreadPools.INSTANCE.execute(() -> {
+                                    if (initHandler(true )) {
+                                        Log.record(TAG, "✅ 初始化成功，开始执行任务EXECUTE");
+                                        execHandler();
+                                    }
+                                });
+                            }
+                            break;
                         case BroadcastActions.PRE_WAKEUP:
-                            Log.record(TAG, "⏰ 收到唤醒广播，准备执行任务");
+                            Log.record(TAG, "⏰ 收到唤醒广播，准备执行任务PRE_WAKEUP");
                             WakeLockManager.INSTANCE.acquire(context, 120_000L); // 2 minute wakelock
                             alarmTriggeredFlag = true;
 
@@ -1235,10 +1222,10 @@ public class ApplicationHook {
                             if (init) {
                                 execHandler();
                             } else {
-                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程");
+                                Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程PRE_WAKEUP");
                                 GlobalThreadPools.INSTANCE.execute(() -> {
                                     if (initHandler(false)) {
-                                        Log.record(TAG, "✅ 初始化成功，开始执行任务");
+                                        Log.record(TAG, "✅ 初始化成功，开始执行任务PRE_WAKEUP");
                                         execHandler();
                                     }
                                 });
