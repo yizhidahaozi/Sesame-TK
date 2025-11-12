@@ -20,6 +20,15 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        splits {
+            abi {
+                isEnable = true
+                reset()
+                include("armeabi-v7a", "arm64-v8a")
+                isUniversalApk = true
+            }
+        }
+
     }
     val gitCommitCount: Int = runCatching {
         val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
@@ -37,13 +46,6 @@ android {
         minSdk = 24
         targetSdk = 36
 
-        if (!isCIBuild) {
-            ndk {
-                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-            }
-        }
-
-
         val buildDate = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
@@ -60,7 +62,7 @@ android {
 
         versionCode = gitCommitCount
         val buildTag = "beta"
-        versionName = "v0.2.8.魔改版rc$gitCommitCount-$buildTag"
+        versionName = "v0.2.8.rc$gitCommitCount-$buildTag"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
@@ -68,8 +70,10 @@ android {
         buildConfigField("String", "BUILD_TAG", "\"$buildTag\"")
         buildConfigField("String", "VERSION", "\"$versionName\"")
 
-        ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+        if (isCIBuild) {
+            ndk {
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+            }
         }
 
         testOptions {
@@ -79,60 +83,21 @@ android {
         }
     }
 
+
+
     buildFeatures {
         buildConfig = true
         compose = true
     }
 
-
-    flavorDimensions += "default"
-    productFlavors {
-        create("normal") {
-            dimension = "default"
-            extra.set("applicationType", "Normal")
-        }
-        create("compatible") {
-            dimension = "default"
-            extra.set("applicationType", "Compatible")
-        }
-    }
     compileOptions {
-        // 全局默认设置
-        isCoreLibraryDesugaringEnabled = true // 启用脱糖
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlin {
         compilerOptions {
             jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        }
-    }
-
-    productFlavors.all {
-        when (name) {
-            "normal" -> {
-                compileOptions {
-                    sourceCompatibility = JavaVersion.VERSION_17
-                    targetCompatibility = JavaVersion.VERSION_17
-                }
-                kotlin {
-                    compilerOptions {
-                        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                    }
-                }
-            }
-
-            "compatible" -> {
-                compileOptions {
-                    sourceCompatibility = JavaVersion.VERSION_11
-                    targetCompatibility = JavaVersion.VERSION_11
-                }
-                kotlin {
-                    compilerOptions {
-                        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
-                    }
-                }
-            }
         }
     }
 
@@ -178,14 +143,15 @@ android {
     applicationVariants.all {
         val variant = this
         variant.outputs.all {
-            val flavorName = variant.flavorName.replaceFirstChar { it.uppercase() }
-            val fileName = "Sesame-TK-$flavorName-${variant.versionName}.apk"
-            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = fileName
+            val output = this
+            val abiName = output.filters.find { it.filterType == "ABI" }?.identifier ?: "universal"
+            val fileName = "Sesame-TK-${abiName}-${variant.versionName}.apk"
+            (output as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = fileName
         }
     }
 }
-dependencies {
 
+dependencies {
     // Shizuku 相关依赖 - 用于获取系统级权限
     implementation(libs.rikka.shizuku.api)        // Shizuku API
     implementation(libs.rikka.shizuku.provider)   // Shizuku 提供者
@@ -235,9 +201,8 @@ dependencies {
     // 仅编译时依赖 - Xposed 相关
     compileOnly(files("libs/api-82.jar"))          // Xposed API 82
     compileOnly(files("libs/api-100.aar"))         // Xposed API 100 https://github.com/libxposed/api
-    implementation (files("libs/interface-100.aar")) // Xposed 模块接口 https://github.com/libxposed/api
+    implementation(files("libs/interface-100.aar")) // Xposed 模块接口 https://github.com/libxposed/api
     implementation(files("libs/service-100-1.0.0.aar"))  // https://github.com/libxposed/service
-//    compileOnly(files("libs/helper-100.aar"))        // https://github.com/libxposed/helper
 
     // 代码生成和工具库
     compileOnly(libs.lombok)                       // Lombok 注解处理器（编译时）
@@ -252,13 +217,8 @@ dependencies {
 
     implementation(libs.hiddenapibypass)           // 隐藏 API 访问绕过
 
-    // Normal 构建变体专用依赖 - Jackson JSON 处理库
-    add("normalImplementation", libs.jackson.core)         // Jackson 核心库
-    add("normalImplementation", libs.jackson.databind)     // Jackson 数据绑定
-    add("normalImplementation", libs.jackson.annotations)  // Jackson 注解
-
-    // Compatible 构建变体专用依赖 - 兼容版本的 Jackson 库
-    add("compatibleImplementation", libs.jackson.core.compatible)         // Jackson 核心库（兼容版）
-    add("compatibleImplementation", libs.jackson.databind.compatible)     // Jackson 数据绑定（兼容版）
-    add("compatibleImplementation", libs.jackson.annotations.compatible)  // Jackson 注解（兼容版）
+    // Jackson JSON 处理库
+    implementation(libs.jackson.core)
+    implementation(libs.jackson.databind)
+    implementation(libs.jackson.annotations)
 }
