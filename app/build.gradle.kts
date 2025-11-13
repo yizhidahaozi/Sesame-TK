@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.rikka.tools.refine)
 }
 var isCIBuild: Boolean = System.getenv("CI").toBoolean()
+var abilities = listOf("armeabi-v7a", "arm64-v8a","x86","x86_64")
 
 //isCIBuild = true // 没有c++源码时开启CI构建, push前关闭
 
@@ -24,7 +25,7 @@ android {
             abi {
                 isEnable = true
                 reset()
-                include("armeabi-v7a", "arm64-v8a")
+                include("armeabi-v7a", "arm64-v8a","x86","x86_64")
                 isUniversalApk = true
             }
         }
@@ -72,7 +73,7 @@ android {
 
         if (isCIBuild) {
             ndk {
-                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a","x86","x86_64"))
             }
         }
 
