@@ -37,7 +37,6 @@ import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasBombCard
 import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasShield
 import fansirsqi.xposed.sesame.task.antForest.Privilege.studentSignInRedEnvelope
 import fansirsqi.xposed.sesame.task.antForest.Privilege.youthPrivilege
-import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.ui.ObjReference
 import fansirsqi.xposed.sesame.util.Average
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
@@ -2834,12 +2833,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val resultCode = jo.optString("resultCode")
                 when (resultCode) {
                     "SUCCESS" -> {
-                        val treeEnergy = jo.optJSONObject("treeEnergy")
-                        val currentEnergy = if (treeEnergy != null) treeEnergy.optString(
+                        val userBaseInfo = jo.optJSONObject("userBaseInfo")
+                        val currentEnergy = userBaseInfo?.optInt(
                             "currentEnergy",
-                            "未知"
-                        ) else "未知"
-                        Log.forest("好友浇水🚿[" + UserMap.getMaskName(userId) + "]#" + waterEnergy + "g，剩余能量[" + currentEnergy + "g]")
+                            0
+                        ) ?: "未知"
+                        val totalEnergy = userBaseInfo?.optInt(
+                            "totalEnergy",
+                            0
+                        ) ?: "未知"
+                        Log.forest("好友浇水🚿[${UserMap.getMaskName(userId)}]#$waterEnergy g，当前能量状态 [$currentEnergy/$totalEnergy g]")
                         wateredTimes++
                         GlobalThreadPools.sleepCompat(1200L)
                     }
