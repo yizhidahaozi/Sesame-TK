@@ -51,7 +51,7 @@ class ForestChouChouLe {
         
         // 已知的抽奖场景配置
         private val SCENES = listOf(
-            Scene("2025101301", "ANTFOREST_NORMAL_DRAW", "森林抽抽乐普通版", "forest::chouChouLe::normal::completed"),
+            Scene("2025112701", "ANTFOREST_NORMAL_DRAW", "森林抽抽乐普通版", "forest::chouChouLe::normal::completed"),
             Scene("20251024", "ANTFOREST_ACTIVITY_DRAW", "森林抽抽乐活动版", "forest::chouChouLe::activity::completed")
         )
     }
