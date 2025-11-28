@@ -538,6 +538,7 @@ public class ApplicationHook {
                                     XposedEnv.processName,
                                     General.PACKAGE_NAME
                             );
+                            
                         } catch (Throwable e) {
                             Log.printStackTrace(e);
                         }

@@ -7,6 +7,8 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker.checkRes
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
+import java.util.Locale
+import java.util.Locale.getDefault
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -36,7 +38,7 @@ class ForestChouChouLe {
         private val BLOCKED_TYPES = setOf("FOREST_NORMAL_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
-        private val BLOCKED_NAMES = setOf("玩游戏得新机会") // 屏蔽的任务名称关键词
+        private val BLOCKED_NAMES = setOf("玩游戏得") // 屏蔽的任务名称关键词
 
         /**
          * 抽奖场景数据类
@@ -49,23 +51,51 @@ class ForestChouChouLe {
             val taskCode get() = "${code}_TASK"  // 任务场景代码
         }
         
-        // 已知的抽奖场景配置
-        private val SCENES = listOf(
-            Scene("2025101301", "ANTFOREST_NORMAL_DRAW", "森林抽抽乐普通版", "forest::chouChouLe::normal::completed"),
-            Scene("20251024", "ANTFOREST_ACTIVITY_DRAW", "森林抽抽乐活动版", "forest::chouChouLe::activity::completed")
-        )
+        // 动态获取抽奖场景配置
+        private fun getScenes(): List<Scene> {
+            return runCatching {
+                val scenes = mutableListOf<Scene>()
+                // 使用任意场景代码查询可用的抽奖活动
+                val response = JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_ACTIVITY_DRAW", SOURCE))
+                if (response.optBoolean("success", false)) {
+                    val drawSceneGroups = response.getJSONObject("resData").getJSONArray("drawSceneGroups")
+                    for (i in 0 until drawSceneGroups.length()) {
+                        val sceneGroup = drawSceneGroups.getJSONObject(i)
+                        val drawActivity = sceneGroup.getJSONObject("drawActivity")
+                        val activityId = drawActivity.getString("activityId")
+                        val sceneCode = drawActivity.getString("sceneCode")
+                        val name = sceneGroup.getString("name")
+                        val flag = when (sceneCode) {
+                            "ANTFOREST_NORMAL_DRAW" -> "forest::chouChouLe::normal::completed"
+                            "ANTFOREST_ACTIVITY_DRAW" -> "forest::chouChouLe::activity::completed"
+                            else -> "forest::chouChouLe::${sceneCode.lowercase(getDefault())}::completed"
+                        }
+                        scenes.add(Scene(activityId, sceneCode, name, flag))
+                    }
+                }
+                scenes
+            }.getOrElse {
+                Log.printStackTrace(TAG, "获取抽奖场景配置失败，使用默认配置", it)
+                // 失败时返回默认配置
+                listOf(
+                    Scene("2025112701", "ANTFOREST_NORMAL_DRAW", "森林抽抽乐普通版", "forest::chouChouLe::normal::completed"),
+                    Scene("20251024", "ANTFOREST_ACTIVITY_DRAW", "森林抽抽乐活动版", "forest::chouChouLe::activity::completed")
+                )
+            }
+        }
     }
     
     private val taskTryCount = ConcurrentHashMap<String, AtomicInteger>()
     
     fun chouChouLe() {
         runCatching {
-            if (SCENES.all { Status.hasFlagToday(it.flag) }) {
+            val scenes = getScenes()
+            if (scenes.all { Status.hasFlagToday(it.flag) }) {
                 Log.record("⏭️ 今天所有森林抽抽乐任务已完成，跳过执行")
                 return
             }
             Log.record("开始处理森林抽抽乐")
-            SCENES.forEach { processScene(it); sleepCompat(3000L) }
+            scenes.forEach { processScene(it); sleepCompat(3000L) }
         }.onFailure { Log.printStackTrace(TAG, "执行异常", it) }
     }
     
@@ -147,7 +177,11 @@ class ForestChouChouLe {
                 val baseInfo = task.getJSONObject("taskBaseInfo")
                 val taskType = baseInfo.getString("taskType")
                 val taskStatus = baseInfo.getString("taskStatus")
-                if (BLOCKED_TYPES.any { it in taskType }) continue  // 跳过屏蔽任务
+                val bizInfo = JSONObject(baseInfo.getString("bizInfo"))
+                val taskName = bizInfo.optString("title", taskType)
+                
+                // 跳过屏蔽任务（类型和名称都检查）
+                if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }) continue
                 
                 total++
                 
@@ -156,10 +190,8 @@ class ForestChouChouLe {
                     completed++
                 } else {
                     allDone = false
-                    val bizInfo = JSONObject(baseInfo.getString("bizInfo"))
-                    val title = bizInfo.optString("title", taskType)
                     val btnText = bizInfo.optString("completeBtnText", "")
-                    Log.record("${s.name} 未完成任务: $title [状态: $taskStatus, 按钮: $btnText]")
+                    Log.record("${s.name} 未完成任务: $taskName [状态: $taskStatus, 按钮: $btnText]")
                 }
             }
             
