@@ -38,7 +38,7 @@ class ForestChouChouLe {
         private val BLOCKED_TYPES = setOf("FOREST_NORMAL_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
-        private val BLOCKED_NAMES = setOf("玩游戏得") // 屏蔽的任务名称关键词
+        private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱") // 屏蔽的任务名称关键词
 
         /**
          * 抽奖场景数据类
@@ -227,7 +227,7 @@ class ForestChouChouLe {
         Log.record("${s.name} 任务: $taskName [$taskType] 状态: $taskStatus 进度: $current/$limit")
         
         // 跳过屏蔽任务（邀请好友类）
-        if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }) {
+        if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }){
             Log.record("${s.name} 已屏蔽任务，跳过：$taskName (类型: $taskType)")
             return false
         }
