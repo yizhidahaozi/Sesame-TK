@@ -2,7 +2,7 @@ package fansirsqi.xposed.sesame.task.antOrchard;
 import java.util.List;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 public class AntOrchardRpcCall {
-    private static final String VERSION = "0.1.2401111000.31";
+    private static final String VERSION = "20250812.01";
     public static String orchardIndex() {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
                 "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
@@ -143,6 +143,16 @@ public class AntOrchardRpcCall {
                 "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"shareId\":\""
                         + shareId
                         + "\",\"source\":\"share\",\"version\":\""
+                        + VERSION + "\"}]");
+    }
+
+    /**
+     * 获取好友列表
+     * @return
+     */
+    public static String friendList() {
+        return RequestManager.requestString("com.alipay.antorchard.friendList",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
                         + VERSION + "\"}]");
     }
 }

@@ -75,7 +75,7 @@ public class AntOrchard extends ModelTask {
         if (jo.optBoolean("userOpenOrchard")) {
           JSONObject taobaoData = new JSONObject(jo.getString("taobaoData"));
           treeLevel = Integer.toString(taobaoData.getJSONObject("gameInfo").getJSONObject("plantInfo").getJSONObject("seedStage").getInt("stageLevel"));
-          JSONObject joo = new JSONObject(AntOrchardRpcCall.mowGrassInfo());
+          JSONObject joo = new JSONObject(AntOrchardRpcCall.friendList());
           if ("100".equals(jo.getString("resultCode"))) {
             userId = joo.getString("userId");
             if (jo.has("lotteryPlusInfo")) drawLotteryPlus(jo.getJSONObject("lotteryPlusInfo"));
