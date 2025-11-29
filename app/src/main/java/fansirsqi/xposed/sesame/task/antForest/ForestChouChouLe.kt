@@ -38,7 +38,7 @@ class ForestChouChouLe {
         private val BLOCKED_TYPES = setOf("FOREST_NORMAL_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_SHARE",
                                     "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
-        private val BLOCKED_NAMES = setOf("玩游戏得") // 屏蔽的任务名称关键词
+        private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱") // 屏蔽的任务名称关键词
 
         /**
          * 抽奖场景数据类
@@ -56,9 +56,9 @@ class ForestChouChouLe {
             return runCatching {
                 val scenes = mutableListOf<Scene>()
                 // 使用任意场景代码查询可用的抽奖活动
-                val response = JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_ACTIVITY_DRAW", SOURCE))
+                val response = JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_NORMAL_DRAW", SOURCE))
                 if (response.optBoolean("success", false)) {
-                    val drawSceneGroups = response.getJSONObject("resData").getJSONArray("drawSceneGroups")
+                    val drawSceneGroups = response.getJSONArray("drawSceneGroups")
                     for (i in 0 until drawSceneGroups.length()) {
                         val sceneGroup = drawSceneGroups.getJSONObject(i)
                         val drawActivity = sceneGroup.getJSONObject("drawActivity")
@@ -227,7 +227,7 @@ class ForestChouChouLe {
         Log.record("${s.name} 任务: $taskName [$taskType] 状态: $taskStatus 进度: $current/$limit")
         
         // 跳过屏蔽任务（邀请好友类）
-        if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }) {
+        if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }){
             Log.record("${s.name} 已屏蔽任务，跳过：$taskName (类型: $taskType)")
             return false
         }
