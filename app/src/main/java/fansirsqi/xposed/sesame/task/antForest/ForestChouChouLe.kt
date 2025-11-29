@@ -56,9 +56,9 @@ class ForestChouChouLe {
             return runCatching {
                 val scenes = mutableListOf<Scene>()
                 // 使用任意场景代码查询可用的抽奖活动
-                val response = JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_ACTIVITY_DRAW", SOURCE))
+                val response = JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_NORMAL_DRAW", SOURCE))
                 if (response.optBoolean("success", false)) {
-                    val drawSceneGroups = response.getJSONObject("resData").getJSONArray("drawSceneGroups")
+                    val drawSceneGroups = response.getJSONArray("drawSceneGroups")
                     for (i in 0 until drawSceneGroups.length()) {
                         val sceneGroup = drawSceneGroups.getJSONObject(i)
                         val drawActivity = sceneGroup.getJSONObject("drawActivity")
