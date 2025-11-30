@@ -12,7 +12,7 @@ public class GreenLife {
             if (ResChecker.checkRes(TAG,jo)) {
                 JSONObject data = jo.getJSONObject("data");
                 if (data.optBoolean("canSendEnergy", false)) {
-                    CoroutineUtils.sleepCompat(300);
+                    CoroutineUtils.sleepCompat(1000);
                     jo = new JSONObject(AntForestRpcCall.sendEnergyByAction(sourceType));
                     if (ResChecker.checkRes(TAG,jo)) {
                         data = jo.getJSONObject("data");

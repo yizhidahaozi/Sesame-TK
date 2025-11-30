@@ -1043,7 +1043,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 if (forestMarket!!.value) {
                     GreenLife.ForestMarket("GREEN_LIFE")
-                    GreenLife.ForestMarket("ANTFOREST")
+                  //  GreenLife.ForestMarket("ANTFOREST")  二级条目暂时关闭
                     tc.countDebug("森林集市")
                 }
 
