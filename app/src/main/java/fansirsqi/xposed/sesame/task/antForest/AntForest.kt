@@ -968,12 +968,17 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 后续任务流程
             // -------------------------------
             if (selfHomeObj != null) {
+                val processObj = if (isTeam(selfHomeObj)){
+                    selfHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember")
+                } else {
+                    selfHomeObj
+                }
                 if (collectWateringBubble!!.value) {
-                    wateringBubbles(selfHomeObj)
+                    wateringBubbles(processObj)
                     tc.countDebug("收取浇水金球")
                 }
                 if (collectProp!!.value) {
-                    givenProps(selfHomeObj)
+                    givenProps(processObj)
                     tc.countDebug("收取道具")
                 }
                 if (userPatrol!!.value) {
@@ -1327,7 +1332,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun handleUserProps(selfHomeObj: JSONObject) {
         try {
-            val usingUserProps = selfHomeObj.optJSONArray("usingUserPropsNew")
+            val usingUserProps = if(isTeam(selfHomeObj)) {
+                selfHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember")
+                    .optJSONArray("usingUserProps")
+            } else {
+                selfHomeObj.optJSONArray("usingUserPropsNew")
+                }
             if (usingUserProps == null || usingUserProps.length() == 0) {
                 return  // 如果没有使用中的用户道具，直接返回
             }
@@ -1335,14 +1345,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             for (i in 0..<usingUserProps.length()) {
                 val jo = usingUserProps.getJSONObject(i)
                 if ("animal" != jo.getString("propGroup")) {
+                    canConsumeAnimalProp = true
                     continue  // 如果当前道具不是动物类型，跳过
                 }
+                canConsumeAnimalProp = false // 设置标志位，表示不可再使用动物道具
                 val extInfo = JSONObject(jo.getString("extInfo"))
                 if (extInfo.optBoolean("isCollected")) {
                     Log.runtime(TAG, "动物派遣能量已被收取")
                     continue  // 如果动物能量已经被收取，跳过
                 }
-                canConsumeAnimalProp = false // 设置标志位，表示不可再使用动物道具
                 val propId = jo.getString("propId")
                 val propType = jo.getString("propType")
                 val shortDay = extInfo.getString("shortDay")
@@ -1682,9 +1693,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         availableBubbles: MutableList<Long>,
         userId: String?
     ) {
-        if (!userHomeObj.has("bubbles")) return
-        val jaBubbles = userHomeObj.getJSONArray("bubbles")
-        if (jaBubbles.length() == 0) return
+        val jaBubbles = if (isTeam(userHomeObj)) {
+            userHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember").optJSONArray("bubbles")
+        } else {
+            userHomeObj.optJSONArray("bubbles")
+        }
+
+        if (jaBubbles == null || jaBubbles.length() == 0) return
 
         val userName = getAndCacheUserName(userId, userHomeObj, null)
         var waitingBubblesCount = 0
@@ -2697,7 +2712,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             var usingUserPropsNew = joHomePage.getJSONArray("loginUserUsingPropNew")
             if (usingUserPropsNew.length() == 0) {
-                usingUserPropsNew = joHomePage.getJSONArray("usingUserPropsNew")
+                usingUserPropsNew = if (isTeam(joHomePage)) {
+                    joHomePage.optJSONObject("teamHomeResult").optJSONObject("mainMember")
+                        .optJSONArray("usingUserProps")
+                } else {
+                    joHomePage.getJSONArray("usingUserPropsNew")
+                }
             }
             for (i in 0..<usingUserPropsNew.length()) {
                 val userUsingProp = usingUserPropsNew.getJSONObject(i)
@@ -4857,5 +4877,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 message = "异常：${e.message}"
             )
         }
+    }
+
+    /**
+     * 判断是否为团队
+     *
+     * @param homeObj 用户主页的JSON对象
+     * @return 是否为团队
+     */
+    private fun isTeam(homeObj: JSONObject): Boolean {
+        return homeObj.optString("nextAction", "") == "Team"
     }
 }
