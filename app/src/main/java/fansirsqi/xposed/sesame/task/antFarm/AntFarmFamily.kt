@@ -383,7 +383,7 @@ data object AntFarmFamily {
                         val content = resp3.getString("content")
                         val resp4 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
                         if (ResChecker.checkRes(TAG, resp4)) {
-                            Log.farm("家庭任务�道早安: $content �")
+                            Log.farm("家庭任务🏠道早安: $content 🌈")
                             Status.setFlagToday("antFarm::deliverMsgSend")
                         }
                     }

@@ -728,7 +728,7 @@ public static String QueryExpandContent(String deliverId) throws JSONException {
     args.put("sceneCode", "ANTFARM");
     args.put("source", "H5");
     args.put("deliverId", deliverId);
-    String params = "[{" + args + "}]";
+    String params = "[" + args + "]";
     return RequestManager.requestString("com.alipay.antfarm.QueryExpandContent", params);
 }
 
@@ -743,7 +743,7 @@ public static String deliverMsgSend(String groupId, JSONArray friendUserIds, Str
     args.put("sceneCode", "ANTFARM");
     args.put("source", "H5");
     args.put("spaceType", "ChickFamily");
-    String params = "[{" + args + "}]";
+    String params = "[" + args + "]";
     return RequestManager.requestString("com.alipay.antfarm.DeliverMsgSend", params);
 }
 
