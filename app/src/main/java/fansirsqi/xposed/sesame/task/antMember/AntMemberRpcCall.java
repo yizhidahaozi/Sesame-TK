@@ -408,4 +408,49 @@ public class AntMemberRpcCall {
         String data = "[{\"benefitId\":\"" + benefitId + "\",\"cityCode\":\"\",\"exchangeType\":\"POINT_PAY\",\"itemId\":\"" + itemId + "\",\"miniAppId\":\"\",\"orderSource\":\"\",\"requestId\":\"" + requestId + "\",\"requestSourceInfo\":\"\",\"sourcePassMap\":{\"alipayClientVersion\":\"" + alipayClientVersion + "\",\"innerSource\":\"\",\"mobileOsType\":\"Android\",\"source\":\"\",\"unid\":\"\"},\"userOutAccount\":\"\"}]";
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
     }
+
+    /**
+     * 芝麻炼金/积分首页
+     */
+    public static String alchemyQueryHome() {
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.queryHome",
+                "[{}]");
+    }
+
+    /**
+     * [日志对应] 芝麻炼金-执行炼金
+     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy
+     * Params: [null]
+     */
+    public static String alchemyExecute() {
+        // 日志中 requestData 为 [null]
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy", "[null]");
+    }
+
+    /**
+     * [日志对应] 芝麻炼金-签到列表查询
+     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists
+     */
+    public static String alchemyQueryCheckIn() {
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists",
+                "[{\"sceneCode\":\"alchemy\",\"version\":\"2025-10-22\"}]");
+    }
+
+    /**
+     * [日志对应] 芝麻炼金-时段奖励查询 (午饭/晚饭)
+     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask
+     */
+    public static String alchemyQueryTimeLimitedTask() {
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask",
+                "[{}]");
+    }
+
+    /**
+     * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
+     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3
+     */
+    public static String alchemyQueryListV3() {
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
+                "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
+    }
 }

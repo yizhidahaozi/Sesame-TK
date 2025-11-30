@@ -22,6 +22,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+
 public class AntMember extends ModelTask {
   private static final String TAG = AntMember.class.getSimpleName();
   @Override
@@ -51,6 +52,9 @@ public class AntMember extends ModelTask {
   private BooleanModelField merchantMoreTask;
   private BooleanModelField beanSignIn;
   private BooleanModelField beanExchangeBubbleBoost;
+  // 芝麻炼金
+  private BooleanModelField sesameAlchemy;
+
   @Override
   public ModelFields getFields() {
     ModelFields modelFields = new ModelFields();
@@ -61,6 +65,8 @@ public class AntMember extends ModelTask {
     modelFields.addField(sesameTask = new BooleanModelField("sesameTask", "芝麻信用|芝麻粒信用任务", false));
     modelFields.addField(collectSesame = new BooleanModelField("collectSesame", "芝麻信用|芝麻粒领取", false));
     modelFields.addField(collectSesameWithOneClick = new BooleanModelField("collectSesameWithOneClick", "芝麻信用|芝麻粒领取使用一键收取", false));
+    // 芝麻炼金
+    modelFields.addField(sesameAlchemy = new BooleanModelField("sesameAlchemy", "芝麻炼金", false));
     modelFields.addField(collectInsuredGold = new BooleanModelField("collectInsuredGold", "蚂蚁保|保障金领取", false));
     modelFields.addField(enableGoldTicket = new BooleanModelField("enableGoldTicket", "黄金票签到", false));
     modelFields.addField(enableGameCenter = new BooleanModelField("enableGameCenter", "游戏中心签到", false));
@@ -71,6 +77,7 @@ public class AntMember extends ModelTask {
     modelFields.addField(beanExchangeBubbleBoost = new BooleanModelField("beanExchangeBubbleBoost", "安心豆兑换时光加速器", false));
     return modelFields;
   }
+
   @Override
   public Boolean check() {
     if (TaskCommon.IS_ENERGY_TIME){
@@ -83,6 +90,7 @@ public class AntMember extends ModelTask {
       return true;
     }
   }
+
   @Override
   protected void runJava() {
     try {
@@ -96,7 +104,10 @@ public class AntMember extends ModelTask {
       if (memberPointExchangeBenefit.getValue()) {
         memberPointExchangeBenefit();
       }
-      if ((sesameTask.getValue() || collectSesame.getValue()) && checkSesameCanRun()) {
+      // 芝麻信用相关检测
+      boolean isSesameOpened = checkSesameCanRun();
+
+      if ((sesameTask.getValue() || collectSesame.getValue()) && isSesameOpened) {
         if (sesameTask.getValue()) {
           doAllAvailableSesameTask();
         }
@@ -118,6 +129,10 @@ public class AntMember extends ModelTask {
       }
       if (beanExchangeBubbleBoost.getValue()) {
         beanExchangeBubbleBoost();
+      }
+      // 芝麻炼金
+      if (sesameAlchemy.getValue() && isSesameOpened) {
+        doSesameAlchemy();
       }
       if (merchantSign.getValue() || merchantKmdk.getValue() || merchantMoreTask.getValue()) {
         JSONObject jo = new JSONObject(AntMemberRpcCall.transcodeCheck());
@@ -233,6 +248,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 会员任务-逛一逛
    * 单次执行 1
@@ -259,6 +275,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 会员积分收取
    * @param page 第几页
@@ -298,6 +315,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 检查是否满足运行芝麻信用任务的条件
    * @return bool
@@ -392,6 +410,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG + ".doAllAvailableSesameTask", t);
     }
   }
+
   /**
    * 不能完成的任务黑名单（根据title关键词匹配）
    */
@@ -575,6 +594,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG + ".collectSesame", t);
     }
   }
+
   /**
    * 商家开门打卡签到
    */
@@ -601,6 +621,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 商家开门打卡报名
    */
@@ -638,6 +659,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 商家积分签到
    */
@@ -663,6 +685,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 商家积分任务
    */
@@ -760,6 +783,7 @@ public class AntMember extends ModelTask {
       }
     }
   }
+
   /**
    * 完成商家积分任务
    * @param taskCode 任务代码
@@ -788,6 +812,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /**
    * 保障金领取
    */
@@ -830,6 +855,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG + ".collectInsuredGold", t);
     }
   }
+
   /**
    * 执行会员任务 类型1
    * @param task 单个任务对象
@@ -888,6 +914,7 @@ public class AntMember extends ModelTask {
       return false;
     }
   }
+
   public void kbMember() {
     try {
       if (!Status.canKbSignInToday()) {
@@ -909,6 +936,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   private void goldTicket() {
     try {
       // 签到
@@ -919,6 +947,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   /** 收取黄金票 */
   private void goldBillCollect(String signInfo) {
     try {
@@ -943,6 +972,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, th);
     }
   }
+
   private void enableGameCenter() {
     try {
       try {
@@ -995,6 +1025,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   private void beanSignIn() {
     try {
       try {
@@ -1026,6 +1057,7 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }
   }
+
   private void beanExchangeBubbleBoost() {
     try {
       // 检查RPC调用是否可用
@@ -1074,6 +1106,198 @@ public class AntMember extends ModelTask {
     } catch (Throwable t) {
       Log.runtime(TAG, "beanExchangeBubbleBoost err:");
       Log.printStackTrace(TAG, t);
+    }
+  }
+
+  /**
+   * 芝麻炼金 - 优化版
+   */
+  private void doSesameAlchemy() {
+    try {
+      Log.record(TAG, "开始执行芝麻炼金⚗️");
+
+      // ================= Step 1: 自动炼金 (消耗芝麻粒升级) =================
+      String homeRes = AntMemberRpcCall.alchemyQueryHome();
+      JSONObject homeJo = new JSONObject(homeRes);
+      if (homeJo.optBoolean("success")) {
+        JSONObject data = homeJo.optJSONObject("data");
+        if (data != null) {
+          int zmlBalance = data.optInt("zmlBalance", 0);      // 当前芝麻粒
+          int cost = data.optInt("alchemyCostZml", 5);        // 单次消耗
+          boolean capReached = data.optBoolean("capReached", false); // 是否达到上限
+          int currentLevel = data.optInt("currentLevel", 0);
+
+          // 循环炼金逻辑
+          while (zmlBalance >= cost && !capReached) {
+            GlobalThreadPools.sleepCompat(1500);
+            String alchemyRes = AntMemberRpcCall.alchemyExecute();
+            JSONObject alchemyJo = new JSONObject(alchemyRes);
+
+            if (alchemyJo.optBoolean("success")) {
+              JSONObject alData = alchemyJo.optJSONObject("data");
+              if (alData != null) {
+                int goldNum = alData.optInt("goldNum", 0);
+                Log.other("芝麻炼金⚗️[炼金成功]#消耗" + cost + "粒 | 获得" + goldNum + "金 |当前等级Lv." + currentLevel);
+                zmlBalance -= cost;
+              } else {
+                break;
+              }
+            } else {
+              Log.record(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"));
+              break;
+            }
+          }
+        }
+      } else {
+        Log.record(TAG, "芝麻炼金首页查询失败");
+      }
+
+      // ================= Step 2: 自动签到 & 时段奖励 =================
+      String checkInRes = AntMemberRpcCall.alchemyQueryCheckIn();
+      JSONObject checkInJo = new JSONObject(checkInRes);
+      if (checkInJo.optBoolean("success")) {
+        JSONObject currentDay = checkInJo.optJSONObject("data").optJSONObject("currentDateCheckInTaskVO");
+        if (currentDay != null && "COMPLETED".equals(currentDay.optString("status"))) {
+          // Log.other("芝麻炼金⚗️[每日签到]#已完成");
+        }
+      }
+
+      AntMemberRpcCall.alchemyQueryTimeLimitedTask();
+      Log.record(TAG, "芝麻炼金⚗️[检查时段奖励]");
+
+      // ================= Step 3: 自动做任务 =================
+      Log.record(TAG, "芝麻炼金⚗️[开始扫描任务列表]");
+      String listRes = AntMemberRpcCall.alchemyQueryListV3();
+      JSONObject listJo = new JSONObject(listRes);
+
+      if (listJo.optBoolean("success")) {
+        JSONObject data = listJo.optJSONObject("data");
+        if (data != null) {
+          JSONArray toComplete = data.optJSONArray("toCompleteVOS");
+          if (toComplete != null) {
+            processAlchemyTasks(toComplete);
+          }
+          JSONObject dailyTaskVO = data.optJSONObject("dailyTaskListVO");
+          if (dailyTaskVO != null) {
+            processAlchemyTasks(dailyTaskVO.optJSONArray("waitJoinTaskVOS"));
+            processAlchemyTasks(dailyTaskVO.optJSONArray("waitCompleteTaskVOS"));
+          }
+        }
+      }
+
+      // ================= Step 4: [新增] 任务完成后一键收取芝麻粒 =================
+      Log.record(TAG, "芝麻炼金⚗️[任务处理完毕，准备收取芝麻粒]");
+      GlobalThreadPools.sleepCompat(2000); // 稍作等待，确保任务奖励到账
+
+      // 4.1 查询是否有可收取的芝麻粒
+      String queryFeedbackRes = AntMemberRpcCall.queryCreditFeedback();
+      JSONObject feedbackJo = new JSONObject(queryFeedbackRes);
+      if (feedbackJo.optBoolean("success")) {
+        JSONArray feedbackList = feedbackJo.optJSONArray("creditFeedbackVOS");
+        if (feedbackList != null && feedbackList.length() > 0) {
+          Log.record(TAG, "芝麻炼金⚗️[发现" + feedbackList.length() + "个待收取项，执行一键收取]");
+
+          // 4.2 执行一键收取
+          String collectRes = AntMemberRpcCall.collectAllCreditFeedback();
+          JSONObject collectJo = new JSONObject(collectRes);
+          if (collectJo.optBoolean("success")) {
+            Log.other("芝麻炼金⚗️[一键收取成功]#收割完毕");
+          } else {
+            Log.record(TAG, "芝麻炼金⚗️[一键收取失败]#" + collectJo.optString("resultView"));
+          }
+        } else {
+          Log.record(TAG, "芝麻炼金⚗️[当前无待收取芝麻粒]");
+        }
+      }
+
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG + ".doSesameAlchemy", t);
+    }
+  }
+
+  private void processAlchemyTasks(JSONArray taskList) throws JSONException {
+    if (taskList == null || taskList.length() == 0) return;
+
+    // 修改点4：定义黑名单
+    String[] blackList = {
+            "每日施肥",
+            "芝麻租赁",
+            "休闲小游戏",
+            "AQApp",
+            "订阅炼金",
+            "租游戏账号",
+            "芝麻大表鸽",
+            "坚持签到"
+    };
+
+    for (int i = 0; i < taskList.length(); i++) {
+      JSONObject task = taskList.getJSONObject(i);
+      String title = task.optString("title");
+      String templateId = task.optString("templateId");
+      boolean finishFlag = task.optBoolean("finishFlag", false);
+
+      if (finishFlag) continue;
+
+      // 修改点4：执行黑名单检查
+      boolean isBlack = false;
+      for (String blackKey : blackList) {
+        if (title.contains(blackKey)) {
+          isBlack = true;
+          break;
+        }
+      }
+      if (isBlack) {
+        Log.record(TAG, "跳过黑名单任务: " + title);
+        continue;
+      }
+
+      if (templateId.contains("invite") || templateId.contains("upload")
+              || templateId.contains("auth") || templateId.contains("banli")) {
+        continue;
+      }
+      String actionUrl = task.optString("actionUrl", "");
+      if (actionUrl.startsWith("alipays://") && !actionUrl.contains("chInfo")) {
+      }
+
+      Log.record(TAG, "芝麻炼金任务: " + title + " 准备执行");
+
+      String recordId = task.optString("recordId", "");
+
+      if (recordId.isEmpty()) {
+        String joinRes = AntMemberRpcCall.joinSesameTask(templateId);
+        JSONObject joinJo = new JSONObject(joinRes);
+        if (joinJo.optBoolean("success")) {
+          JSONObject joinData = joinJo.optJSONObject("data");
+          if (joinData != null) {
+            recordId = joinData.optString("recordId");
+          }
+          Log.record(TAG, "任务领取成功: " + title);
+          GlobalThreadPools.sleepCompat(1000);
+        } else {
+          Log.record(TAG, "任务领取失败: " + title + " - " + joinJo.optString("resultView"));
+          continue;
+        }
+      }
+
+      AntMemberRpcCall.feedBackSesameTask(templateId);
+
+      int sleepTime = 3000;
+      if (title.contains("浏览") || title.contains("逛")) {
+        sleepTime = 15000;
+      }
+      GlobalThreadPools.sleepCompat(sleepTime);
+
+      if (!recordId.isEmpty()) {
+        String finishRes = AntMemberRpcCall.finishSesameTask(recordId);
+        JSONObject finishJo = new JSONObject(finishRes);
+        if (finishJo.optBoolean("success")) {
+          int reward = task.optInt("rewardAmount", 0);
+          Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒");
+        } else {
+          Log.record(TAG, "任务提交失败: " + title + " - " + finishJo.optString("resultView"));
+        }
+      }
+      GlobalThreadPools.sleepCompat(2000);
     }
   }
 }
