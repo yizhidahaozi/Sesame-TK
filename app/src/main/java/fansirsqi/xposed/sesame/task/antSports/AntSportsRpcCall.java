@@ -1,4 +1,8 @@
 package fansirsqi.xposed.sesame.task.antSports;
+
+import org.json.JSONObject;
+
+import java.util.List; //健康岛导入的
 import fansirsqi.xposed.sesame.hook.RequestManager;
 public class AntSportsRpcCall {
     private static final String chInfo = "ch_appcenter__chsub_9patch",
@@ -330,4 +334,394 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
         String requestData = "[{\"chInfo\":\"healthstep\",\"currentBossId\":\"" + currentBossId + "\",\"memberId\":\"" + memberId + "\",\"originBossId\":\"" + originBossId + "\",\"priceInfo\":" + priceInfo + ",\"roomId\":\"" + roomId + "\"}]";
         return RequestManager.requestString("alipay.antsports.club.trade.buyMember", requestData);
     }
+    public class NeverlandRpcCall {
+
+        /**
+         * 健康岛 - 查询签到状态
+         * <p>
+         * RPC: com.alipay.neverland.biz.rpc.querySign
+         * <p>
+         * 请求示例：
+         * [
+         * {
+         * "signType": 3,
+         * "source": "jkdsportcard"
+         * }
+         * ]
+         * <p>
+         * 响应示例：
+         * {
+         * "success": true,
+         * "data": {
+         * "continuousSignInfo": {
+         * "bizDate": 1764463885808,
+         * "continuitySignedDayCount": 0,
+         * "signedToday": false,
+         * "signInNodes": [
+         * {
+         * "continuitySignDayAtOnce": 1,
+         * "rewardAmount": 5,
+         * "rewardType": "ENERGY",
+         * "signed": false,
+         * "todayFlg": true
+         * },
+         * {
+         * "continuitySignDayAtOnce": 2,
+         * "rewardAmount": 8,
+         * "rewardType": "ENERGY",
+         * "signed": false,
+         * "todayFlg": false,
+         * "tomorrowNodeFlg": true
+         * }
+         * ...
+         * ]
+         * },
+         * "signCount": 0,
+         * "type": "LIAN_XU_QIAN_DAO"
+         * }
+         * }
+         *
+         * @param signType 签到类型（健康岛固定为 3）
+         * @param source   来源（固定 "jkdsportcard"）
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String querySign(int signType, String source) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.querySign",
+                    "[{\"signType\":" + signType + "," +
+                            "\"source\":\"" + source + "\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 执行签到
+         * <p>
+         * RPC: com.alipay.neverland.biz.rpc.takeSign
+         * <p>
+         * 请求示例：
+         * [
+         * {
+         * "signType": 3,
+         * "source": "jkdsportcard"
+         * }
+         * ]
+         * <p>
+         * 响应示例：
+         * {
+         * "success": true,
+         * "data": {
+         * "continuousDoSignInVO": {
+         * "rewardAmount": 5,
+         * "rewardType": "ENERGY"
+         * },
+         * "continuousSignInfo": {
+         * "signedToday": true,
+         * "continuitySignedDayCount": 1,
+         * "signInNodes": [
+         * {
+         * "continuitySignDayAtOnce": 1,
+         * "rewardAmount": 5,
+         * "rewardType": "ENERGY",
+         * "signed": true,
+         * "todayFlg": true
+         * },
+         * {
+         * "continuitySignDayAtOnce": 2,
+         * "rewardAmount": 8,
+         * "rewardType": "ENERGY",
+         * "signed": false,
+         * "tomorrowNodeFlg": true
+         * }
+         * ...
+         * ]
+         * }
+         * }
+         * }
+         *
+         * @param signType 签到类型（健康岛固定为 3）
+         * @param source   来源（固定 "jkdsportcard"）
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String takeSign(int signType, String source) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.takeSign",
+                    "[{\"signType\":" + signType + "," +
+                            "\"source\":\"" + source + "\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 查询泡泡任务
+         * <p>
+         * RPC：com.alipay.neverland.biz.rpc.queryBubbleTask
+         * <p>
+         * 请求示例：
+         * [
+         * {
+         * "source": "jkdsportcard",
+         * "sportsAuthed": true
+         * }
+         * ]
+         * <p>
+         * 响应示例（节选）：
+         * {
+         * "success": true,
+         * "data": {
+         * "bubbleTaskVOS": [
+         * {
+         * "taskId": "adTask300",
+         * "title": "早晚打卡",
+         * "energyNum": "5",
+         * "initState": false
+         * },
+         * {
+         * "taskId": "OFFLINE_BALL",
+         * "title": "离线奖励",
+         * "energyNum": "15"
+         * }
+         * ]
+         * }
+         * }
+         *
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String queryBubbleTask() {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryBubbleTask",
+                    "[{\"source\":\"jkdsportcard\",\"sportsAuthed\":true}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 收取泡泡能量
+         * <p>
+         * RPC：com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy
+         * <p>
+         * 请求示例：
+         * [
+         * {
+         * "medEnergyBallInfoRecordIds":[
+         * "f304daa3bcac17f3c2e55d6c6ed73ddd",
+         * "2f7901ab2ef000cb575f297a4049bb94"
+         * ],
+         * "pickAllEnergyBall": true,
+         * "source": "jkdsportcard"
+         * }
+         * ]
+         * <p>
+         * 响应示例：
+         * {
+         * "success": true,
+         * "data": {
+         * "balance": "19118",
+         * "changeAmount": "90"
+         * }
+         * }
+         *
+         * @param ids 泡泡 RecordId 列表
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String pickBubbleTaskEnergy(List<String> ids) {
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("[{\"medEnergyBallInfoRecordIds\":[");
+
+            for (int i = 0; i < ids.size(); i++) {
+                sb.append("\"").append(ids.get(i)).append("\"");
+                if (i < ids.size() - 1) sb.append(",");
+            }
+
+            sb.append("],\"pickAllEnergyBall\":true,\"source\":\"jkdsportcard\"}]");
+
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy",
+                    sb.toString()
+            );
+        }
+
+        /**
+         * 健康岛 - 获取任务大厅列表
+         * <p>
+         * RPC: com.alipay.neverland.biz.rpc.queryTaskCenter
+         * <p>
+         * 请求示例：
+         * [
+         *   {
+         *     "apDid":"6b30jO17Z6Wbr2ggRytFxB09hZdhixfSekjytgi9Ytc=",
+         *     "cityCode":"",
+         *     "deviceLevel":"high",
+         *     "newGame":0,
+         *     "source":"jkdsportcard"
+         *   }
+         * ]
+         * <p>
+         * 响应示例（节选）：
+         * {
+         *   "success": true,
+         *   "data": {
+         *     "taskCenterTaskVOS": [
+         *       {
+         *         "taskId":"AP601235652",
+         *         "taskType":"LIGHT_TASK",
+         *         "taskStatus":"SIGNUP_COMPLETE",
+         *         "title":"浏览30秒商品橱窗",
+         *         "jumpLink":"...bizId=6042591d9bf54cccb1526ced12867e93..."
+         *       },
+         *       {
+         *         "taskId":"AP15304824",
+         *         "taskType":"PROMOKERNEL_TASK",
+         *         "title":"逛1秒打卡抽现金",
+         *         "jumpLink":"alipays://...&bizId=6042591d9bf54cccb1526ced12867e93..."
+         *       }
+         *     ]
+         *   }
+         * }
+         *
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String queryTaskCenter() { //这里的apDid暂时写死，应该不会变
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryTaskCenter",
+                    "[{\"apDid\":\"" + "6b30jO17Z6Wbr2ggRytFxB09hZdhixfSekjytgi9Ytc=" + "\","
+                            + "\"cityCode\":\"\","
+                            + "\"deviceLevel\":\"high\","
+                            + "\"newGame\":0,"
+                            + "\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 提交 Neverland 任务（用于 PROMOKERNEL_TASK 无 bizId 或特殊任务）
+         * <p>
+         * RPC: com.alipay.neverland.biz.rpc.taskSend
+         * <p>
+         * 请求示例：
+         * [
+         *   { ... task json from taskCenterTaskVOS ... }
+         * ]
+         * <p>
+         * 响应示例（节选）：
+         * { "success": true, "data": {} }
+         *
+         * @param taskObj 来自 taskCenterTaskVOS 的 task JSONObject
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String taskSend(JSONObject taskObj) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.taskSend",
+                    "[" + taskObj.toString() + "]"
+            );
+        }
+
+        /**
+         * 广告任务 - 完成任务
+         * <p>
+         * RPC: com.alipay.adtask.biz.mobilegw.service.task.finish
+         * <p>
+         * 请求示例：
+         * [
+         *   {"bizId":"6042591d9bf54cccb1526ced12867e93"}
+         * ]
+         * <p>
+         * 响应示例：
+         * {
+         *   "success": true,
+         *   "bizId":"6042591d9bf54cccb1526ced12867e93",
+         *   "extendInfo": {
+         *     "rewardInfo": { "rewardAmount":"10", "rewardTypeName":"无权益" }
+         *   }
+         * }
+         *
+         * @param bizId 广告任务的 bizId
+         * @return RPC 返回的 JSON 字符串
+         */
+        public static String finish(String bizId) {
+            return RequestManager.requestString(
+                    "com.alipay.adtask.biz.mobilegw.service.task.finish",
+                    "[{\"bizId\":\"" + bizId + "\"}]"
+            );
+        }
+
+        /**
+         * 查询地图列表
+         * RPC: com.alipay.neverland.biz.rpc.queryMapList
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String queryMapList() {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryMapList",
+                    "[{\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 查询单个地图奖励详情
+         * RPC: com.alipay.neverland.biz.rpc.queryMapDetail
+         * @param mapId 地图 ID
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String queryMapDetail(String mapId) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryMapDetail",
+                    "[{\"mapId\":\"" + mapId + "\",\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 领取奖励
+         * RPC: com.alipay.neverland.biz.rpc.mapChooseReward
+         * @param branchId 分支 ID（通常 MASTER）
+         * @param mapId 地图 ID
+         * @param rewardId 奖励 ID
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String chooseReward(String branchId, String mapId, String rewardId) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.mapChooseReward",
+                    "[{\"branchId\":\"" + branchId + "\",\"channel\":\"jkdsportcard\",\"mapId\":\"" + mapId + "\",\"rewardId\":\"" + rewardId + "\",\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 选择地图
+         * RPC: com.alipay.neverland.biz.rpc.mapChooseFree
+         * @param branchId 分支 ID（通常 MASTER）
+         * @param mapId 地图 ID
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String chooseMap(String branchId, String mapId) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.mapChooseFree",
+                    "[{\"branchId\":\"" + branchId + "\",\"mapId\":\"" + mapId + "\",\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 行走
+         * RPC: com.alipay.neverland.biz.rpc.walkGrid
+         * @param branchId 分支 ID（通常 MASTER）
+         * @param mapId 地图 ID
+         * @param drilling 是否钻探（通常 false）
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String walkGrid(String branchId, String mapId, boolean drilling) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.walkGrid",
+                    "[{\"branchId\":\"" + branchId + "\",\"mapId\":\"" + mapId + "\",\"drilling\":" + drilling + ",\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 查询用户能量
+         * RPC: com.alipay.neverland.biz.rpc.queryUserAccount
+         * @return RPC 返回 JSON 字符串
+         */
+        public static String queryUserEnergy() {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryUserAccount",
+                    "[{\"source\":\"jkdsportcard\"}]"
+            );
+        }
+    }
 }
+
