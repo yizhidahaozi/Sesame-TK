@@ -168,7 +168,15 @@ class MainActivity : BaseActivity() {
             }
 
             R.id.btn_view_error_log_file -> {
-                data += Files.getErrorLogFile().absolutePath
+                showPasswordDialog {
+                    val data = "file://" + Files.getErrorLogFile().absolutePath
+                    val it = Intent(this, HtmlViewerActivity::class.java)
+                    it.putExtra("nextLine", false)
+                    it.putExtra("canClear", true)
+                    it.data = Uri.parse(data)
+                    startActivity(it)
+                }
+                return
             }
 
             R.id.btn_view_all_log_file -> {
@@ -447,5 +455,35 @@ class MainActivity : BaseActivity() {
             RunType.ACTIVE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.active_text))
             RunType.LOADED.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.textColorPrimary))
         }
+    }
+
+    private fun showPasswordDialog(onSuccess: () -> Unit) {
+        val input = TextView(this).apply {
+            setPadding(50, 50, 50, 50)
+            textSize = 18f
+            hint = "请输入密码"
+        }
+
+        val editText = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "非必要情况点击无效（联系闲鱼卖家帮你处理）！"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("🔐 输入密码")
+            .setView(editText)
+            .setPositiveButton("确定") { dialog, _ ->
+                val password = editText.text.toString()
+                if (password == "Sesame-TK") {
+                    ToastUtil.showToast(this, "验证成功😊")
+                    onSuccess()
+                } else {
+                    ToastUtil.showToast(this, "密码错误😡")
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 }
