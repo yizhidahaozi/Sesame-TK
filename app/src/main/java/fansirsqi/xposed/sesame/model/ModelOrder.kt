@@ -17,7 +17,6 @@ import fansirsqi.xposed.sesame.task.consumeGold.ConsumeGold;
 import fansirsqi.xposed.sesame.task.greenFinance.GreenFinance;
 import fansirsqi.xposed.sesame.task.antBookRead.AntBookRead;
 import fansirsqi.xposed.sesame.task.omegakoiTown.OmegakoiTown;
-import fansirsqi.xposed.sesame.task.zhimaTree.ZhimaTree
 
 object ModelOrder {
     private val array = arrayOf(
@@ -30,7 +29,6 @@ object ModelOrder {
         AntDodo::class.java,       // 神奇物种
         AntCooperate::class.java,    // 合种
         AntSports::class.java,       // 运动
-        ZhimaTree::class.java,       // 芝麻树
         AntMember::class.java,     // 会员
         AncientTree::class.java,     // 古树
         GreenFinance::class.java,  // 绿色经营

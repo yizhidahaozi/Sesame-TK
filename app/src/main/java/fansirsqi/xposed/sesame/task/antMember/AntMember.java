@@ -1,9 +1,12 @@
 package fansirsqi.xposed.sesame.task.antMember;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import fansirsqi.xposed.sesame.entity.MemberBenefit;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -54,6 +57,8 @@ public class AntMember extends ModelTask {
   private BooleanModelField beanExchangeBubbleBoost;
   // 芝麻炼金
   private BooleanModelField sesameAlchemy;
+  // 芝麻树
+  private BooleanModelField enableZhimaTree;
 
   @Override
   public ModelFields getFields() {
@@ -67,6 +72,8 @@ public class AntMember extends ModelTask {
     modelFields.addField(collectSesameWithOneClick = new BooleanModelField("collectSesameWithOneClick", "芝麻信用|芝麻粒领取使用一键收取", false));
     // 芝麻炼金
     modelFields.addField(sesameAlchemy = new BooleanModelField("sesameAlchemy", "芝麻炼金", false));
+    // 芝麻树
+    modelFields.addField(enableZhimaTree = new BooleanModelField("enableZhimaTree", "芝麻信用|芝麻树", false));
     modelFields.addField(collectInsuredGold = new BooleanModelField("collectInsuredGold", "蚂蚁保|保障金领取", false));
     modelFields.addField(enableGoldTicket = new BooleanModelField("enableGoldTicket", "黄金票签到", false));
     modelFields.addField(enableGameCenter = new BooleanModelField("enableGameCenter", "游戏中心签到", false));
@@ -100,6 +107,7 @@ public class AntMember extends ModelTask {
       }
       if (memberTask.getValue()) {
         doAllMemberAvailableTask();
+        handleGrowthGuideTasks();
       }
       if (memberPointExchangeBenefit.getValue()) {
         memberPointExchangeBenefit();
@@ -134,6 +142,10 @@ public class AntMember extends ModelTask {
       if (sesameAlchemy.getValue() && isSesameOpened) {
         doSesameAlchemy();
       }
+      // 芝麻树
+      if (enableZhimaTree.getValue() && isSesameOpened) {
+        doZhimaTree();
+      }
       if (merchantSign.getValue() || merchantKmdk.getValue() || merchantMoreTask.getValue()) {
         JSONObject jo = new JSONObject(AntMemberRpcCall.transcodeCheck());
         if (!jo.optBoolean("success")) {
@@ -161,6 +173,116 @@ public class AntMember extends ModelTask {
       Log.printStackTrace(TAG, t);
     }finally {
       Log.record(TAG,"执行结束-" + getName());
+    }
+  }
+
+  private void handleGrowthGuideTasks() {
+    try {
+      // 目前 guideBehaviorId 取 "yuebao_7d" 即可获取完整 growthGuideList + toDoList 列表
+      String resp = AntMemberRpcCall.queryGrowthGuideToDoList("yuebao_7d", "1.0.2025.10.27");
+      JSONObject root = new JSONObject(resp);
+      if (!root.optBoolean("success")) {
+        Log.runtime(TAG + ".handleGrowthGuideTasks", "信誉任务列表获取失败: " + root.optString("resultView", resp));
+        return;
+      }
+
+      // 1. 成长引导列表（growthGuideList）主要用于前端展示，这里只做统计
+      JSONArray growthGuideList = root.optJSONArray("growthGuideList");
+      int guideCount = growthGuideList != null ? growthGuideList.length() : 0;
+
+      // 2. toDoList 为真正需要处理的任务（包含每日问答、公益任务等）
+      JSONArray toDoList = root.optJSONArray("toDoList");
+      int toDoCount = toDoList != null ? toDoList.length() : 0;
+      //Log.record(TAG, "信誉任务[成长任务列表] 已获取: growthGuideList=" + guideCount + ", toDoList=" + toDoCount);
+
+      if (toDoList == null || toDoCount == 0) {
+        return;
+      }
+
+      for (int i = 0; i < toDoList.length(); i++) {
+        JSONObject task = toDoList.getJSONObject(i);
+        String behaviorId = task.optString("behaviorId");
+        String title = task.optString("title");
+        String status = task.optString("status"); // wait_receive / wait_doing / ...
+        String buttonText = task.optString("buttonText");
+
+        // 2.1 公益类「领任务」示例：蚂蚁庄园 / 蚂蚁森林 / 芭芭农场 等
+        //     status = wait_receive 时，通过 openBehaviorCollect 上报「接收任务」，相当于手动点了“领任务”按钮。
+        if ("wait_receive".equals(status)) {
+          // Log.record(TAG, "信誉任务[自动领取] behaviorId=" + behaviorId + " title=" + title+ " buttonText=" + buttonText + " —— 准备调用 openBehaviorCollect 上报接收");
+          String openResp = AntMemberRpcCall.openBehaviorCollect(behaviorId);
+          try {
+            JSONObject openJo = new JSONObject(openResp);
+            if (openJo.optBoolean("success")) {
+              Log.other(TAG, "信誉任务[领取成功] "+title);// behaviorId=" + behaviorId + " title=" + title
+            } else {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "信誉任务[领取失败] behaviorId=" + behaviorId
+                      + " title=" + title + " resp=" + openResp);
+            }
+          } catch (Throwable parseErr) {
+            Log.printStackTrace(TAG + ".handleGrowthGuideTasks.openBehaviorCollect", parseErr);
+          }
+          // 领取后直接处理下一个任务；具体完成逻辑仍由各自业务（森林/庄园等）模块负责
+          continue;
+        }
+
+        // 2.2 每日问答：behaviorId = meiriwenda，status = wait_doing
+        if ("meiriwenda".equals(behaviorId)) {
+          // Log.record(TAG, "信誉任务[每日问答] 尝试自动答题，title=" + title + " status=" + status);
+          try {
+            // 1）查询当日题目与正确答案
+            String quizResp = AntMemberRpcCall.queryDailyQuiz(behaviorId);
+            JSONObject quizJo = new JSONObject(quizResp);
+            if (!quizJo.optBoolean("success")) {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[查询题目失败] resp=" + quizResp);
+              continue;
+            }
+            JSONObject data = quizJo.optJSONObject("data");
+            if (data == null) {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[缺少data节点] resp=" + quizResp);
+              continue;
+            }
+            long bizDate = data.optLong("bizDate", 0L);
+            JSONObject qVo = data.optJSONObject("questionVo");
+            if (qVo == null) {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[缺少questionVo] resp=" + quizResp);
+              continue;
+            }
+            String questionId = qVo.optString("questionId");
+            String questionContent = qVo.optString("questionContent");
+            JSONObject rightAnswer = qVo.optJSONObject("rightAnswer");
+            if (rightAnswer == null) {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[缺少rightAnswer] resp=" + quizResp);
+              continue;
+            }
+            String answerId = rightAnswer.optString("answerId");
+            String answerContent = rightAnswer.optString("answerContent");
+            if (bizDate <= 0L || questionId.isEmpty() || answerId.isEmpty()) {
+              Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[关键字段为空] bizDate=" + bizDate
+                      + " questionId=" + questionId + " answerId=" + answerId);
+              continue;
+            }
+
+            // 2）提交答题结果（直接用正确答案，answerStatus = RIGHT）
+            String pushResp = AntMemberRpcCall.pushDailyTask(behaviorId, bizDate, answerId, questionId, "RIGHT");
+            try {
+              JSONObject pushJo = new JSONObject(pushResp);
+              if (pushJo.optBoolean("success")) {
+                Log.other(TAG, "信誉任务[每日答题成功] " + questionContent
+                        + " 答案=" + answerContent + "(" + answerId + ")");
+              } else {
+                Log.runtime(TAG + ".handleGrowthGuideTasks", "每日问答[提交失败] resp=" + pushResp);
+              }
+            } catch (Throwable parsePushErr) {
+              Log.printStackTrace(TAG + ".handleGrowthGuideTasks.pushDailyTask", parsePushErr);
+            }
+          } catch (Throwable e) {
+            Log.printStackTrace(TAG + ".handleGrowthGuideTasks.meiriwenda", e);
+          }
+        }
+      }
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG + ".handleGrowthGuideTasks", t);
     }
   }
 
@@ -415,21 +537,21 @@ public class AntMember extends ModelTask {
    * 不能完成的任务黑名单（根据title关键词匹配）
    */
   private static final String[] TASK_BLACKLIST = {
-    "每日施肥领水果",           // 需要淘宝操作
-    "坚持种水果",              // 需要淘宝操作  
-    "坚持去玩休闲小游戏",       // 需要游戏操作
-    "去AQapp提问",            // 需要下载APP
-    "去AQ提问",               // 需要下载APP
-    "坚持看直播领福利",        // 需要淘宝直播
-    "去淘金币逛一逛",          // 需要淘宝操作
-    "坚持攒保障金",            // 参数错误：promiseActivityExtCheck
-    "芝麻租赁下单得芝麻粒",     // 需要租赁操作
-    "去玩小游戏",              // 参数错误：promiseActivityExtCheck
-    "浏览租赁商家小程序",       // 需要小程序操作
-    "订阅小组件",              // 参数错误：promiseActivityExtCheck
-    "租1笔图书",               // 参数错误：promiseActivityExtCheck
-    "去订阅芝麻小组件",         // 参数错误：promiseActivityExtCheck
-    "坚持攒保障"               // 参数错误：promiseActivityExtCheck（与"坚持攒保障金"类似，防止匹配遗漏）
+          "每日施肥领水果",           // 需要淘宝操作
+          "坚持种水果",              // 需要淘宝操作
+          "坚持去玩休闲小游戏",       // 需要游戏操作
+          "去AQapp提问",            // 需要下载APP
+          "去AQ提问",               // 需要下载APP
+          "坚持看直播领福利",        // 需要淘宝直播
+          "去淘金币逛一逛",          // 需要淘宝操作
+          "坚持攒保障金",            // 参数错误：promiseActivityExtCheck
+          "芝麻租赁下单得芝麻粒",     // 需要租赁操作
+          "去玩小游戏",              // 参数错误：promiseActivityExtCheck
+          "浏览租赁商家小程序",       // 需要小程序操作
+          "订阅小组件",              // 参数错误：promiseActivityExtCheck
+          "租1笔图书",               // 参数错误：promiseActivityExtCheck
+          "去订阅芝麻小组件",         // 参数错误：promiseActivityExtCheck
+          "坚持攒保障"               // 参数错误：promiseActivityExtCheck（与"坚持攒保障金"类似，防止匹配遗漏）
   };
 
   /**
@@ -1298,6 +1420,297 @@ public class AntMember extends ModelTask {
         }
       }
       GlobalThreadPools.sleepCompat(2000);
+    }
+  }
+  private void doZhimaTree() {
+    try {
+      // 1. 执行首页的所有任务 (包括浏览任务和复访任务)
+      doHomeTasks();
+
+      // 2. 执行常规列表任务 (赚净化值列表)
+      doRentGreenTasks();
+
+      // 3. 消耗净化值进行净化
+      doPurification();
+
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG, t);
+    }
+  }
+
+  /**
+   * 处理首页返回的任务 (含浏览任务和状态列表任务)
+   */
+  private void doHomeTasks() {
+    try {
+      String res = AntMemberRpcCall.zhimaTreeHomePage();
+      if (res == null) return;
+
+      JSONObject json = new JSONObject(res);
+      if (ResChecker.checkRes(TAG, json)) {
+        JSONObject result = json.optJSONObject("extInfo");
+        if (result == null) return;
+        JSONObject queryResult = result.optJSONObject("zhimaTreeHomePageQueryResult");
+        if (queryResult == null) return;
+
+        // 1. 处理 browseTaskList (如：芝麻树首页每日_浏览任务)
+        JSONArray browseList = queryResult.optJSONArray("browseTaskList");
+        if (browseList != null) {
+          for (int i = 0; i < browseList.length(); i++) {
+            processSingleTask(browseList.getJSONObject(i));
+          }
+        }
+
+        // 2. 处理 taskStatusList (如：芝麻树复访任务70净化值)
+        JSONArray statusList = queryResult.optJSONArray("taskStatusList");
+        if (statusList != null) {
+          for (int i = 0; i < statusList.length(); i++) {
+            processSingleTask(statusList.getJSONObject(i));
+          }
+        }
+      }
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
+    }
+  }
+
+  /**
+   * 处理赚净化值列表任务
+   */
+  private void doRentGreenTasks() {
+    try {
+      String res = AntMemberRpcCall.queryRentGreenTaskList();
+      if (res == null) return;
+
+      JSONObject json = new JSONObject(res);
+      if (ResChecker.checkRes(TAG, json)) {
+        JSONObject extInfo = json.optJSONObject("extInfo");
+        if (extInfo == null) return;
+
+        JSONObject taskDetailListObj = extInfo.optJSONObject("taskDetailList");
+        if (taskDetailListObj == null) return;
+
+        JSONArray tasks = taskDetailListObj.optJSONArray("taskDetailList");
+        if (tasks == null) return;
+
+        for (int i = 0; i < tasks.length(); i++) {
+          processSingleTask(tasks.getJSONObject(i));
+        }
+      }
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
+    }
+  }
+
+  /**
+   * 处理单个任务对象的逻辑
+   */
+  private void processSingleTask(JSONObject task) {
+    try {
+      JSONObject taskBaseInfo = task.optJSONObject("taskBaseInfo");
+      if (taskBaseInfo == null) return;
+
+      String taskId = taskBaseInfo.optString("appletId");
+      // 有些任务ID在taskId字段，有些在appletId，做个兼容
+      if (taskId == null || taskId.isEmpty()) {
+        taskId = task.optString("taskId");
+      }
+
+      String title = taskBaseInfo.optString("appletName");
+      if (title.isEmpty()) title = taskBaseInfo.optString("title", taskId);
+
+      String status = task.optString("taskProcessStatus");
+
+      // 过滤掉明显无法自动完成的任务（如包含邀请、下单、开通），但保留复访任务
+      if (title.contains("邀请") || title.contains("下单") || title.contains("开通")) {
+        return;
+      }
+
+      // 解析奖励信息
+      String prizeName = getPrizeName(task);
+
+      if ("NOT_DONE".equals(status) || "SIGNUP_COMPLETE".equals(status)) {
+        // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
+        Log.record("芝麻树🌳[开始任务] " + title + (prizeName.isEmpty() ? "" : " (" + prizeName + ")"));
+        if (performTask(taskId, title, prizeName)) {
+          // 任务完成
+        }
+      } else if ("TO_RECEIVE".equals(status)) {
+        // 待领取状态
+        if (doTaskAction(taskId, "receive")) {
+          String logMsg = "芝麻树🌳[领取奖励] " + title + " #" + (prizeName.isEmpty() ? "奖励已领取" : prizeName);
+          Log.forest(logMsg); // 输出到 forest
+        }
+      }
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
+    }
+  }
+
+  /**
+   * 执行任务动作：去完成 -> 等待 -> 领取
+   */
+  private boolean performTask(String taskId, String title, String prizeName) {
+    try {
+      // 发送"去完成"指令
+      if (doTaskAction(taskId, "send")) {
+        int waitTime = 16000; // 默认等待16秒，覆盖大多数浏览任务
+
+        try {
+          Thread.sleep(waitTime);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+
+        // 发送"领取"指令
+        if (doTaskAction(taskId, "receive")) {
+          String logMsg = "芝麻树🌳[完成任务] " + title + " #" + (prizeName.isEmpty() ? "奖励已领取" : prizeName);
+          Log.forest(logMsg); // 这里输出到 forest
+          return true;
+        }
+      }
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
+    }
+    return false;
+  }
+
+  /**
+   * 获取任务奖励名称
+   */
+  private String getPrizeName(JSONObject task) {
+    String prizeName = "";
+    try {
+      JSONArray prizes = task.optJSONArray("validPrizeDetailDTO");
+      if (prizes == null || prizes.length() == 0) {
+        prizes = task.optJSONArray("prizeDetailDTOList");
+      }
+
+      if (prizes != null && prizes.length() > 0) {
+        JSONObject prizeBase = prizes.getJSONObject(0).optJSONObject("prizeBaseInfoDTO");
+        if (prizeBase != null) {
+          String rawName = prizeBase.optString("prizeName", "");
+
+          if (rawName.contains("能量")) {
+            Pattern p = Pattern.compile("(森林)?能量(\\d+g?)");
+            Matcher m = p.matcher(rawName);
+            if (m.find()) {
+              prizeName = m.group(0);
+            } else {
+              prizeName = rawName;
+            }
+          } else if (rawName.contains("净化值")) {
+            Pattern p = Pattern.compile("(\\d+净化值|净化值\\d+)");
+            Matcher m = p.matcher(rawName);
+            if (m.find()) {
+              prizeName = m.group(1);
+            } else {
+              prizeName = rawName;
+            }
+          } else {
+            prizeName = rawName;
+          }
+        }
+      }
+
+      // 如果没找到 PrizeDTO，尝试从 taskExtProps 解析
+      if (prizeName.isEmpty()) {
+        JSONObject taskExtProps = task.optJSONObject("taskExtProps");
+        if (taskExtProps != null && taskExtProps.has("TASK_MORPHO_DETAIL")) {
+          JSONObject detail = new JSONObject(taskExtProps.getString("TASK_MORPHO_DETAIL"));
+          String val = detail.optString("finishOneTaskGetPurificationValue", "");
+          if (!val.isEmpty() && !"0".equals(val)) {
+            prizeName = val + "净化值";
+          }
+        }
+      }
+    } catch (Exception ignore) {}
+    return prizeName;
+  }
+
+  private boolean doTaskAction(String taskId, String stageCode) {
+    try {
+      String s = AntMemberRpcCall.rentGreenTaskFinish(taskId, stageCode);
+      if (s == null) return false;
+      JSONObject json = new JSONObject(s);
+      return ResChecker.checkRes(TAG, json);
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
+      return false;
+    }
+  }
+
+  /**
+   * 净化逻辑
+   */
+  private void doPurification() {
+    try {
+      String homeRes = AntMemberRpcCall.zhimaTreeHomePage();
+      if (homeRes == null) return;
+
+      JSONObject homeJson = new JSONObject(homeRes);
+      if (!ResChecker.checkRes(TAG, homeJson)) return;
+
+      JSONObject result = homeJson.optJSONObject("extInfo").optJSONObject("zhimaTreeHomePageQueryResult");
+      if (result == null) return;
+
+      int currentScore = result.optInt("purificationScore", result.optInt("currentCleanNum", 0));
+      String treeCode = "ZHIMA_TREE";
+      if (result.has("trees")) {
+        JSONArray trees = result.getJSONArray("trees");
+        if (trees.length() > 0) {
+          treeCode = trees.getJSONObject(0).optString("treeCode", "ZHIMA_TREE");
+        }
+      }
+
+      if (currentScore <= 0) {
+        return;
+      }
+
+      Log.forest("芝麻树🌳[开始净化] 当前净化值: " + currentScore);
+
+      while (currentScore > 0) {
+        String cleanRes = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode);
+        if (cleanRes == null) break;
+
+        JSONObject cleanJson = new JSONObject(cleanRes);
+        if (ResChecker.checkRes(TAG, cleanJson)) {
+          JSONObject extInfo = cleanJson.optJSONObject("extInfo");
+
+          currentScore -= 100;
+
+          int newScore = -1;
+          int growthValue = -1;
+
+          if (extInfo != null) {
+            // 优先解析 CleanAndPushResult
+            JSONObject cleanResult = extInfo.optJSONObject("zhimaTreeCleanAndPushResult");
+            if (cleanResult != null) {
+              newScore = cleanResult.optInt("purificationScore", -1);
+              JSONObject treeInfo = cleanResult.optJSONObject("currentTreeInfo");
+              if (treeInfo != null) {
+                // 使用 scoreSummary 作为成长值
+                growthValue = treeInfo.optInt("scoreSummary", -1);
+              }
+            } else if (extInfo.has("purificationScore")) {
+              // 兼容旧逻辑或异常情况
+              newScore = extInfo.getInt("purificationScore");
+            }
+          }
+
+          if (newScore != -1) currentScore = newScore;
+
+          String growthLog = (growthValue != -1) ? " 当前成长值:" + growthValue : "";
+          Log.forest("芝麻树🌳[净化成功] 剩余净化值:" + Math.max(0, currentScore) + growthLog + "✅");
+
+          Thread.sleep(1500);
+        } else {
+          break;
+        }
+      }
+
+    } catch (Exception e) {
+      Log.printStackTrace(TAG, e);
     }
   }
 }

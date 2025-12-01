@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.antMember;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -452,5 +453,212 @@ public class AntMemberRpcCall {
     public static String alchemyQueryListV3() {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
                 "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
+    }
+
+    // ================= 芝麻树 =================
+    private static final String ZHIMATREE_PLAY_INFO = "SwbtxJSo8OOUrymAU%2FHnY2jyFRc%2BkCJ3";
+    private static final String ZHIMATREE_REFER = "https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei";
+
+    /**
+     * 查询芝麻树首页
+     */
+    public static String zhimaTreeHomePage() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("operation", "ZHIMA_TREE_HOME_PAGE");
+            args.put("playInfo", ZHIMATREE_PLAY_INFO);
+            args.put("refer", ZHIMATREE_REFER);
+            args.put("extInfo", new JSONObject());
+
+            return RequestManager.requestString("alipay.promoprod.play.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 净化芝麻树 (消耗净化值)
+     */
+    public static String zhimaTreeCleanAndPush(String treeCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("operation", "ZHIMA_TREE_CLEAN_AND_PUSH");
+            args.put("playInfo", ZHIMATREE_PLAY_INFO);
+            args.put("refer", ZHIMATREE_REFER);
+
+            JSONObject extInfo = new JSONObject();
+            extInfo.put("clickNum", "1");
+            extInfo.put("treeCode", treeCode);
+
+            args.put("extInfo", extInfo);
+
+            return RequestManager.requestString("alipay.promoprod.play.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询做任务赚净化值列表
+     */
+    public static String queryRentGreenTaskList() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("operation", "RENT_GREEN_TASK_LIST_QUERY");
+            args.put("playInfo", ZHIMATREE_PLAY_INFO);
+            args.put("refer", ZHIMATREE_REFER);
+
+            JSONObject extInfo = new JSONObject();
+            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("batchId", "");
+            args.put("extInfo", extInfo);
+
+            return RequestManager.requestString("alipay.promoprod.play.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 完成/领取净化值任务
+     * @param stageCode "send" 表示去完成/开始, "receive" 表示领取奖励
+     */
+    public static String rentGreenTaskFinish(String taskId, String stageCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("operation", "RENT_GREEN_TASK_FINISH");
+            args.put("playInfo", ZHIMATREE_PLAY_INFO);
+            args.put("refer", ZHIMATREE_REFER);
+
+            JSONObject extInfo = new JSONObject();
+            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("taskId", taskId);
+            extInfo.put("stageCode", stageCode);
+            args.put("extInfo", extInfo);
+
+            return RequestManager.requestString("alipay.promoprod.play.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 信誉获取任务列表（成长任务）
+     * <p>
+     * 对应抓包：
+     * <pre>
+     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList
+     *   requestData: [{"guideBehaviorId":"yuebao_7d","invokeVersion":"1.0.2025.10.27","switchNewPage":true}]
+     * </pre>
+     * 说明：
+     * <ul>
+     *   <li>__apiCallStartTime / __apiNativeCallId 属于容器层元数据，不需要拼在 requestData 里</li>
+     *   <li>guideBehaviorId 用来指定「引导任务」的入口，通常传 yuebao_7d 即可拉全量列表</li>
+     *   <li>invokeVersion 建议保持和抓包一致，方便服务器做灰度控制</li>
+     * </ul>
+     *
+     * @param guideBehaviorId 抓包中的 guideBehaviorId，例如 "yuebao_7d"
+     * @param invokeVersion   抓包中的 invokeVersion，例如 "1.0.2025.10.27"
+     */
+    public static String queryGrowthGuideToDoList(String guideBehaviorId, String invokeVersion) {
+        if (guideBehaviorId == null || guideBehaviorId.isEmpty()) {
+            guideBehaviorId = "yuebao_7d";
+        }
+        if (invokeVersion == null || invokeVersion.isEmpty()) {
+            // 默认使用抓包中观察到的版本号，避免服务端按版本做限流/灰度
+            invokeVersion = "1.0.2025.10.27";
+        }
+        String data = "[{" +
+                "\"guideBehaviorId\":\"" + guideBehaviorId + "\"," +
+                "\"invokeVersion\":\"" + invokeVersion + "\"," +
+                "\"switchNewPage\":true" +
+                "}]";
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList",
+                data
+        );
+    }
+
+    /**
+     * 信誉任务「领取任务 / 触发接收」接口。
+     * <p>
+     * 对应抓包：
+     * <pre>
+     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect
+     *   requestData: [{"behaviorId":"babanongchang_7d"}]
+     * </pre>
+     * behaviorId 直接来自 queryToDoList 返回的 toDoList[i].behaviorId。
+     */
+    public static String openBehaviorCollect(String behaviorId) {
+        String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect",
+                data
+        );
+    }
+
+    /**
+     * 查询每日答题题目（每日问答）。
+     *
+     * 对应抓包：
+     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz
+     *   requestData: [{"behaviorId":"meiriwenda"}]
+     *
+     * @param behaviorId 行为 ID（例如 "meiriwenda"）
+     */
+    public static String queryDailyQuiz(String behaviorId) {
+        String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz",
+                data
+        );
+    }
+
+    /**
+     * 提交每日答题结果。
+     *
+     * 对应抓包：
+     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask
+     *   requestData: [{
+     *       "behaviorId":"meiriwenda",
+     *       "bizDate":1764564388751,
+     *       "extInfo":{
+     *           "answerId":"20250925_3_0",
+     *           "answerStatus":"RIGHT",
+     *           "questionId":"20250925_3"
+     *       }
+     *   }]
+     *
+     * @param behaviorId    行为 ID（meiriwenda）
+     * @param bizDate       业务时间戳（直接使用 queryDailyQuiz 返回的 data.bizDate）
+     * @param answerId      选中的答案 ID（data.questionVo.rightAnswer.answerId）
+     * @param questionId    题目 ID（data.questionVo.questionId）
+     * @param answerStatus  答案状态：RIGHT / WRONG
+     */
+    public static String pushDailyTask(String behaviorId, long bizDate,
+                                       String answerId, String questionId,
+                                       String answerStatus) {
+        if (answerStatus == null || answerStatus.isEmpty()) {
+            answerStatus = "RIGHT";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("[{\"behaviorId\":\"")
+                .append(behaviorId)
+                .append("\",\"bizDate\":")
+                .append(bizDate)
+                .append(",\"extInfo\":{")
+                .append("\"answerId\":\"").append(answerId).append("\",")
+                .append("\"answerStatus\":\"").append(answerStatus).append("\",")
+                .append("\"questionId\":\"").append(questionId).append("\"")
+                .append("}}]");
+        String data = sb.toString();
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
+                data
+        );
     }
 }
