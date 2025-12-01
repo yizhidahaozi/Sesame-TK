@@ -282,15 +282,18 @@ class MainActivity : BaseActivity() {
                 return true
             }
 
-            4 -> { // 查看错误日志文件
-                val errorData = "file://" + Files.getErrorLogFile().absolutePath
-                val errorIt = Intent(this, HtmlViewerActivity::class.java)
-                errorIt.putExtra("nextLine", false)
-                errorIt.putExtra("canClear", true)
-                errorIt.data = Uri.parse(errorData)
-                startActivity(errorIt)
+            4 -> { // 查看错误日志文件（加密码验证）
+                showPasswordDialog {
+                    val errorData = "file://" + Files.getErrorLogFile().absolutePath
+                    val errorIt = Intent(this, HtmlViewerActivity::class.java)
+                    errorIt.putExtra("nextLine", false)
+                    errorIt.putExtra("canClear", true)
+                    errorIt.data = Uri.parse(errorData)
+                    startActivity(errorIt)
+                }
                 return true
             }
+
 
             5 -> { // 查看全部日志文件
                 val recordData = "file://" + Files.getRecordLogFile().absolutePath
@@ -467,7 +470,7 @@ class MainActivity : BaseActivity() {
         val editText = android.widget.EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "非必要情况点击无效（联系闲鱼卖家帮你处理）！"
+            hint = "非必要情况点击无效\n（联系闲鱼卖家帮你处理）！"
         }
 
         AlertDialog.Builder(this)
@@ -486,4 +489,5 @@ class MainActivity : BaseActivity() {
             .setNegativeButton("取消") { dialog, _ -> dialog.dismiss() }
             .show()
     }
+
 }
