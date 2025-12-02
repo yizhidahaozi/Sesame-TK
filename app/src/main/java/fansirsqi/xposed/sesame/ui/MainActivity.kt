@@ -461,33 +461,84 @@ class MainActivity : BaseActivity() {
     }
 
     private fun showPasswordDialog(onSuccess: () -> Unit) {
-        val input = TextView(this).apply {
-            setPadding(50, 50, 50, 50)
-            textSize = 18f
-            hint = "请输入密码"
+        // 父布局
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 10)
         }
 
+        // 上方提示文字
+        val label = android.widget.TextView(this).apply {
+            text = "非必要情况无需查看异常日志\n（有困难联系闲鱼卖家帮你处理）"
+            textSize = 16f
+            setTextColor(android.graphics.Color.DKGRAY)
+            setPadding(0, 0, 0, 20)
+            textAlignment = android.view.View.TEXT_ALIGNMENT_CENTER
+        }
+
+        // 输入框
         val editText = android.widget.EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                     android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "非必要情况点击无效\n（联系闲鱼卖家帮你处理）！"
+            hint = "请输入密码"
+            setTextColor(android.graphics.Color.BLACK)
+            setHintTextColor(android.graphics.Color.GRAY)
+            setPadding(40, 30, 40, 30)
+            textAlignment = android.view.View.TEXT_ALIGNMENT_CENTER
+
+            // 输入框椭圆圆角背景
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.WHITE)
+                cornerRadii = floatArrayOf(
+                    60f, 60f,  // 左上
+                    60f, 60f,  // 右上
+                    60f, 60f,  // 右下
+                    60f, 60f   // 左下
+                )
+                setStroke(3, android.graphics.Color.LTGRAY)
+            }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("🔐 输入密码")
-            .setView(editText)
-            .setPositiveButton("确定") { dialog, _ ->
+        container.addView(label)
+        container.addView(editText)
+
+        // 创建 AlertDialog
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("🔐 防呆验证")
+            .setView(container)
+            .setCancelable(true)
+            .setPositiveButton("确定", null)
+            .setNegativeButton("取消") { d, _ -> d.dismiss() }
+            .create()
+
+        // 弹窗显示后设置外边框圆角
+        dialog.setOnShowListener {
+            // 设置外框圆角
+            dialog.window?.setBackgroundDrawable(
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.WHITE) // 背景色
+                    cornerRadius = 60f // 弹窗圆角
+                }
+            )
+
+            val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            positiveButton.setTextColor(android.graphics.Color.parseColor("#3F51B5"))
+            positiveButton.setOnClickListener {
                 val password = editText.text.toString()
                 if (password == "Sesame-TK") {
                     ToastUtil.showToast(this, "验证成功😊")
                     onSuccess()
+                    dialog.dismiss()
                 } else {
                     ToastUtil.showToast(this, "密码错误😡")
+                    editText.text.clear()
                 }
-                dialog.dismiss()
             }
-            .setNegativeButton("取消") { dialog, _ -> dialog.dismiss() }
-            .show()
-    }
 
+            val negativeButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+            negativeButton.setTextColor(android.graphics.Color.DKGRAY)
+        }
+
+        dialog.show()
+    }
 }
