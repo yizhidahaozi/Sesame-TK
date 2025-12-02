@@ -64,26 +64,26 @@ public class AntSportsRpcCall {
                 "]";
         return RequestManager.requestString("com.alipay.sportshealth.biz.rpc.SportsHealthCoinTaskRpc.signInCoinTask", args1);
     }
-// 领取任务奖励 - 默认不领取所有能量球
-public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId) {
-    return pickBubbleTaskEnergy(medEnergyBallInfoRecordId, false);
-}
+    // 领取任务奖励 - 默认不领取所有能量球
+    public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId) {
+        return pickBubbleTaskEnergy(medEnergyBallInfoRecordId, false);
+    }
 
-// 领取任务奖励 - 可指定是否领取所有能量球
-public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, boolean pickAllEnergyBall) {
-    String args1 = "[\n" +
-        "    {\n" +
-        "        \"apiVersion\": \"energy\",\n" +
-        "        \"chInfo\": \"medical_health\",\n" +
-        "        \"clientOS\": \"android\",\n" +
-        "        \"features\": " + features +
-        "        \"medEnergyBallInfoRecordIds\": [\"" + medEnergyBallInfoRecordId + "\"],\n" +
-        "        \"pickAllEnergyBall\": " + pickAllEnergyBall + ",\n" +
-        "        \"source\": \"SPORT\"\n" +
-        "    }\n" +
-        "]";
-    return RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", args1);
-}
+    // 领取任务奖励 - 可指定是否领取所有能量球
+    public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, boolean pickAllEnergyBall) {
+        String args1 = "[\n" +
+                "    {\n" +
+                "        \"apiVersion\": \"energy\",\n" +
+                "        \"chInfo\": \"medical_health\",\n" +
+                "        \"clientOS\": \"android\",\n" +
+                "        \"features\": " + features +
+                "        \"medEnergyBallInfoRecordIds\": [\"" + medEnergyBallInfoRecordId + "\"],\n" +
+                "        \"pickAllEnergyBall\": " + pickAllEnergyBall + ",\n" +
+                "        \"source\": \"SPORT\"\n" +
+                "    }\n" +
+                "]";
+        return RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", args1);
+    }
 
 
 
@@ -183,60 +183,60 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
      */
     // 查询用户
     public static String queryUser() {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryUser",
-                            "[{\"source\":\"ch_appcenter__chsub_9patch\",\"timeZone\":\"" + timeZone + "\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryUser",
+                "[{\"source\":\"ch_appcenter__chsub_9patch\",\"timeZone\":\"" + timeZone + "\"}]");
     }
     // 查询主题列表
     public static String queryThemeList() {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.theme.queryThemeList",
-                            "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
-                                            + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
-                                            + "}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.theme.queryThemeList",
+                "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
+                        + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
+                        + "}]");
     }
     // 查询世界地图
     public static String queryWorldMap(String themeId) {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryWorldMap",
-                            "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
-                                            + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
-                                            + ",\"themeId\":\"" + themeId + "\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryWorldMap",
+                "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
+                        + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
+                        + ",\"themeId\":\"" + themeId + "\"}]");
     }
     // 查询城市路线
     public static String queryCityPath(String cityId) {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryCityPath",
-                            "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
-                                            + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
-                                            + ",\"cityId\":\"" + cityId + "\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryCityPath",
+                "[{\"chInfo\":\"ch_appcenter__chsub_9patch\",\"clientOS\":\"android\","
+                        + "\"features\":[\"DAILY_STEPS_RANK_V2\",\"STEP_BATTLE\",\"CLUB_HOME_CARD\",\"NEW_HOME_PAGE_STATIC\",\"CLOUD_SDK_AUTH\",\"STAY_ON_COMPLETE\",\"EXTRA_TREASURE_BOX\",\"SUPPORT_AI\",\"SUPPORT_FLYRABBIT\",\"SUPPORT_NEW_MATCH\",\"EXTERNAL_ADVERTISEMENT_TASK\",\"PROP\",\"PROPV2\",\"ASIAN_GAMES\"]"
+                        + ",\"cityId\":\"" + cityId + "\"}]");
     }
     // 查询路线
     public static String queryPath(String appId, String date, String pathId) {
-            String wufuRewardType = "WUFU_CARD";
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryPath",
-                            "[{\"appId\":\"" + appId + "\",\"date\":\"" + date + "\",\"pathId\":\"" + pathId
-                                            + "\",\"source\":\"ch_appcenter__chsub_9patch\",\"timeZone\":\"" + timeZone
-                                            + "\",\"wufuRewardType\":\"" + wufuRewardType + "\"}]");
+        String wufuRewardType = "WUFU_CARD";
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryPath",
+                "[{\"appId\":\"" + appId + "\",\"date\":\"" + date + "\",\"pathId\":\"" + pathId
+                        + "\",\"source\":\"ch_appcenter__chsub_9patch\",\"timeZone\":\"" + timeZone
+                        + "\",\"wufuRewardType\":\"" + wufuRewardType + "\"}]");
     }
     // 加入路线
     public static String joinPath(String pathId) {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.joinPath",
-                            "[{\"pathId\":\"" + pathId + "\",\"source\":\"ch_appcenter__chsub_9patch\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.joinPath",
+                "[{\"pathId\":\"" + pathId + "\",\"source\":\"ch_appcenter__chsub_9patch\"}]");
     }
     // 行走路线
     public static String walkGo(String appId, String date, String pathId, int useStepCount) {
         return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.go",
-        "[{\"appId\":\"" + appId + "\",\"date\":\"" + date + "\",\"pathId\":\"" + pathId
+                "[{\"appId\":\"" + appId + "\",\"date\":\"" + date + "\",\"pathId\":\"" + pathId
                         + "\",\"source\":\"ch_appcenter__chsub_9patch\",\"timeZone\":\"" + timeZone
                         + "\",\"useStepCount\":\"" + useStepCount + "\"}]");
     }
     // 开启宝箱
     // eventBillNo = boxNo(WalkGo)
     public static String receiveEvent(String eventBillNo) {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.receiveEvent",
-                            "[{\"eventBillNo\":\"" + eventBillNo + "\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.receiveEvent",
+                "[{\"eventBillNo\":\"" + eventBillNo + "\"}]");
     }
     // 查询路线奖励
     public static String queryPathReward(String appId, String pathId) {
-            return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryPathReward", "[{\"appId\":\""
-                            + appId + "\",\"pathId\":\"" + pathId + "\",\"source\":\"ch_appcenter__chsub_9patch\"}]");
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryPathReward", "[{\"appId\":\""
+                + appId + "\",\"pathId\":\"" + pathId + "\",\"source\":\"ch_appcenter__chsub_9patch\"}]");
     }
     /* 这个好像没用 */
     public static String exchangeSuccess(String exchangeId) {
@@ -643,7 +643,7 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
         }
 
         /**
-         * 查询地图列表
+         * 健康岛 - 查询地图列表
          * RPC: com.alipay.neverland.biz.rpc.queryMapList
          * @return RPC 返回 JSON 字符串
          */
@@ -651,6 +651,43 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
             return RequestManager.requestString(
                     "com.alipay.neverland.biz.rpc.queryMapList",
                     "[{\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 查询地图详情（新接口）
+         * RPC: com.alipay.neverland.biz.rpc.queryMapInfoNew
+         * 用于获取 buildingEnergyProcess / buildingEnergyFinal / mapStatus 等信息
+         */
+        public static String queryMapInfoNew(String mapId) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryMapInfoNew",
+                    "[{\"mapId\":\"" + mapId + "\",\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 查询基础信息（用于判断是否新游戏/建造模式）
+         * RPC: com.alipay.neverland.biz.rpc.queryBaseinfo
+         * 示例中 data.newGame = true 表示为新游戏，需要走建造逻辑
+         */
+        public static String queryBaseinfo() {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.queryBaseinfo",
+                    "[{\"source\":\"jkdsportcard\"}]"
+            );
+        }
+
+        /**
+         * 健康岛 - 建造建筑
+         * RPC: com.alipay.neverland.biz.rpc.build
+         *
+         * multiNum: 1-10，10倍约等于消耗 50 能量
+         */
+        public static String build(String branchId, String mapId, int multiNum) {
+            return RequestManager.requestString(
+                    "com.alipay.neverland.biz.rpc.build",
+                    "[{\"branchId\":\"" + branchId + "\",\"mapId\":\"" + mapId + "\",\"multiNum\":" + multiNum + ",\"source\":\"jkdsportcard\"}]"
             );
         }
 
@@ -724,4 +761,3 @@ public static String pickBubbleTaskEnergy(String medEnergyBallInfoRecordId, bool
         }
     }
 }
-
