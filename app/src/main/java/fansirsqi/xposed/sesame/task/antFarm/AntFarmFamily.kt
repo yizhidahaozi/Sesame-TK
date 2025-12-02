@@ -326,68 +326,185 @@ data object AntFarmFamily {
 
 
     /**
-     * 发送道早安
-     * @param familyUserIds 家庭成员列表
+     * 家庭「道早安」任务
+     *
+     *
+     *
+     * 1）先通过 familyTaskTips 判断今日是否还有「道早安」任务：
+     *    - 请求方法：com.alipay.antfarm.familyTaskTips
+     *    - 请求体关键字段：
+     *        animals      -> 直接复用 enterFamily 返回的家庭 animals 列表
+     *        taskSceneCode-> "ANTFARM_FAMILY_TASK"
+     *        sceneCode    -> "ANTFARM"
+     *        source       -> "H5"
+     *        requestType  -> "NORMAL"
+     *        timeZoneId   -> "Asia/Shanghai"
+     *    - 响应 familyTaskTips 数组中存在 bizKey="GREETING" 且 taskStatus="TODO" 时，说明可以道早安
+     *
+     * 2）未完成早安任务时，按顺序调用以下 RPC 获取 AI 文案并发送：
+     *    a. com.alipay.antfarm.deliverSubjectRecommend
+     *       -> 入参：friendUserIds（家庭其他成员 userId 列表），sceneCode="ChickFamily"，source="H5"
+     *       -> 取出：ariverRpcTraceId、eventId、eventName、sceneId、sceneName 等上下文
+     *    b. com.alipay.antfarm.DeliverContentExpand
+     *       -> 入参：上一步取到的 ariverRpcTraceId / eventId / eventName / sceneId / sceneName 等 + friendUserIds
+     *       -> 返回：AI 生成的 content 以及 deliverId
+     *    c. com.alipay.antfarm.QueryExpandContent
+     *       -> 入参：deliverId
+     *       -> 用于再次确认 content 与场景（可选安全校验）
+     *    d. com.alipay.antfarm.DeliverMsgSend
+     *       -> 入参：content、deliverId、friendUserIds、groupId（家庭 groupId）、sceneCode="ANTFARM"、spaceType="ChickFamily" 等
+     *
+     *   额外增加保护：
+     *  - 仅在每天 06:00~10:00 之间执行
+     *  - 每日仅发送一次（本地 Status 标记 + 远端 familyTaskTips 双重判断）
+     *  - 自动从家庭成员列表中移除自己，避免接口报参数错误
+     *
+     * @param familyUserIds 家庭成员 userId 列表（包含自己，方法内部会移除当前账号）
      */
     fun deliverMsgSend(familyUserIds: MutableList<String>) {
         try {
-            val currentTime = Calendar.getInstance()
-            currentTime.get(Calendar.HOUR_OF_DAY)
-            currentTime.get(Calendar.MINUTE)
-            // 6-10点早安时间
-            val startTime = Calendar.getInstance()
-            startTime.set(Calendar.HOUR_OF_DAY, 6)
-            startTime.set(Calendar.MINUTE, 0)
-            val endTime = Calendar.getInstance()
-            endTime.set(Calendar.HOUR_OF_DAY, 10)
-            endTime.set(Calendar.MINUTE, 0)
-            if (currentTime.before(startTime) || currentTime.after(endTime)) {
+            // 1. 时间窗口控制：仅允许在「早安时间段」内自动发送（06:00 ~ 10:00）
+            val now = Calendar.getInstance()
+            val startTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 6)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val endTime = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 10)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            if (now.before(startTime) || now.after(endTime)) {
+                Log.record(TAG, "家庭任务🏠道早安#当前时间不在 06:00-10:00，跳过")
                 return
             }
-            if (Objects.isNull(groupId)) {
-                return
-            }
-            // 先移除当前用户自己的ID，否则下面接口报错
-            familyUserIds.remove(UserMap.currentUid)
-            if (familyUserIds.isEmpty()) {
-                return
-            }
-            if (Status.hasFlagToday("antFarm::deliverMsgSend")) {
-                return
-            }
-            val userIds = JSONArray()
-            for (userId in familyUserIds) {
-                userIds.put(userId)
-            }
-            val resp0 = JSONObject(AntFarmRpcCall.OpenAIPrivatePolicy())
-            if (!ResChecker.checkRes(TAG, resp0)) {
-                Log.error(TAG, "OpenAIPrivatePolicy failed")
-                return
-            }
-            val resp1 = JSONObject(AntFarmRpcCall.deliverSubjectRecommend(userIds))
-            if (ResChecker.checkRes(TAG, resp1)) {
-                val ariverRpcTraceId = resp1.getString("ariverRpcTraceId")
-                val eventId = resp1.getString("eventId")
-                val eventName = resp1.getString("eventName")
-                val memo = resp1.getString("memo")
-                val resultCode = resp1.getString("resultCode")
-                val sceneId = resp1.getString("sceneId")
-                val sceneName = resp1.getString("sceneName")
-                val success = resp1.getBoolean("success")
 
-                val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(ariverRpcTraceId, eventId, eventName, memo, resultCode, sceneId, sceneName, success, userIds))
-                if (ResChecker.checkRes(TAG, resp2)) {
-                    val deliverId = resp2.getString("deliverId")
-                    val resp3 = JSONObject(AntFarmRpcCall.QueryExpandContent(deliverId))
-                    if (ResChecker.checkRes(TAG, resp3)) {
-                        val content = resp3.getString("content")
-                        val resp4 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
-                        if (ResChecker.checkRes(TAG, resp4)) {
-                            Log.farm("家庭任务🏠道早安: $content 🌈")
-                            Status.setFlagToday("antFarm::deliverMsgSend")
-                        }
+            // groupId 是 enterFamily 返回的家庭 ID，如果为空说明当前账号未开通家庭
+            if (groupId.isEmpty()) {
+                Log.record(TAG, "家庭任务🏠道早安#未检测到家庭 groupId，可能尚未加入家庭，跳过")
+                return
+            }
+
+            // 本地去重：一天只发送一次，避免重复打扰
+            if (Status.hasFlagToday("antFarm::deliverMsgSend")) {
+                Log.record(TAG, "家庭任务🏠道早安#今日已在本地发送过，跳过")
+                return
+            }
+
+            // 2. 远端任务状态校验：确认「道早安」任务是否仍为 TODO
+            try {
+                val taskTipsRes = JSONObject(AntFarmRpcCall.familyTaskTips(familyAnimals))
+                if (!ResChecker.checkRes(TAG, taskTipsRes)) {
+                    Log.error(TAG, "家庭任务🏠道早安#familyTaskTips 调用失败，跳过")
+                    return
+                }
+
+                val taskTips = taskTipsRes.optJSONArray("familyTaskTips")
+                if (taskTips == null || taskTips.length() == 0) {
+                    // familyTaskTips 为空：要么今天已经完成，要么当前无早安任务
+                    Log.record(TAG, "家庭任务🏠道早安#远端无 GREETING 任务，可能今日已完成，跳过")
+                    Status.setFlagToday("antFarm::deliverMsgSend")
+                    return
+                }
+
+                var hasGreetingTodo = false
+                for (i in 0 until taskTips.length()) {
+                    val item = taskTips.getJSONObject(i)
+                    val bizKey = item.optString("bizKey")
+                    val taskStatus = item.optString("taskStatus")
+                    if ("GREETING" == bizKey && "TODO" == taskStatus) {
+                        hasGreetingTodo = true
+                        break
                     }
                 }
+
+                if (!hasGreetingTodo) {
+                    Log.record(TAG, "家庭任务🏠道早安#GREETING 任务非 TODO 状态，跳过")
+                    Status.setFlagToday("antFarm::deliverMsgSend")
+                    return
+                }
+            } catch (e: Throwable) {
+                // safety：远端任务判断异常时，为了避免误刷，多数情况下选择跳过
+                Log.printStackTrace(TAG, "familyTaskTips 解析失败，出于安全考虑跳过道早安：", e)
+                return
+            }
+
+            // 3. 构建好友 userId 列表（去掉自己）
+            // 先移除当前用户自己的 ID，否则 DeliverMsgSend 等接口会因为参数不合法而报错
+            familyUserIds.remove(UserMap.currentUid)
+            if (familyUserIds.isEmpty()) {
+                Log.record(TAG, "家庭任务🏠道早安#家庭成员仅自己一人，跳过")
+                return
+            }
+
+            val userIds = JSONArray().apply {
+                for (userId in familyUserIds) {
+                    put(userId)
+                }
+            }
+
+            // 4. 确认 AI 隐私协议（OpenAIPrivatePolicy 抓包见看我.txt 中 deliverChickInfoVO.privatePolicyId）
+            val resp0 = JSONObject(AntFarmRpcCall.OpenAIPrivatePolicy())
+            if (!ResChecker.checkRes(TAG, resp0)) {
+                Log.error(TAG, "家庭任务🏠道早安#OpenAIPrivatePolicy 调用失败")
+                return
+            }
+
+            // 5. 请求推荐早安场景（deliverSubjectRecommend）以获取事件上下文
+            val resp1 = JSONObject(AntFarmRpcCall.deliverSubjectRecommend(userIds))
+            if (!ResChecker.checkRes(TAG, resp1)) {
+                Log.error(TAG, "家庭任务🏠道早安#deliverSubjectRecommend 调用失败")
+                return
+            }
+
+            // 提取后续调用所需的关键字段（均为动态值，绝不可写死）
+            val ariverRpcTraceId = resp1.getString("ariverRpcTraceId")
+            val eventId = resp1.getString("eventId")
+            val eventName = resp1.getString("eventName")
+            val memo = resp1.optString("memo")
+            val resultCode = resp1.optString("resultCode")
+            val sceneId = resp1.getString("sceneId")
+            val sceneName = resp1.getString("sceneName")
+            val success = resp1.optBoolean("success", true)
+
+            // 6. 调用 DeliverContentExpand，实际向 AI 请求生成完整早安文案
+            val resp2 = JSONObject(
+                AntFarmRpcCall.deliverContentExpand(
+                    ariverRpcTraceId,
+                    eventId,
+                    eventName,
+                    memo,
+                    resultCode,
+                    sceneId,
+                    sceneName,
+                    success,
+                    userIds
+                )
+            )
+            if (!ResChecker.checkRes(TAG, resp2)) {
+                Log.error(TAG, "家庭任务🏠道早安#DeliverContentExpand 调用失败")
+                return
+            }
+
+            val deliverId = resp2.getString("deliverId")
+
+            // 7. 使用 deliverId 再次确认扩展内容，得到最终的早安文案
+            val resp3 = JSONObject(AntFarmRpcCall.QueryExpandContent(deliverId))
+            if (!ResChecker.checkRes(TAG, resp3)) {
+                Log.error(TAG, "家庭任务🏠道早安#QueryExpandContent 调用失败")
+                return
+            }
+
+            val content = resp3.getString("content")
+
+            // 8. 最终发送早安消息：DeliverMsgSend
+            val resp4 = JSONObject(AntFarmRpcCall.deliverMsgSend(groupId, userIds, content, deliverId))
+            if (ResChecker.checkRes(TAG, resp4)) {
+                Log.farm("家庭任务🏠道早安: $content 🌈")
+                Status.setFlagToday("antFarm::deliverMsgSend")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "deliverMsgSend err:", t)

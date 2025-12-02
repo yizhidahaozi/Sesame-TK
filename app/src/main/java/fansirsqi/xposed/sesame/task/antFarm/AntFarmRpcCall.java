@@ -653,6 +653,25 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.enterFamily", args);
     }
 
+    /**
+     * 家庭任务入口 - 查询当前是否还有「道早安」等家庭任务
+     *
+     * 对应看我.txt 中：com.alipay.antfarm.familyTaskTips
+     *
+     * @param animals enterFamily 接口返回的家庭 animals 数组（原样透传给 RPC）
+     */
+    public static String familyTaskTips(JSONArray animals) {
+        String args = "[{" +
+                "\"animals\":" + animals +
+                ",\"requestType\":\"NORMAL\"" +
+                ",\"sceneCode\":\"ANTFARM\"" +
+                ",\"source\":\"H5\"" +
+                ",\"taskSceneCode\":\"ANTFARM_FAMILY_TASK\"" +
+                ",\"timeZoneId\":\"Asia/Shanghai\"" +
+                "}]";
+        return RequestManager.requestString("com.alipay.antfarm.familyTaskTips", args);
+    }
+
     public static String familyReceiveFarmTaskAward(String taskId) {
         String args = "[{\"awardType\":\"FAMILY_INTIMACY\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"taskId\":\"" + taskId + "\",\"taskSceneCode\":\"ANTFARM_FAMILY_TASK\"}]";
         return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", args);
