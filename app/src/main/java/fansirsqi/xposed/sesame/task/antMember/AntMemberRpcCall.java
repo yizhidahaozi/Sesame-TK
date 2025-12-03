@@ -4,7 +4,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.RandomUtil;
@@ -196,6 +195,28 @@ public class AntMemberRpcCall {
     public static String queryHome() {
         return RequestManager.requestString("com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV7RpcManager.queryHome",
                 "[{\"invokeSource\":\"zmHome\",\"miniZmGrayInside\":\"\",\"version\":\"week\"}]");
+    }
+
+    /**
+     * 芝麻信用首页 - 服务卡片（含芝麻粒签到卡片）
+     * 对应: com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryServiceCard
+     */
+    public static String queryServiceCard() {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryServiceCard",
+                "[{}]");
+    }
+
+    /**
+     * 芝麻签到 - 通用完成接口（芝麻粒/炼金等）
+     * 对应: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.completeTask
+     * @param checkInDate yyyyMMdd
+     * @param sceneCode   "zml" 对应芝麻粒福利签到, "alchemy" 对应芝麻炼金签到
+     */
+    public static String zmCheckInCompleteTask(String checkInDate, String sceneCode) {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.completeTask",
+                "[{\"checkInDate\":\"" + checkInDate + "\",\"sceneCode\":\"" + sceneCode + "\"}]");
     }
 
     /**
@@ -445,6 +466,41 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask",
                 "[{}]");
     }
+
+    /**
+     * [日志对应] 芝麻炼金-完成时段任务 (午饭/晚饭)
+     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask
+     *
+     * 请求示例:
+     * {
+     *     "templateId": "wujianli"
+     * }
+     *
+     * 返回示例:
+     * {
+     *     "ariverRpcTraceId": "client`aBYSOR/y0xEDACWu2y9mPoqMPhTTaIz_5694806",
+     *     "data": {
+     *         "degrade": false,
+     *         "toast": "领取成功,得10芝麻粒",
+     *         "zmlNum": 10
+     *     },
+     *     "resultCode": "SUCCESS",
+     *     "resultView": "成功",
+     *     "success": true,
+     *     "traceId": "21d0e34417646521077286391ee43a"
+     * }
+     */
+    public static String alchemyCompleteTimeLimitedTask(String templateId) {
+        String body = "{\n" +
+                "    \"templateId\": \"" + templateId + "\"\n" +
+                "}";
+
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask",
+                body
+        );
+    }
+
 
     /**
      * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
