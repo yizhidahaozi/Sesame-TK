@@ -4,6 +4,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+
 public class AntCooperateRpcCall {
     private static final String VERSION = "20230501";
     public static String queryUserCooperatePlantList() {
@@ -48,6 +49,26 @@ public class AntCooperateRpcCall {
         jo.put("userId",userId);
         return  RequestManager.requestString("alipay.antmember.forest.h5.sendCooperateBeckon",
                 new JSONArray().put(jo).toString());
+    }
+
+    /**
+     * 查询真爱合种首页
+     */
+    public static String queryLoveHome() {
+        String start = "20251022";
+        String end = "20251217";
+        return RequestManager.requestString("alipay.greenmatrix.rpc.h5.love.loveHome",
+                "[{\"calenderEnd\":\"" + end + "\",\"calenderStart\":\"" + start + "\",\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]");
+    }
+
+    /**
+     * 真爱合种浇水
+     * @param teamId 队伍ID
+     * @param donateNum 浇水数值
+     */
+    public static String loveTeamWater(String teamId, int donateNum) {
+        return RequestManager.requestString("alipay.greenmatrix.rpc.h5.love.teamWater",
+                "[{\"donateNum\":" + donateNum + ",\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"teamId\":\"" + teamId + "\"}]");
     }
 
 }
