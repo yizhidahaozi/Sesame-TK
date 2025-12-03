@@ -1171,10 +1171,16 @@ class AntFarm : ModelTask() {
                 if (totalConsumeSpeed > 0) {
                     val remainingSec = ((foodInTroughLimitCurrent - totalFoodHaveEatten) / totalConsumeSpeed)
                         .coerceAtLeast(0.0)
-                    val nextFeedTime = System.currentTimeMillis() + (remainingSec * 1000).toLong()
+                    val nextFeedTime = if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                        // 如果为饥饿状态，则10s后执行
+                        System.currentTimeMillis() + (10 * 1000).toLong()
+                    } else {
+                        System.currentTimeMillis() + (remainingSec * 1000).toLong()
+                    }
                     // 调试日志：打印时间计算详情（动态上限 + 实时增量）
                     Log.record(
-                        TAG, "蹲点时间计算🕐[开始时间=" + TimeUtil.getCommonDate(startEatTime) +
+                        TAG, "蹲点时间计算🕐[小鸡状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
+                                ", 开始时间=" + TimeUtil.getCommonDate(startEatTime) +
                                 ", 已吃(含增量)=" + totalFoodHaveEatten + ", 速度总计=" + totalConsumeSpeed +
                                 ", 食槽上限=" + foodInTroughLimitCurrent + ", 计算时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
                     )
