@@ -1077,8 +1077,19 @@ class AntFarm : ModelTask() {
             return  // 小鸡不在家，不执行喂养逻辑
         }
 
+        if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+            Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
+            return
+        }
+
         var needReload = false
-        // 1. 判断是否需要喂食
+
+        // 1. 判断是否有待领取的饲料
+        if (receiveFarmTaskAward!!.value && unreceiveTaskAward > 0) {
+            Log.record(TAG, "还有待领取的饲料")
+            receiveFarmAwards()
+        }
+        // 2. 判断是否需要喂食
         if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
             if (feedAnimal!!.value) {
                 Log.record("小鸡在挨饿~Tk 尝试为你自动喂食")
@@ -1086,11 +1097,9 @@ class AntFarm : ModelTask() {
                     needReload = true
                 }
             }
-        } else if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-            Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
         }
 
-        // 2. 使用加饭卡（仅当正在吃饭且开启配置）
+        // 3. 使用加饭卡（仅当正在吃饭且开启配置）
         if (useBigEaterTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 若服务端已标记今日使用过（或当前有效），本地直接跳过
             if (serverUseBigEaterTool) {
@@ -1126,7 +1135,7 @@ class AntFarm : ModelTask() {
             }
         }
 
-        // 3. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
+        // 4. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
         if (useAccelerateTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 记录调试日志：加速卡判定前的关键状态
             Log.record(
@@ -1247,10 +1256,6 @@ class AntFarm : ModelTask() {
         // 小鸡换装
         if (listOrnaments!!.value && Status.canOrnamentToday()) {
             listOrnaments()
-        }
-        if (unreceiveTaskAward > 0) {
-            Log.record(TAG, "还有待领取的饲料")
-            receiveFarmAwards()
         }
     }
 
