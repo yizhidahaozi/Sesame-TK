@@ -1152,7 +1152,6 @@ class AntFarm : ModelTask() {
 
         // 4. 如果有操作导致状态变化，则刷新庄园信息
         if (needReload) {
-            enterFarm()
             syncAnimalStatus(ownerFarmId)
         }
 
