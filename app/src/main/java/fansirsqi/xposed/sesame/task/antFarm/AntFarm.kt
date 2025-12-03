@@ -1082,19 +1082,18 @@ class AntFarm : ModelTask() {
             return
         }
 
-        var needReload = false
-
         // 1. 判断是否有待领取的饲料
         if (receiveFarmTaskAward!!.value && unreceiveTaskAward > 0) {
             Log.record(TAG, "还有待领取的饲料")
-            receiveFarmAwards()
+            receiveFarmAwards() // 该步骤会自动计算饲料数量，不需要重复刷新状态
         }
         // 2. 判断是否需要喂食
         if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
             if (feedAnimal!!.value) {
                 Log.record("小鸡在挨饿~Tk 尝试为你自动喂食")
                 if (feedAnimal(ownerFarmId)) {
-                    needReload = true
+                    // 刷新状态
+                    syncAnimalStatus(ownerFarmId)
                 }
             }
         }
@@ -1127,7 +1126,8 @@ class AntFarm : ModelTask() {
                     Log.farm("使用道具🎭[加饭卡]！")
                     DataStore.put(usedKey, usedCount + 1)
                     delay(1000)
-                    needReload = true
+                    // 刷新状态
+                    syncAnimalStatus(ownerFarmId)
                 } else {
                     Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
                 }
@@ -1146,13 +1146,9 @@ class AntFarm : ModelTask() {
             val accelerated = useAccelerateTool()
             if (accelerated) {
                 Log.farm("使用道具🎭[加速卡]⏩成功")
-                needReload = true
+                // 刷新状态
+                syncAnimalStatus(ownerFarmId)
             }
-        }
-
-        // 4. 如果有操作导致状态变化，则刷新庄园信息
-        if (needReload) {
-            syncAnimalStatus(ownerFarmId)
         }
 
         // 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
