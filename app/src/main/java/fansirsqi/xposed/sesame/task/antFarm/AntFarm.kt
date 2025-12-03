@@ -594,6 +594,10 @@ class AntFarm : ModelTask() {
             if (enterFarm() == null) {
                 return
             }
+            
+            recallAnimal()
+            tc.countDebug("召回小鸡")
+
             listFarmTool() //装载道具信息
             tc.countDebug("装载道具信息")
 
@@ -664,15 +668,12 @@ class AntFarm : ModelTask() {
                     Log.record(TAG, "饲料任务未到执行时间，跳过")
                 }
             }
-            
+
             // 收取饲料奖励（无时间限制）
             if (receiveFarmTaskAward!!.value) {
                 receiveFarmAwards()
                 tc.countDebug("收取饲料奖励")
             }
-
-            recallAnimal()
-            tc.countDebug("召回小鸡")
 
             handleAutoFeedAnimal()
             tc.countDebug("喂食")
@@ -1076,20 +1077,28 @@ class AntFarm : ModelTask() {
             return  // 小鸡不在家，不执行喂养逻辑
         }
 
-        var needReload = false
-        // 1. 判断是否需要喂食
+        if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+            Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
+            return
+        }
+
+        // 1. 判断是否有待领取的饲料
+        if (receiveFarmTaskAward!!.value && unreceiveTaskAward > 0) {
+            Log.record(TAG, "还有待领取的饲料")
+            receiveFarmAwards() // 该步骤会自动计算饲料数量，不需要重复刷新状态
+        }
+        // 2. 判断是否需要喂食
         if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
             if (feedAnimal!!.value) {
                 Log.record("小鸡在挨饿~Tk 尝试为你自动喂食")
                 if (feedAnimal(ownerFarmId)) {
-                    needReload = true
+                    // 刷新状态
+                    syncAnimalStatus(ownerFarmId)
                 }
             }
-        } else if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-            Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
         }
 
-        // 2. 使用加饭卡（仅当正在吃饭且开启配置）
+        // 3. 使用加饭卡（仅当正在吃饭且开启配置）
         if (useBigEaterTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 若服务端已标记今日使用过（或当前有效），本地直接跳过
             if (serverUseBigEaterTool) {
@@ -1117,7 +1126,8 @@ class AntFarm : ModelTask() {
                     Log.farm("使用道具🎭[加饭卡]！")
                     DataStore.put(usedKey, usedCount + 1)
                     delay(1000)
-                    needReload = true
+                    // 刷新状态
+                    syncAnimalStatus(ownerFarmId)
                 } else {
                     Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
                 }
@@ -1125,7 +1135,7 @@ class AntFarm : ModelTask() {
             }
         }
 
-        // 3. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
+        // 4. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
         if (useAccelerateTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 记录调试日志：加速卡判定前的关键状态
             Log.record(
@@ -1136,14 +1146,9 @@ class AntFarm : ModelTask() {
             val accelerated = useAccelerateTool()
             if (accelerated) {
                 Log.farm("使用道具🎭[加速卡]⏩成功")
-                needReload = true
+                // 刷新状态
+                syncAnimalStatus(ownerFarmId)
             }
-        }
-
-        // 4. 如果有操作导致状态变化，则刷新庄园信息
-        if (needReload) {
-            enterFarm()
-            syncAnimalStatus(ownerFarmId)
         }
 
         // 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
@@ -1161,77 +1166,43 @@ class AntFarm : ModelTask() {
                 if (totalConsumeSpeed > 0) {
                     val remainingSec = ((foodInTroughLimitCurrent - totalFoodHaveEatten) / totalConsumeSpeed)
                         .coerceAtLeast(0.0)
-                    val nextFeedTime = System.currentTimeMillis() + (remainingSec * 1000).toLong()
+                    val nextFeedTime = if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                        // 如果为饥饿状态，则10s后执行
+                        System.currentTimeMillis() + (10 * 1000).toLong()
+                    } else {
+                        System.currentTimeMillis() + (remainingSec * 1000).toLong()
+                    }
                     // 调试日志：打印时间计算详情（动态上限 + 实时增量）
                     Log.record(
-                        TAG, "蹲点时间计算🕐[开始时间=" + TimeUtil.getCommonDate(startEatTime) +
+                        TAG, "蹲点时间计算🕐[小鸡状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
+                                ", 开始时间=" + TimeUtil.getCommonDate(startEatTime) +
                                 ", 已吃(含增量)=" + totalFoodHaveEatten + ", 速度总计=" + totalConsumeSpeed +
                                 ", 食槽上限=" + foodInTroughLimitCurrent + ", 计算时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
                     )
 
                     val taskId = "FA|$ownerFarmId"
-                    if (!hasChildTask(taskId)) {
-                        addChildTask(ChildModelTask(taskId, "FA", Runnable {
-                            try {
-                                Log.record(TAG, "🔔 蹲点投喂任务触发")
-                                
-                                // 1️⃣ 同步最新状态
-                                syncAnimalStatus(ownerFarmId)
-                                
-                                // 2️⃣ 检查小鸡状态（可能在睡觉或已经被喂过了）
-                                if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
-                                    Log.record(TAG, "🍚 检测到小鸡饥饿，开始投喂")
-                                    
-                                    // 3️⃣ 执行喂食
-                                    if (feedAnimal(ownerFarmId)) {
-                                        Log.record(TAG, "✅ 投喂成功，刷新庄园状态")
-                                        
-                                        // 4️⃣ 重新进入庄园，获取最新状态
-                                        enterFarm()
-                                        
-                                        // 5️⃣ 关键：重新执行喂养逻辑，计算并创建下一次蹲点
-                                        kotlinx.coroutines.runBlocking {
-                                            handleAutoFeedAnimal()
-                                        }
-                                        
-                                        Log.record(TAG, "🔄 下一次蹲点任务已创建")
-                                    } else {
-                                        Log.record(TAG, "⚠️ 投喂失败，可能饲料不足")
-                                    }
-                                } else if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                                    Log.record(TAG, "💤 小鸡正在睡觉，跳过本次投喂")
-                                } else if (AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
-                                    Log.record(TAG, "😋 小鸡正在吃饭，可能已被其他逻辑喂食")
-                                }
-                            } catch (e: Exception) {
-                                Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
-                                Log.printStackTrace(TAG, e)
+                    addChildTask(ChildModelTask(taskId, "FA", Runnable {
+                        try {
+                            Log.record(TAG, "🔔 蹲点投喂任务触发")
+                            // 重新进入庄园，获取最新状态
+                            enterFarm()
+                            // 同步最新状态
+                            syncAnimalStatus(ownerFarmId)
+                            // 重新执行喂养逻辑，计算并创建下一次蹲点
+                            kotlinx.coroutines.runBlocking {
+                                handleAutoFeedAnimal()
                             }
-                        }, nextFeedTime))
-                        Log.record(
-                            TAG,
-                            "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(
-                                nextFeedTime
-                            ) + "]执行"
-                        )
-                    } else {
-                        // 更新已存在的任务
-                        addChildTask(ChildModelTask(taskId, "FA", Runnable {
-                            try {
-                                syncAnimalStatus(ownerFarmId)
-                                if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
-                                    if (feedAnimal(ownerFarmId)) {
-                                        enterFarm()
-                                        kotlinx.coroutines.runBlocking {
-                                            handleAutoFeedAnimal()
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.printStackTrace(TAG, e)
-                            }
-                        }, nextFeedTime))
-                    }
+                        } catch (e: Exception) {
+                            Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
+                            Log.printStackTrace(TAG, e)
+                        }
+                    }, nextFeedTime))
+                    Log.record(
+                        TAG,
+                        "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(
+                            nextFeedTime
+                        ) + "]执行"
+                    )
                 }
             } catch (e: Exception) {
                 Log.printStackTrace(e)
@@ -1246,10 +1217,6 @@ class AntFarm : ModelTask() {
         // 小鸡换装
         if (listOrnaments!!.value && Status.canOrnamentToday()) {
             listOrnaments()
-        }
-        if (unreceiveTaskAward > 0) {
-            Log.record(TAG, "还有待领取的饲料")
-            receiveFarmAwards()
         }
     }
 
