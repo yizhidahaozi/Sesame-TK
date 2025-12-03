@@ -985,15 +985,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     queryUserPatrol()
                     tc.countDebug("动物巡护任务")
                 }
+
+                handleUserProps(selfHomeObj)
+                tc.countDebug("收取动物派遣能量")
+
                 if (canConsumeAnimalProp && consumeAnimalProp!!.value) {
                     queryAndConsumeAnimal()
                     tc.countDebug("森林巡护")
                 } else {
                     Log.record("已经有动物伙伴在巡护森林~")
                 }
-
-                handleUserProps(selfHomeObj)
-                tc.countDebug("收取动物派遣能量")
 
                 if (combineAnimalPiece!!.value) {
                     queryAnimalAndPiece()
@@ -1337,7 +1338,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     .optJSONArray("usingUserProps")
             } else {
                 selfHomeObj.optJSONArray("usingUserPropsNew")
-                }
+            }
+            canConsumeAnimalProp = true
             if (usingUserProps == null || usingUserProps.length() == 0) {
                 return  // 如果没有使用中的用户道具，直接返回
             }
@@ -1345,7 +1347,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             for (i in 0..<usingUserProps.length()) {
                 val jo = usingUserProps.getJSONObject(i)
                 if ("animal" != jo.getString("propGroup")) {
-                    canConsumeAnimalProp = true
                     continue  // 如果当前道具不是动物类型，跳过
                 }
                 canConsumeAnimalProp = false // 设置标志位，表示不可再使用动物道具
@@ -3733,7 +3734,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val propType = animalProp.getJSONObject("main").getString("propType")
             val name = animalProp.getJSONObject("partner").getString("name")
             // 调用API进行伙伴派遣
-            val jo = JSONObject(AntForestRpcCall.consumeProp(propGroup, propType, false))
+            val jo = JSONObject(AntForestRpcCall.consumeProp(propGroup, "", propType, false))
             if (ResChecker.checkRes(TAG + "巡护派遣失败:", jo)) {
                 Log.forest("巡护派遣🐆[$name]")
             } else {
