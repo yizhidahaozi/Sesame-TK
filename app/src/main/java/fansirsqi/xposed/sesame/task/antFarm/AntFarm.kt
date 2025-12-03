@@ -594,6 +594,10 @@ class AntFarm : ModelTask() {
             if (enterFarm() == null) {
                 return
             }
+            
+            recallAnimal()
+            tc.countDebug("召回小鸡")
+
             listFarmTool() //装载道具信息
             tc.countDebug("装载道具信息")
 
@@ -664,15 +668,12 @@ class AntFarm : ModelTask() {
                     Log.record(TAG, "饲料任务未到执行时间，跳过")
                 }
             }
-            
+
             // 收取饲料奖励（无时间限制）
             if (receiveFarmTaskAward!!.value) {
                 receiveFarmAwards()
                 tc.countDebug("收取饲料奖励")
             }
-
-            recallAnimal()
-            tc.countDebug("召回小鸡")
 
             handleAutoFeedAnimal()
             tc.countDebug("喂食")
