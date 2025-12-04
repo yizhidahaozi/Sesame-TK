@@ -469,7 +469,7 @@ public class ApplicationHook {
 
     @SuppressLint("PrivateApi")
     private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
-        XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
+        XposedBridge.log(TAG + "|handleHookLogic " + packageName + " success!");
         if (hooked) return;
         hooked = true;
 
@@ -483,11 +483,13 @@ public class ApplicationHook {
 
         Log.runtime(TAG, "🔀 当前进程: " + finalProcessName);
 
-        // 初始化反射缓存（提前缓存，提升后续性能）
-        // 注意：初始化失败不影响正常功能，会自动回退到传统反射
+        // ✅ 第一步: 尽早安装版本号 Hook (在所有其他 Hook 之前)
+        VersionHook.installHook(classLoader);
+
+        // 初始化反射缓存
         ReflectionCache.initialize(classLoader);
 
-        // Hook验证码关闭功能（需要在应用初始化之前就Hook配置写入）
+        // Hook验证码关闭功能
         try {
             CaptchaHook.INSTANCE.setupHook(classLoader);
             Log.runtime(TAG, "验证码Hook系统已初始化");
@@ -511,45 +513,71 @@ public class ApplicationHook {
                     appContext = (Context) param.args[0];
 
                     // 在主进程和小组件进程中注册广播接收器
-                    if (General.PACKAGE_NAME.equals(finalProcessName) || (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
+                    if (General.PACKAGE_NAME.equals(finalProcessName) ||
+                            (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
                         registerBroadcastReceiver(appContext);
                     }
-                    // 注意：调度器将在首次使用时延迟初始化（避免 Application.attach 阶段初始化过早）
 
-                    PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
-                    Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
-                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
-                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
-                    boolean b = pInfo.versionName != null;
-                    if (b) {
-                        if (pInfo.versionName.equals("10.7.26.8100")) {
-                            HookUtil.INSTANCE.fuckAccounLimit(classLoader);
+                    // ✅ 优先使用 Hook 捕获的版本号
+                    if (VersionHook.hasVersion()) {
+                        alipayVersion = VersionHook.getCapturedVersion();
+                        Log.runtime(TAG, "📦 支付宝版本(Hook): " + alipayVersion.getVersionString());
+                    } else {
+                        // 回退方案: 使用传统 PackageManager 获取
+                        Log.runtime(TAG, "⚠️ Hook 未捕获到版本号,使用回退方案");
+                        try {
+                            PackageInfo pInfo = appContext.getPackageManager()
+                                    .getPackageInfo(packageName, 0);
+                            if (pInfo.versionName != null) {
+                                alipayVersion = new AlipayVersion(pInfo.versionName);
+                                Log.runtime(TAG, "📦 支付宝版本(回退): " + pInfo.versionName);
+
+                                // 特殊版本处理
+                                if (pInfo.versionName.equals("10.7.26.8100")) {
+                                    HookUtil.INSTANCE.fuckAccounLimit(classLoader);
+                                }
+                            } else {
+                                Log.runtime(TAG, "⚠️ 无法获取版本信息");
+                                alipayVersion = new AlipayVersion(""); // 空版本
+                            }
+                        } catch (Exception e) {
+                            Log.runtime(TAG, "❌ 获取版本号失败");
+                            Log.printStackTrace(TAG, e);
+                            alipayVersion = new AlipayVersion(""); // 空版本
                         }
-                        Log.runtime(TAG, alipayVersion.getVersionString() + "Not support fuck");
                     }
 
+                    // 加载 Native 库
+                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
+                    loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
+
+                    // 特殊版本处理 (如果使用 Hook 获取的版本)
+                    if (VersionHook.hasVersion() &&
+                            "10.7.26.8100".equals(alipayVersion.getVersionString())) {
+                        HookUtil.INSTANCE.fuckAccounLimit(classLoader);
+                        Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
+                    }
+
+                    // 调试模式启动 HTTP 服务器
                     if (BuildConfig.DEBUG) {
                         try {
                             Log.runtime(TAG, "start service for debug rpc");
-                            // 使用管理器，仅主进程启动并防重复
                             fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.startIfNeeded(
                                     8080,
                                     "ET3vB^#td87sQqKaY*eMUJXP",
                                     XposedEnv.processName,
                                     General.PACKAGE_NAME
                             );
-                            
                         } catch (Throwable e) {
                             Log.printStackTrace(e);
                         }
-                    } else {
-                        Log.runtime(TAG, "need not start service for debug rpc");
                     }
 
-                    // 后台运行权限检查，确保只在主进程执行一次
+                    // 后台运行权限检查
                     if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
-                        if (BaseModel.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
-                            Log.record(TAG, "支付宝无始终在后台运行权限，准备申请");
+                        if (BaseModel.getBatteryPerm().getValue() &&
+                                !PermissionUtil.checkBatteryPermissions()) {
+                            Log.record(TAG, "支付宝无始终在后台运行权限,准备申请");
                             mainHandler.postDelayed(
                                     () -> {
                                         if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
@@ -558,8 +586,9 @@ public class ApplicationHook {
                                     },
                                     2000);
                         }
-                        batteryPermissionChecked = true; // 标记为已检查，无论是否需要申请
+                        batteryPermissionChecked = true;
                     }
+
                     super.afterHookedMethod(param);
                 }
             });

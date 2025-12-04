@@ -23,6 +23,9 @@ import lombok.Getter;
 
 @Data
 public class Status {
+
+
+
     private static final String TAG = Status.class.getSimpleName();
     @Getter
     private static final Status INSTANCE = new Status();
@@ -47,6 +50,9 @@ public class Status {
     private Boolean answerQuestion = false;
     private Map<String, Integer> feedFriendLogList = new HashMap<>();
     private Map<String, Integer> visitFriendLogList = new HashMap<>();
+    // 可以存各种今日计数（步数、次数等）
+    private Map<String, Integer> intFlagMap = new HashMap<>();//2025/12/4  GSMT  用来存储int类型数据，无需再重复定义
+
     private Set<String> dailyAnswerList = new HashSet<>();
     private Set<String> donationEggList = new HashSet<>();
     private int useAccelerateToolCount = 0;
@@ -598,6 +604,17 @@ public class Status {
             save();
         }
     }
+
+    //2025/12/4 用来获取 自定义flag的int
+    public static Integer getIntFlagToday(String key) {
+        return getINSTANCE().intFlagMap.get(key);
+    }
+
+    public static void setIntFlagToday(String key, int value) {
+        getINSTANCE().intFlagMap.put(key, value);
+        save();
+    }
+
 
     public static Boolean canMemberPointExchangeBenefitToday(String benefitId) {
         return !getINSTANCE().memberPointExchangeBenefitLogList.contains(benefitId);

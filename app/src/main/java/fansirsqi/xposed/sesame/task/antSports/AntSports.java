@@ -16,6 +16,7 @@ import java.util.Random;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.Status;
+import fansirsqi.xposed.sesame.data.StatusFlags;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -71,7 +72,10 @@ public class AntSports extends ModelTask {
     private StringModelField sportsTaskBlacklist;
 
     //健康岛任务
-    private BooleanModelField neverlandTask;
+    private BooleanModelField neverlandTask;  //健康岛任务
+    private BooleanModelField neverlandGrid;    //健康岛走路
+
+    private IntegerModelField neverlandGridStepCount;   //健康岛
 
 
     @Override
@@ -105,7 +109,9 @@ public class AntSports extends ModelTask {
         modelFields.addField(donateCharityCoinType = new ChoiceModelField("donateCharityCoinType", "捐能量🎈 | 方式", DonateCharityCoinType.ONE, DonateCharityCoinType.nickNames));
         modelFields.addField(donateCharityCoinAmount = new IntegerModelField("donateCharityCoinAmount", "捐能量🎈 | 数量(每次)", 100));
         // 健康岛任务
-        modelFields.addField(neverlandTask =  new BooleanModelField("neverlandTask", "健康岛任务", false));
+        modelFields.addField(neverlandTask =  new BooleanModelField("neverlandTask", "健康岛 | 任务", false));
+        modelFields.addField(neverlandGrid =  new BooleanModelField("neverlandGrid", "健康岛 | 自动走路建造", false));
+        modelFields.addField(neverlandGridStepCount = new IntegerModelField("neverlandGridStepCount", "健康岛 | 今日走路最大次数", 20));
         // 抢好友相关配置
         modelFields.addField(battleForFriends = new BooleanModelField("battleForFriends", "抢好友 | 开启", false));
         modelFields.addField(battleForFriendType = new ChoiceModelField("battleForFriendType", "抢好友 | 动作", BattleForFriendType.ROB, BattleForFriendType.nickNames));
@@ -167,7 +173,7 @@ public class AntSports extends ModelTask {
         Log.record(TAG, "执行开始-" + getName());
         try {
 
-            if (neverlandTask.getValue()) {
+            if (neverlandTask.getValue()||neverlandGrid.getValue()) {
                 Log.record(TAG, "开始执行健康岛");
                 NeverlandTaskHandler handler = new NeverlandTaskHandler();
                 handler.runNeverland();
@@ -1264,63 +1270,89 @@ public class AntSports extends ModelTask {
     }
 
     // 训练好友-训练操作
+    // 流程：
+    // 1. 查询 clubHome，找到第一个可以训练的好友（trainInfo.training = false）
+    // 2. 调用 alipay.antsports.club.train.queryTrainItem 拿到 bizId 和 trainItemList
+    // 3. 从 trainItemList 中随便选一个（这里选 production 最大的），调用 trainMember 进行训练
     private void queryTrainItem() {
         try {
-            // 发送 RPC 请求获取 club home 数据
             JSONObject clubHomeData = new JSONObject(AntSportsRpcCall.queryClubHome());
-            // 检查是否存在 roomList
-            if (clubHomeData.has("roomList")) {
-                JSONArray roomList = clubHomeData.getJSONArray("roomList");
-                // 遍历 roomList
-                for (int i = 0; i < roomList.length(); i++) {
-                    JSONObject room = roomList.getJSONObject(i);
-                    // 获取 memberList
-                    JSONArray memberList = room.getJSONArray("memberList");
-                    // 遍历 memberList
-                    for (int j = 0; j < memberList.length(); j++) {
-                        JSONObject member = memberList.getJSONObject(j);
-                        // 提取 memberId 和 originBossId
-                        String memberId = member.getString("memberId");
-                        String originBossId = member.getString("originBossId");
-                        // 获取用户名称
-                        String userName = UserMap.getMaskName(originBossId);
-                        // 发送 RPC 请求获取 train item 数据
-                        String responseData = AntSportsRpcCall.queryTrainItem();
-                        // 解析 JSON 数据
-                        JSONObject responseJson = new JSONObject(responseData);
-                        // 检查请求是否成功
-                        boolean success = responseJson.optBoolean("success");
-                        if (!success) {
-                            return;
-                        }
-                        // 获取 trainItemList
-                        JSONArray trainItemList = responseJson.getJSONArray("trainItemList");
-                        // 遍历 trainItemList
-                        for (int k = 0; k < trainItemList.length(); k++) {
-                            JSONObject trainItem = trainItemList.getJSONObject(k);
-                            // 提取训练项目的相关信息
-                            String itemType = trainItem.getString("itemType");
-                            // 如果找到了 itemType 为 "barbell" 的训练项目，则调用 trainMember 方法并传递 itemType、memberId 和 originBossId 值
-                            if ("barbell".equals(itemType)) {
-                                // 调用 trainMember 方法并传递 itemType、memberId 和 originBossId 值
-                                String trainMemberResponse = AntSportsRpcCall.trainMember(itemType, memberId, originBossId);
-                                // 解析 trainMember 响应数据
-                                JSONObject trainMemberResponseJson = new JSONObject(trainMemberResponse);
-                                // 检查 trainMember 响应是否成功
-                                boolean trainMemberSuccess = trainMemberResponseJson.optBoolean("success");
-                                if (!trainMemberSuccess) {
-                                    Log.runtime(TAG, "trainMember request failed");
-                                    continue; // 如果 trainMember 请求失败，继续处理下一个训练项目
-                                }
-                                // 获取训练项目的名称
-                                String trainItemName = trainItem.getString("name");
-                                // 将用户名称和训练项目的名称添加到日志输出
-                                Log.other(TAG, "训练好友🥋[训练:" + userName + " " + trainItemName + "]");
-                            }
+            JSONArray roomList = clubHomeData.optJSONArray("roomList");
+            if (roomList == null || roomList.length() == 0) {
+                return;
+            }
+
+            // 找到第一个可训练的好友
+            for (int i = 0; i < roomList.length(); i++) {
+                JSONObject room = roomList.optJSONObject(i);
+                if (room == null) continue;
+                JSONArray memberList = room.optJSONArray("memberList");
+                if (memberList == null || memberList.length() == 0) continue;
+
+                for (int j = 0; j < memberList.length(); j++) {
+                    JSONObject member = memberList.optJSONObject(j);
+                    if (member == null) continue;
+
+                    JSONObject trainInfo = member.optJSONObject("trainInfo");
+                    // 只有当前未在训练中的好友才需要发起训练
+                    if (trainInfo == null || trainInfo.optBoolean("training", false)) {
+                        continue;
+                    }
+
+                    String memberId = member.optString("memberId");
+                    String originBossId = member.optString("originBossId");
+                    String userName = UserMap.getMaskName(originBossId);
+
+                    // 查询训练项目列表
+                    String responseData = AntSportsRpcCall.queryTrainItem();
+                    JSONObject responseJson = new JSONObject(responseData);
+                    if (!responseJson.optBoolean("success")) {
+                        Log.runtime(TAG, "queryTrainItem rpc failed: " + responseJson.optString("resultDesc"));
+                        return;
+                    }
+
+                    // bizId 从响应顶层获取
+                    String bizId = responseJson.optString("bizId", "");
+                    if (bizId.isEmpty() && responseJson.has("taskDetail")) {
+                        bizId = responseJson.getJSONObject("taskDetail").optString("taskId", "");
+                    }
+
+                    JSONArray trainItemList = responseJson.optJSONArray("trainItemList");
+                    if (bizId.isEmpty() || trainItemList == null || trainItemList.length() == 0) {
+                        Log.runtime(TAG, "queryTrainItem response missing bizId or trainItemList");
+                        return;
+                    }
+
+                    // 这里随便选一个，这里选 production 最大的训练方式
+                    JSONObject bestItem = null;
+                    int bestProduction = -1;
+                    for (int k = 0; k < trainItemList.length(); k++) {
+                        JSONObject item = trainItemList.optJSONObject(k);
+                        if (item == null) continue;
+                        int production = item.optInt("production", 0);
+                        if (production > bestProduction) {
+                            bestProduction = production;
+                            bestItem = item;
                         }
                     }
-                    // 添加 1 秒的间隔
+
+                    if (bestItem == null) {
+                        return;
+                    }
+
+                    String itemType = bestItem.optString("itemType");
+                    String trainItemName = bestItem.optString("name");
+
+                    String trainMemberResponse = AntSportsRpcCall.trainMember(bizId, itemType, memberId, originBossId);
+                    JSONObject trainMemberResponseJson = new JSONObject(trainMemberResponse);
+                    if (!trainMemberResponseJson.optBoolean("success")) {
+                        Log.runtime(TAG, "trainMember request failed: " + trainMemberResponseJson.optString("resultDesc"));
+                        return;
+                    }
+
+                    Log.other(TAG, "训练好友🥋[训练:" + userName + " " + trainItemName + "]");
                     GlobalThreadPools.sleepCompat(1000);
+                    return; // 只训练一个好友，逻辑足够
                 }
             }
         } catch (Throwable t) {
@@ -1330,78 +1362,130 @@ public class AntSports extends ModelTask {
     }
 
     // 抢好友大战-抢购好友
+    // 流程：
+    // 1. 查询 clubHome 拿到当前余额 coinBalance 和房间列表
+    // 2. 在空房间上，根据余额调用 queryMemberPriceRanking，拿到可买的好友列表
+    // 3. 过滤出 originBossId 符合配置的好友，调用 queryClubMember → buyMember 完成抢购
     private void buyMember() {
         try {
-            // 发送 RPC 请求获取 club home 数据
             String clubHomeResponse = AntSportsRpcCall.queryClubHome();
             GlobalThreadPools.sleepCompat(500);
             JSONObject clubHomeJson = new JSONObject(clubHomeResponse);
+
             // 判断 clubAuth 字段是否为 "ENABLE"
-            if (!clubHomeJson.optString("clubAuth").equals("ENABLE")) {
-                // 如果 clubAuth 不是 "ENABLE"，停止执行
+            if (!"ENABLE".equals(clubHomeJson.optString("clubAuth"))) {
                 Log.record(TAG, "抢好友大战🧑‍🤝‍🧑未授权开启");
                 return;
             }
-            // 获取 coinBalance 的值
-            JSONObject assetsInfo = clubHomeJson.getJSONObject("assetsInfo");
-            int coinBalance = assetsInfo.getInt("coinBalance");
-            JSONArray roomList = clubHomeJson.getJSONArray("roomList");
-            // 遍历 roomList
+
+            JSONObject assetsInfo = clubHomeJson.optJSONObject("assetsInfo");
+            if (assetsInfo == null) {
+                return;
+            }
+            // 看我.txt：assetsInfo.energyBalance 是当前的能量值
+            int coinBalance = assetsInfo.optInt("energyBalance", 0);
+            if (coinBalance <= 0) {
+                Log.record(TAG, "抢好友大战🧑‍🤝‍🧑当前能量为0，跳过抢好友");
+                return;
+            }
+
+            JSONArray roomList = clubHomeJson.optJSONArray("roomList");
+            if (roomList == null || roomList.length() == 0) {
+                return;
+            }
+
             for (int i = 0; i < roomList.length(); i++) {
-                JSONObject room = roomList.getJSONObject(i);
+                JSONObject room = roomList.optJSONObject(i);
+                if (room == null) continue;
+
                 JSONArray memberList = room.optJSONArray("memberList");
-                // 检查 memberList 是否为空
-                if (memberList == null || memberList.length() == 0) {
-                    // 获取 roomId 的值
-                    String roomId = room.getString("roomId");
-                    // 调用 queryMemberPriceRanking 方法并传递 coinBalance 的值
-                    String memberPriceResult = AntSportsRpcCall.queryMemberPriceRanking(String.valueOf(coinBalance));
+                // 只在空房间下手
+                if (memberList != null && memberList.length() > 0) {
+                    continue;
+                }
+
+                String roomId = room.optString("roomId");
+                if (roomId.isEmpty()) continue;
+
+                // 根据余额拉一批可抢好友
+                String memberPriceResult = AntSportsRpcCall.queryMemberPriceRanking(coinBalance);
+                GlobalThreadPools.sleepCompat(500);
+                JSONObject memberPriceJson = new JSONObject(memberPriceResult);
+                if (!memberPriceJson.optBoolean("success", true)) {
+                    Log.runtime(TAG, "queryMemberPriceRanking err: " + memberPriceJson.optString("resultDesc"));
+                    continue;
+                }
+
+                JSONArray memberDetailList = memberPriceJson.optJSONArray("memberDetailList");
+                if (memberDetailList == null || memberDetailList.length() == 0) {
+                    Log.record(TAG, "抢好友大战🧑‍🤝‍🧑暂无可抢好友");
+                    continue;
+                }
+
+                // 遍历候选好友
+                for (int j = 0; j < memberDetailList.length(); j++) {
+                    JSONObject detail = memberDetailList.optJSONObject(j);
+                    if (detail == null) continue;
+
+                    JSONObject memberModel = detail.optJSONObject("memberModel");
+                    if (memberModel == null) continue;
+
+                    String originBossId = memberModel.optString("originBossId");
+                    String memberIdFromRank = memberModel.optString("memberId");
+                    if (originBossId.isEmpty() || memberIdFromRank.isEmpty()) continue;
+
+                    // 检查 originBossId 是否在配置的列表中
+                    boolean isBattleForFriend = originBossIdList.getValue().contains(originBossId);
+                    if (battleForFriendType.getValue() == BattleForFriendType.DONT_ROB) {
+                        isBattleForFriend = !isBattleForFriend;
+                    }
+                    if (!isBattleForFriend) {
+                        continue;
+                    }
+
+                    // 价格判断：price <= coinBalance 才抢
+                    JSONObject priceInfoObj = memberModel.optJSONObject("priceInfo");
+                    if (priceInfoObj == null) continue;
+                    int price = priceInfoObj.optInt("price", Integer.MAX_VALUE);
+                    if (price > coinBalance) {
+                        continue;
+                    }
+
+                    // 查询玩家详情，拿到 currentBossId / memberId / priceInfo
+                    String clubMemberResult = AntSportsRpcCall.queryClubMember(memberIdFromRank, originBossId);
                     GlobalThreadPools.sleepCompat(500);
-                    JSONObject memberPriceJson = new JSONObject(memberPriceResult);
-                    // 检查是否存在 rank 字段
-                    if (memberPriceJson.has("rank") && memberPriceJson.getJSONObject("rank").has("data")) {
-                        JSONArray dataArray = memberPriceJson.getJSONObject("rank").getJSONArray("data");
-                        // 遍历 data 数组
-                        for (int j = 0; j < dataArray.length(); j++) {
-                            JSONObject dataObj = dataArray.getJSONObject(j);
-                            String originBossId = dataObj.getString("originBossId");
-                            // 检查 originBossId 是否在 originBossIdList 中
-                            boolean isBattleForFriend = originBossIdList.getValue().contains(originBossId);
-                            if (battleForFriendType.getValue() == BattleForFriendType.DONT_ROB) {
-                                isBattleForFriend = !isBattleForFriend;
-                            }
-                            if (isBattleForFriend) {
-                                // 在这里调用 queryClubMember 方法并传递 memberId 和 originBossId 的值
-                                String clubMemberResult = AntSportsRpcCall.queryClubMember(dataObj.getString("memberId"), originBossId);
-                                GlobalThreadPools.sleepCompat(500);
-                                // 解析 queryClubMember 返回的 JSON 数据
-                                JSONObject clubMemberJson = new JSONObject(clubMemberResult);
-                                if (clubMemberJson.has("member")) {
-                                    JSONObject memberObj = clubMemberJson.getJSONObject("member");
-                                    // 获取当前成员的信息
-                                    String currentBossId = memberObj.getString("currentBossId");
-                                    String memberId = memberObj.getString("memberId");
-                                    String priceInfo = memberObj.getString("priceInfo");
-                                    // 调用 buyMember 方法
-                                    String buyMemberResult = AntSportsRpcCall.buyMember(currentBossId, memberId, originBossId, priceInfo, roomId);
-                                    GlobalThreadPools.sleepCompat(500);
-                                    // 处理 buyMember 的返回结果
-                                    JSONObject buyMemberResponse = new JSONObject(buyMemberResult);
-                                    if (ResChecker.checkRes(TAG, buyMemberResponse)) {
-                                        String userName = UserMap.getMaskName(originBossId);
-                                        Log.other(TAG, "抢购好友🥋[成功:将 " + userName + " 抢回来]");
-                                        // 抢好友成功后，如果训练好友功能开启，则执行训练
-                                        if (trainFriend.getValue()) {
-                                            queryTrainItem();
-                                        }
-                                    } else if ("CLUB_AMOUNT_NOT_ENOUGH".equals(buyMemberResponse.getString("resultCode"))) {
-                                        Log.record(TAG, "[能量🎈不足，无法完成抢购好友！]");
-                                    } else if ("CLUB_MEMBER_TRADE_PROTECT".equals(buyMemberResponse.getString("resultCode"))) {
-                                        Log.record(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]");
-                                    }
-                                }
-                            }
+                    JSONObject clubMemberDetailJson = new JSONObject(clubMemberResult);
+                    if (!clubMemberDetailJson.optBoolean("success", true) || !clubMemberDetailJson.has("member")) {
+                        continue;
+                    }
+
+                    JSONObject memberObj = clubMemberDetailJson.getJSONObject("member");
+                    String currentBossId = memberObj.optString("currentBossId");
+                    String memberId = memberObj.optString("memberId");
+                    JSONObject priceInfoFull = memberObj.optJSONObject("priceInfo");
+                    if (currentBossId.isEmpty() || memberId.isEmpty() || priceInfoFull == null) {
+                        continue;
+                    }
+
+                    String priceInfoStr = priceInfoFull.toString();
+
+                    String buyMemberResult = AntSportsRpcCall.buyMember(currentBossId, memberId, originBossId, priceInfoStr, roomId);
+                    GlobalThreadPools.sleepCompat(500);
+                    JSONObject buyMemberResponse = new JSONObject(buyMemberResult);
+
+                    if (ResChecker.checkRes(TAG, buyMemberResponse)) {
+                        String userName = UserMap.getMaskName(originBossId);
+                        Log.other(TAG, "抢购好友🥋[成功:将 " + userName + " 抢回来]");
+                        // 抢好友成功后，如果训练好友功能开启，则执行训练
+                        if (trainFriend.getValue()) {
+                            queryTrainItem();
                         }
+                        return; // 抢到一个就够了
+                    } else if ("CLUB_AMOUNT_NOT_ENOUGH".equals(buyMemberResponse.optString("resultCode"))) {
+                        Log.record(TAG, "[能量🎈不足，无法完成抢购好友！]");
+                        return;
+                    } else if ("CLUB_MEMBER_TRADE_PROTECT".equals(buyMemberResponse.optString("resultCode"))) {
+                        Log.record(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]");
                     }
                 }
             }
@@ -1437,13 +1521,21 @@ public class AntSports extends ModelTask {
         public void runNeverland() {
             try {
                 Log.record(TAG, "开始执行健康岛任务");
+                if(neverlandTask.getValue())
+                {
+                    // 固定顺序：1.签到 → 2.循环处理任务大厅 → 3.捡泡泡
+                    neverlandDoSign();                 // 签到
+                    loopHandleTaskCenter();            // 循环处理任务
+                   // handleHealthIslandTask();            // 循环处理任务中心的浏览任务
+                    neverlandPickAllBubble();          // 拾取能量球
+                }
 
-                // 固定顺序：1.签到 → 2.循环处理任务大厅 → 3.捡泡泡
-                neverlandDoSign();
-                loopHandleTaskCenter(); // 新增循环处理任务
-                neverlandPickAllBubble();
-                //Log.record(TAG, "开始执行健康岛行走/建造");
-                neverlandAutoWalk();
+                if(neverlandTask.getValue())
+                {
+                    neverlandAutoTask();               //执行健康岛建造
+                }
+
+
                 Log.record(TAG, "健康岛任务结束");
             } catch (Throwable t) {
                 Log.error(TAG, "runNeverland err:");
@@ -1472,7 +1564,7 @@ public class AntSports extends ModelTask {
                 JSONObject signInfo = data.optJSONObject("continuousSignInfo");
 
                 if (signInfo != null && signInfo.optBoolean("signedToday", false)) {
-                    Log.other(TAG, "今日已签到 ✔ 连续：" + signInfo.optInt("continuitySignedDayCount") + " 天");
+                    Log.record(TAG, "今日已签到 ✔ 连续：" + signInfo.optInt("continuitySignedDayCount") + " 天");
                     return;
                 }
 
@@ -1497,7 +1589,7 @@ public class AntSports extends ModelTask {
                         + " 连续：" + newContinuity + " 天");
 
             } catch (Throwable t) {
-                Log.error(TAG, "neverlandDoSign err:");
+                Log.error(TAG, "neverlandDoSign err:"+t.toString());
                 Log.printStackTrace(TAG, t);
             }
         }
@@ -1552,7 +1644,7 @@ public class AntSports extends ModelTask {
 
                     // 4. 如果本次获取到的任务中没有可处理任务，则认为后续也无法执行，直接退出
                     if (pendingTasks.isEmpty()) {
-                        Log.other(TAG, "本次获取到的任务中没有可处理的 PROMOKERNEL_TASK 或 LIGHT_TASK，停止循环");
+                        Log.record(TAG, "本次获取到的任务中没有可处理的 PROMOKERNEL_TASK 或 LIGHT_TASK，停止循环");
                         break;
                     }
 
@@ -1599,6 +1691,71 @@ public class AntSports extends ModelTask {
 
             Log.record(TAG, "任务大厅循环处理结束");
         }
+
+        /**
+         * 处理健康岛浏览任务
+         */
+        private void handleHealthIslandTask() {
+            try {
+                Log.record(TAG, "开始检查健康岛浏览任务");
+
+                // 1. 查询健康岛任务信息
+                JSONObject taskInfoResp = new JSONObject(
+                        AntSportsRpcCall.NeverlandRpcCall.queryTaskInfo("health-island", "LIGHT_FEEDS_TASK")
+                );
+
+                if (!ResChecker.checkRes(TAG + "查询健康岛浏览任任务失败:", taskInfoResp)
+                        || !taskInfoResp.optBoolean("success", false)
+                        || taskInfoResp.optJSONObject("data") == null) {
+
+
+                    Log.other(TAG, "健康岛浏览任务查询失败 ["+taskInfoResp+"] 请关闭此功能"+taskInfoResp);
+                    return;
+                }
+
+                JSONArray taskInfos = taskInfoResp.getJSONObject("data").optJSONArray("taskInfos");
+                if (taskInfos == null || taskInfos.length() == 0) {
+                    Log.other(TAG, "健康岛任务列表为空");
+                    return;
+                }
+
+                // 2. 遍历处理每个任务
+                for (int i = 0; i < taskInfos.length(); i++) {
+                    JSONObject taskInfo = taskInfos.getJSONObject(i);
+                    String encryptValue = taskInfo.optString("encryptValue");
+                    int energyNum = taskInfo.optInt("energyNum", 0);
+                    int viewSec = taskInfo.optInt("viewSec", 15);
+
+                    if (encryptValue.isEmpty()) {
+                        Log.error(TAG, "健康岛任务 encryptValue 为空，跳过");
+                        continue;
+                    }
+
+                    Log.record(TAG, "健康岛浏览任务：能量+" + energyNum + "，需等待" + viewSec + "秒");
+
+                    // 3. 等待浏览时间
+                    Thread.sleep(viewSec * 1000L);
+
+                    // 4. 领取奖励
+                    JSONObject receiveResp = new JSONObject(
+                            AntSportsRpcCall.NeverlandRpcCall.energyReceive(encryptValue, energyNum, "LIGHT_FEEDS_TASK")
+                    );
+
+                    if (ResChecker.checkRes(TAG + "领取健康岛任务奖励:", receiveResp)
+                            && receiveResp.optBoolean("success", false)) {
+                        Log.other(TAG, "✅ 健康岛任务完成，获得能量+" + energyNum);
+                    } else {
+                        Log.error(TAG, "健康岛任务领取失败: " + receiveResp);
+                    }
+
+                    Thread.sleep(1000); // 任务间隔
+                }
+
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, "处理健康岛任务异常", t);
+            }
+        }
+
 
         /**
          * 筛选待完成的任务（状态为 SIGNUP_COMPLETE）
@@ -1729,7 +1886,7 @@ public class AntSports extends ModelTask {
                 }
 
                 if (ids.isEmpty()) {
-                    Log.other(TAG, "没有可领取的泡泡");
+                    Log.record(TAG, "没有可领取的泡泡");
                     return;
                 }
 
@@ -1756,73 +1913,272 @@ public class AntSports extends ModelTask {
         // -------------------------------------------------------------------------
         // 4. 自动走路任务处理
         // -------------------------------------------------------------------------
+        // =========================================================================
+        // 步数上限检查 - 公共方法
+        // =========================================================================
         /**
-         * 健康岛自动任务：根据 queryBaseinfo 自动选择【走路】或【建造】
-         *
-         * - 当 queryBaseinfo.data.newGame == true 时，认为是新版本“建造”玩法，走建造逻辑
-         * - 否则沿用旧版“走路”逻辑
-         * ！！！ 注意，千万不要手开岛屿，否则无法识别到当前的地图，只能手动切到对应地图
+         * 检查今日步数是否达到上限
+         * @return 剩余可走步数,如果返回 0 或负数表示已达上限
          */
-        private void neverlandAutoWalk() {
-            try {
-                Log.record(TAG, "健康岛 · 开始自动行走/建造任务(千万不要手开岛屿，否则无法识别到当前的地图，只能手动切到对应地图)");
+        private int checkDailyStepLimit() {
+            Integer stepCount = Status.getIntFlagToday(StatusFlags.FLAG_NEVERLAND_STEPCOUNT);
+            if (stepCount == null) {
+                stepCount = 0;
+            }
+            int maxStepLimit = neverlandGridStepCount.getValue();
+            int remainSteps = maxStepLimit - stepCount;
 
-                // 0. 先通过 queryBaseinfo 判断是否为新玩法（建造）
+            Log.record(TAG, String.format("今日步数统计: 已走 %d/%d 步, 剩余 %d 步",
+                    stepCount, maxStepLimit, Math.max(0, remainSteps)));
+
+            return remainSteps;
+        }
+
+        /**
+         * 记录步数增加
+         * @param addedSteps 本次增加的步数
+         * @return 更新后的总步数
+         */
+        private int recordStepIncrease(int addedSteps) {
+            if (addedSteps <= 0) {
+                return Status.getIntFlagToday(StatusFlags.FLAG_NEVERLAND_STEPCOUNT);
+            }
+
+            Integer currentSteps = Status.getIntFlagToday(StatusFlags.FLAG_NEVERLAND_STEPCOUNT);
+            if (currentSteps == null) {
+                currentSteps = 0;
+            }
+
+            int newSteps = currentSteps + addedSteps;
+            Status.setIntFlagToday(StatusFlags.FLAG_NEVERLAND_STEPCOUNT, newSteps);
+
+            int maxLimit = neverlandGridStepCount.getValue();
+            Log.record(TAG, String.format("步数增加: +%d 步, 当前总计 %d/%d 步",
+                    addedSteps, newSteps, maxLimit));
+
+            return newSteps;
+        }
+
+        // =========================================================================
+// 健康岛自动任务
+// =========================================================================
+
+        /**
+         * 健康岛走路建造任务入口
+         *
+         * <p>功能说明:</p>
+         * <ul>
+         *   <li>自动检测游戏模式(新游戏建造模式 or 旧版行走模式)</li>
+         *   <li>检查每日步数上限和能量余额</li>
+         *   <li>根据模式自动执行对应任务</li>
+         * </ul>
+         *
+         * <p>执行流程:</p>
+         * <ol>
+         *   <li>查询基础信息,判断游戏模式</li>
+         *   <li>检查每日步数限额</li>
+         *   <li>检查能量余额</li>
+         *   <li>分发到对应的任务处理函数</li>
+         * </ol>
+         *
+         * @throws Exception 网络请求或数据解析异常
+         */
+        private void neverlandAutoTask() {
+            try {
+                Log.record(TAG, "健康岛 · 启动走路建造任务");
+
+                // ========== 1. 查询基础信息 ==========
                 JSONObject baseInfo = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryBaseinfo());
-                if (!ResChecker.checkRes(TAG + "查询基础信息失败:", baseInfo)
+                if (!ResChecker.checkRes(TAG + " 查询基础信息失败:", baseInfo)
                         || !baseInfo.optBoolean("success", false)
                         || baseInfo.optJSONObject("data") == null) {
-                    Log.error(TAG, "queryBaseinfo raw=" + baseInfo);
+                    Log.error(TAG, "queryBaseinfo 失败, 响应数据: " + baseInfo);
                     return;
                 }
+
                 JSONObject baseData = baseInfo.getJSONObject("data");
-                boolean newGame = baseData.optBoolean("newGame", false);
-                String baseBranchId = baseData.optString("branchId", "MASTER");
-                String baseMapId = baseData.optString("mapId", "");
-                String mapName = baseData.optString("mapName", "");
+                boolean isNewGame = baseData.optBoolean("newGame", false);
+                String branchId = baseData.optString("branchId", "MASTER");
+                String mapId = baseData.optString("mapId", "");
+                String mapName = baseData.optString("mapName", "未知地图");
 
-                if (newGame) {
-                    // 新游戏：走建造逻辑
-                    Log.record(TAG, "健康岛 · 检测到新游戏建造模式，地图[" + mapName + "](" + baseMapId + ")，切换为建造任务");
-                    neverlandAutoBuild(baseBranchId, baseMapId);
+                Log.record(TAG, String.format("当前地图: [%s](%s) | 模式: %s",
+                        mapName, mapId, isNewGame ? "新游戏建造" : "旧版行走"));
+
+                // ========== 2. 检查每日步数上限 ==========
+                int remainSteps = checkDailyStepLimit();
+                if (remainSteps <= 0) {
+                    Log.record(TAG, "今日步数已达上限, 任务结束");
                     return;
-                } else {
-                    Log.record(TAG, "健康岛 · 当前为旧版行走模式，继续走路任务");
                 }
 
-                // 1. 查询剩余能量
+                // ========== 3. 查询剩余能量 ==========
+                int leftEnergy = queryUserEnergy();
+                if (leftEnergy < 5) {
+                    Log.record(TAG, "剩余能量不足(< 5), 无法执行任务");
+                    return;
+                }
+
+                // ========== 4. 根据模式分发任务 ==========
+                if (isNewGame) {
+                    executeAutoBuild(branchId, mapId, remainSteps, leftEnergy);
+                } else {
+                    executeAutoWalk(branchId, remainSteps, leftEnergy);
+                }
+
+                Log.record(TAG, "健康岛自动走路建造执行完成 ✓");
+
+            } catch (Throwable t) {
+                Log.error(TAG, "neverlandAutoTask 发生异常");
+                Log.printStackTrace(TAG, t);
+            }
+        }
+
+// =========================================================================
+// 辅助函数
+// =========================================================================
+
+        /**
+         * 查询用户剩余能量
+         *
+         * @return 剩余能量值,查询失败返回 0
+         */
+        private int queryUserEnergy() {
+            try {
                 JSONObject energyResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryUserEnergy());
-                if (!ResChecker.checkRes(TAG + "查询用户能量失败:", energyResp)
+                if (!ResChecker.checkRes(TAG + " 查询用户能量失败:", energyResp)
                         || !energyResp.optBoolean("success", false)
                         || energyResp.optJSONObject("data") == null) {
-                    Log.error(TAG, "queryUserEnergy raw=" + energyResp);
-                    return;
-                }
-                int leftCount = energyResp.getJSONObject("data").optInt("balance", 0);
-                Log.other(TAG, "初始剩余能量=" + leftCount);
-                if (leftCount < 5) {
-                    Log.other(TAG, "剩余能量不足，无法走路");
-                    return;
+                    Log.error(TAG, "queryUserEnergy 失败, 响应数据: " + energyResp);
+                    return 0;
                 }
 
-                // 2. 获取地图列表
+                int balance = energyResp.getJSONObject("data").optInt("balance", 0);
+                Log.other(TAG, "当前剩余能量: " + balance);
+                return balance;
+
+            } catch (Throwable t) {
+                Log.error(TAG, "queryUserEnergy 发生异常");
+                Log.printStackTrace(TAG, t);
+                return 0;
+            }
+        }
+
+// =========================================================================
+// 旧版行走模式
+// =========================================================================
+
+        /**
+         * 执行自动行走任务(旧版模式)
+         *
+         * <p>功能说明:</p>
+         * <ul>
+         *   <li>获取当前地图列表</li>
+         *   <li>查找 DOING 状态的地图,若无则选择 LOCKED 地图</li>
+         *   <li>循环执行 walkGrid 直到能量或步数耗尽</li>
+         * </ul>
+         *
+         * @param baseBranchId 基础分支 ID
+         * @param remainSteps 剩余可用步数
+         * @param leftEnergy 剩余能量
+         */
+        private void executeAutoWalk(String baseBranchId, int remainSteps, int leftEnergy) {
+            try {
+                Log.other(TAG, "开始执行旧版行走任务");
+
+                // ========== 1. 获取地图列表 ==========
                 JSONObject mapResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapList());
-                if (!ResChecker.checkRes(TAG + "查询地图失败:", mapResp)
+                if (!ResChecker.checkRes(TAG + " 查询地图失败:", mapResp)
                         || !mapResp.optBoolean("success", false)
                         || mapResp.optJSONObject("data") == null) {
-                    Log.error(TAG, "queryMapList raw=" + mapResp);
+                    Log.error(TAG, "queryMapList 失败, 响应数据: " + mapResp);
                     return;
                 }
 
                 JSONArray mapList = mapResp.getJSONObject("data").optJSONArray("mapList");
                 if (mapList == null || mapList.length() == 0) {
-                    Log.error(TAG, "地图列表为空");
+                    Log.error(TAG, "地图列表为空, 无法继续");
                     return;
                 }
 
-                // 3. 查找 DOING 地图
+                // ========== 2. 查找或选择地图 ==========
+                JSONObject currentMap = findOrChooseMap(mapList);
+                if (currentMap == null) {
+                    Log.error(TAG, "无可用地图, 任务终止");
+                    return;
+                }
+
+                String branchId = currentMap.optString("branchId", baseBranchId);
+                String mapId = currentMap.optString("mapId", "");
+                Log.other(TAG, "使用地图 ID: " + mapId);
+
+                // ========== 3. 自动走路循环 ==========
+                boolean retriedMapNotCurrent = false;
+
+                for (int i = 0; i < remainSteps; i++) {
+                    if (leftEnergy < 5) {
+                        Log.other(TAG, "能量不足(< 5), 停止走路任务");
+                        break;
+                    }
+
+                    JSONObject walkResp = new JSONObject(
+                            AntSportsRpcCall.NeverlandRpcCall.walkGrid(branchId, mapId, false));
+
+                    if (!ResChecker.checkRes(TAG + " walkGrid 失败:", walkResp)
+                            || !walkResp.optBoolean("success", false)
+                            || walkResp.optJSONObject("data") == null) {
+
+                        String errorCode = walkResp.optString("errorCode", "");
+
+                        if ("MAP_NOT_CURRENT".equals(errorCode) && !retriedMapNotCurrent) {
+                            if (tryChooseMap(branchId, mapId)) {
+                                retriedMapNotCurrent = true;
+                                i--;
+                                Thread.sleep(300);
+                                continue;
+                            }
+                        }
+
+                        Log.error(TAG, String.format("walkGrid 失败, 错误码: %s, 响应数据: %s",
+                                errorCode, walkResp));
+                        break;
+                    }
+
+                    // ========== 4. 处理走路结果 ==========
+                    JSONObject walkData = walkResp.getJSONObject("data");
+                    leftEnergy = walkData.optInt("leftCount", leftEnergy);
+
+                    int stepIncrease = extractStepIncrease(walkData);
+                    int totalSteps = recordStepIncrease(stepIncrease);
+
+                    JSONObject starData = walkData.optJSONObject("starData");
+                    int currStar = starData != null ? starData.optInt("curr", 0) : 0;
+
+                    Log.other(TAG, String.format("走路进度 🎉 能量: %d | 本次: +%d | 今日: %d/%d | 星星: %d",
+                            leftEnergy, stepIncrease, totalSteps, neverlandGridStepCount.getValue(), currStar));
+
+                    Thread.sleep(888);
+                }
+
+                Log.other(TAG, "自动走路任务完成 ✓");
+
+            } catch (Throwable t) {
+                Log.error(TAG, "executeAutoWalk 发生异常");
+                Log.printStackTrace(TAG, t);
+            }
+        }
+
+        /**
+         * 查找 DOING 地图或随机选择 LOCKED 地图
+         *
+         * @param mapList 地图列表
+         * @return 选中的地图对象,失败返回 null
+         */
+        private JSONObject findOrChooseMap(JSONArray mapList) {
+            try {
                 JSONObject currentMap = null;
                 List<JSONObject> lockedMaps = new ArrayList<>();
+
                 for (int i = 0; i < mapList.length(); i++) {
                     JSONObject map = mapList.getJSONObject(i);
                     String status = map.optString("status", "");
@@ -1834,267 +2190,187 @@ public class AntSports extends ModelTask {
                     }
                 }
 
-                // 4. 如果没有 DOING，则随机选择 LOCKED 地图
                 if (currentMap == null && !lockedMaps.isEmpty()) {
                     int idx = new Random().nextInt(lockedMaps.size());
                     currentMap = lockedMaps.get(idx);
                     String branchId = currentMap.optString("branchId", "");
                     String mapId = currentMap.optString("mapId", "");
-                    Log.record(TAG, "未找到 DOING 地图，选择 LOCKED 地图: " + mapId);
 
-                    // 选择地图
-                    JSONObject chooseResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId));
-                    if (!chooseResp.optBoolean("success", false)) {
-                        Log.error(TAG, "chooseMap失败: " + chooseResp);
-                        return;
+                    Log.other(TAG, String.format("未找到 DOING 地图, 随机选择 LOCKED 地图: %s", mapId));
+
+                    if (!tryChooseMap(branchId, mapId)) {
+                        return null;
                     }
                 }
 
-                String branchId = currentMap.optString("branchId", "");
-                String currentMapId = currentMap.optString("mapId", "");
-                Log.other(TAG, "当前地图ID=" + currentMapId);
-
-                // 5. 自动走路循环，每次消耗5能量，循环50次
-                int stepTimes = 50;
-                boolean retriedMapNotCurrent = false; // MAP_NOT_CURRENT 只自动纠正一次
-                for (int i = 0; i < stepTimes; i++) {
-                    if (leftCount < 5) {
-                        Log.other(TAG, "能量不足，停止走路");
-                        break;
-                    }
-
-                    JSONObject walkResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.walkGrid(branchId, currentMapId, false));
-                    if (!ResChecker.checkRes(TAG + "walkGrid失败:", walkResp)
-                            || !walkResp.optBoolean("success", false)
-                            || walkResp.optJSONObject("data") == null) {
-                        String errorCode = walkResp.optString("errorCode", "");
-                        if ("MAP_NOT_CURRENT".equals(errorCode)) {
-                            // 当前 mapId 在服务端视角不是“当前地图”，尝试自动切一次
-                            if (!retriedMapNotCurrent) {
-                                try {
-                                    JSONObject chooseResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, currentMapId));
-                                    if (chooseResp.optBoolean("success", false)) {
-                                        Log.record(TAG, "健康岛走路🚶‍♂️[检测到地图不一致，已自动切换至当前线路，准备重试]");
-                                        retriedMapNotCurrent = true;
-                                        // 重试本轮，不消耗这一次循环
-                                        i--;
-                                        Thread.sleep(300);
-                                        continue;
-                                    } else {
-                                        Log.record(TAG, "健康岛走路🚶‍♂️[自动切换地图失败，请在健康岛界面手动切换一次地图后再运行 Tk]");
-                                    }
-                                } catch (Throwable e) {
-                                    Log.printStackTrace(TAG, "健康岛走路自动切换地图失败", e);
-                                }
-                            } else {
-                                Log.record(TAG, "健康岛走路🚶‍♂️[当前地图不是 Tk 识别的地图，请在健康岛界面手动切换一次地图后再运行 Tk]");
-                            }
-                        } else {
-                            Log.error(TAG, "walkGrid raw=" + walkResp);
-                        }
-                        break;
-                    }
-
-                    JSONObject walkData = walkResp.getJSONObject("data");
-                    leftCount = walkData.optInt("leftCount", leftCount);
-                    JSONArray mapAwards = walkData.optJSONArray("mapAwards");
-                    int step = 0;
-                    if (mapAwards != null && mapAwards.length() > 0) {
-                        step = mapAwards.getJSONObject(0).optInt("step", 0);
-                    }
-                    JSONObject starData = walkData.optJSONObject("starData");
-                    int currStar = starData != null ? starData.optInt("curr", 0) : 0;
-
-                    Log.other(TAG, "走路中 🎉 剩余能量=" + leftCount + " 本次步数=" + step + " 当前星星=" + currStar);
-
-                    Thread.sleep(888); // 每次走路间隔888ms
-                }
-
-                Log.record(TAG, "自动走路任务结束");
+                return currentMap;
 
             } catch (Throwable t) {
-                Log.error(TAG, "neverlandAutoWalk err:");
+                Log.error(TAG, "findOrChooseMap 发生异常");
+                Log.printStackTrace(TAG, t);
+                return null;
+            }
+        }
+
+        /**
+         * 尝试切换到指定地图
+         *
+         * @param branchId 分支 ID
+         * @param mapId 地图 ID
+         * @return 切换成功返回 true
+         */
+        private boolean tryChooseMap(String branchId, String mapId) {
+            try {
+                Log.other(TAG, "尝试切换地图: " + mapId);
+                JSONObject chooseResp = new JSONObject(
+                        AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId));
+
+                if (chooseResp.optBoolean("success", false)) {
+                    Log.record(TAG, "成功切换到地图: " + mapId);
+                    return true;
+                } else {
+                    Log.error(TAG, "切换地图失败: " + chooseResp);
+                    return false;
+                }
+            } catch (Throwable t) {
+                Log.error(TAG, "tryChooseMap 发生异常");
+                Log.printStackTrace(TAG, t);
+                return false;
+            }
+        }
+
+        /**
+         * 从 walkData 中提取步数增量
+         *
+         * @param walkData 走路响应数据
+         * @return 步数增量
+         */
+        private int extractStepIncrease(JSONObject walkData) {
+            try {
+                JSONArray mapAwards = walkData.optJSONArray("mapAwards");
+                if (mapAwards != null && mapAwards.length() > 0) {
+                    return mapAwards.getJSONObject(0).optInt("step", 0);
+                }
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+            }
+            return 0;
+        }
+
+// =========================================================================
+// 新游戏建造模式
+// =========================================================================
+
+        /**
+         * 执行自动建造任务(新游戏模式)
+         *
+         * <p>功能说明:</p>
+         * <ul>
+         *   <li>根据剩余步数和能量计算建造倍数</li>
+         *   <li>循环执行 build 直到能量或步数耗尽</li>
+         *   <li>实时记录建造进度和奖励</li>
+         * </ul>
+         *
+         * @param branchId 分支 ID
+         * @param mapId 地图 ID
+         * @param remainSteps 剩余可用步数
+         * @param leftEnergy 剩余能量
+         */
+        private void executeAutoBuild(String branchId, String mapId, int remainSteps, int leftEnergy) {
+            try {
+                Log.other(TAG, String.format("开始执行建造任务, 地图: %s", mapId));
+
+                while (remainSteps > 0 && leftEnergy >= 5) {
+                    // 计算本次建造倍数 (1-10 倍)
+                    int maxMulti = Math.min(10, remainSteps);
+                    int energyBasedMulti = leftEnergy / 5;
+                    int multiNum = Math.min(maxMulti, energyBasedMulti);
+
+                    if (multiNum <= 0) {
+                        Log.other(TAG, "能量不足或步数已达上限, 停止建造");
+                        break;
+                    }
+
+                    JSONObject buildResp = new JSONObject(
+                            AntSportsRpcCall.NeverlandRpcCall.build(branchId, mapId, multiNum));
+
+                    if (!ResChecker.checkRes(TAG + " build 失败:", buildResp)
+                            || !buildResp.optBoolean("success", false)) {
+                        Log.error(TAG, String.format("build 失败, multiNum=%d, 响应: %s",
+                                multiNum, buildResp));
+                        break;
+                    }
+
+                    JSONObject buildData = buildResp.optJSONObject("data");
+                    if (buildData == null) {
+                        Log.error(TAG, "build 响应数据为空: " + buildResp);
+                        break;
+                    }
+
+                    // 更新能量
+                    int newLeftEnergy = buildData.optInt("leftCount", -1);
+                    if (newLeftEnergy >= 0) {
+                        leftEnergy = newLeftEnergy;
+                    }
+
+                    // 计算实际步数
+                    int stepIncrease = calculateBuildSteps(buildData, multiNum);
+                    int totalSteps = recordStepIncrease(stepIncrease);
+                    remainSteps -= stepIncrease;
+
+                    // 获取奖励信息
+                    String awardInfo = extractAwardInfo(buildData);
+
+                    Log.other(TAG, String.format("建造进度 🏗️ 倍数: x%d | 能量: %d | 本次: +%d | 今日: %d/%d%s",
+                            multiNum, leftEnergy, stepIncrease, totalSteps,
+                            neverlandGridStepCount.getValue(), awardInfo));
+
+                    Thread.sleep(1000);
+                }
+
+                Log.other(TAG, "自动建造任务完成 ✓");
+
+            } catch (Throwable t) {
+                Log.error(TAG, "executeAutoBuild 发生异常");
                 Log.printStackTrace(TAG, t);
             }
         }
 
         /**
-         * 健康岛自动建造任务（新游戏 newGame = true 时使用）
-         * 根据当前余额动态选择 multiNum（1~10），每 1 倍消耗约 5 点健康能量
+         * 计算建造实际产生的步数
+         *
+         * @param buildData 建造响应数据
+         * @param defaultMulti 默认倍数
+         * @return 实际步数
          */
-        private void neverlandAutoBuild(String branchId, String mapId) {
+        private int calculateBuildSteps(JSONObject buildData, int defaultMulti) {
             try {
-                Log.record(TAG, "健康岛 · 开始自动建造任务，branchId=" + branchId + " mapId=" + mapId);
-
-                while (true) {
-                    // 0. 先判断当前地图是否已经建造完成（通过 queryMapInfoNew）
-                    try {
-                        JSONObject mapInfo = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapInfoNew(mapId));
-                        if (!ResChecker.checkRes(TAG + "queryMapInfoNew 失败:", mapInfo)
-                                || !mapInfo.optBoolean("success", false)
-                                || mapInfo.optJSONObject("data") == null) {
-                            Log.error(TAG, "queryMapInfoNew raw=" + mapInfo);
-                            break;
-                        }
-                        JSONObject mData = mapInfo.getJSONObject("data");
-                        String mapStatus = mData.optString("mapStatus", "");
-                        int mapFinal = mData.optInt("mapEnergyFinal", 0);
-                        int mapProcess = mData.optInt("mapEnergyProcess", 0);
-                        JSONObject stageInfo = mData.optJSONObject("stageInfo");
-                        int stageFinal = stageInfo != null ? stageInfo.optInt("buildingEnergyFinal", 0) : 0;
-                        int stageProcess = stageInfo != null ? stageInfo.optInt("buildingEnergyProcess", 0) : 0;
-
-                        boolean stageDone = stageFinal > 0 && stageProcess >= stageFinal;
-                        boolean mapDone = mapFinal > 0 && mapProcess >= mapFinal;
-                        boolean statusDone = mapStatus.startsWith("FINISH");
-
-                        if (stageDone || mapDone || statusDone) {
-                            Log.record(TAG,
-                                    "当前地图建造已完成[" + mData.optString("mapName", mapId) + "] " +
-                                            "(mapEnergy=" + mapProcess + "/" + mapFinal +
-                                            ", stage=" + stageProcess + "/" + stageFinal + ")，" +
-                                            "尝试自动切换到下一张岛屿继续建造");
-
-                            // 自动从地图列表中选择一个未完成的新地图
-                            JSONObject listResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapList());
-                            if (!ResChecker.checkRes(TAG + "queryMapList 失败:", listResp)
-                                    || !listResp.optBoolean("success", false)
-                                    || listResp.optJSONObject("data") == null) {
-                                Log.error(TAG, "queryMapList raw=" + listResp);
-                                break;
-                            }
-
-                            JSONArray mapList2 = listResp.getJSONObject("data").optJSONArray("mapList");
-                            if (mapList2 == null || mapList2.length() == 0) {
-                                Log.record(TAG, "健康岛 · 没有更多地图可建造，结束建造任务");
-                                break;
-                            }
-
-                            JSONObject nextMap = null;
-                            for (int i = 0; i < mapList2.length(); i++) {
-                                JSONObject mp = mapList2.getJSONObject(i);
-                                String status2 = mp.optString("mapStatus", mp.optString("status", ""));
-                                int totalFinal = mp.optInt("mapEnergyFinal", 0);
-                                int totalProcess = mp.optInt("mapEnergyProcess", 0);
-                                // 过滤已经完成奖励的地图（FINISH 开头或能量满都视为已完成）
-                                if (status2.startsWith("FINISH") || (totalFinal > 0 && totalProcess >= totalFinal)) {
-                                    continue;
-                                }
-                                nextMap = mp;
-                                break;
-                            }
-
-                            if (nextMap == null) {
-                                Log.record(TAG, "健康岛 · 所有地图均已完成，结束建造任务");
-                                break;
-                            }
-
-                            String nextMapId = nextMap.optString("mapId", "");
-                            String nextBranchId = nextMap.optString("branchId", branchId);
-                            String nextName = nextMap.optString("mapName", nextMapId);
-
-                            JSONObject chooseResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.chooseMap(nextBranchId, nextMapId));
-                            if (!chooseResp.optBoolean("success", false)) {
-                                Log.error(TAG, "切换新地图失败: " + chooseResp);
-                                break;
-                            }
-
-                            Log.record(TAG, "健康岛 · 已切换至新地图[" + nextName + "(" + nextMapId + ")]，继续自动建造");
-                            // 更新当前地图信息，继续 while 循环
-                            branchId = nextBranchId;
-                            mapId = nextMapId;
-                            continue;
-                        }
-                    } catch (Throwable e) {
-                        Log.printStackTrace(TAG, "检测地图建造进度失败", e);
-                        break;
-                    }
-
-                    // 1. 查询剩余能量
-                    JSONObject energyResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryUserEnergy());
-                    if (!ResChecker.checkRes(TAG + "查询用户能量失败:", energyResp)
-                            || !energyResp.optBoolean("success", false)
-                            || energyResp.optJSONObject("data") == null) {
-                        Log.error(TAG, "queryUserEnergy raw=" + energyResp);
-                        break;
-                    }
-                    int leftCount = energyResp.getJSONObject("data").optInt("balance", 0);
-                    if (leftCount < 5) {
-                        Log.other(TAG, "建造能量不足（" + leftCount + "） ，停止建造");
-                        break;
-                    }
-
-                    // 2. 按剩余能量动态计算 multiNum，最多 10 倍（1 倍≈5 能量）
-                    int maxMultiByEnergy = leftCount / 5;
-                    int multiNum = Math.min(10, Math.max(1, maxMultiByEnergy));
-
-                    // 3. 调用 build 进行建造
-                    JSONObject buildResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.build(branchId, mapId, multiNum));
-                    if (!ResChecker.checkRes(TAG + "build 失败:", buildResp)
-                            || !buildResp.optBoolean("success", false)
-                            || buildResp.optJSONObject("data") == null) {
-                        String errorCode = buildResp.optString("errorCode", "");
-                        if ("MAP_NOT_CURRENT".equals(errorCode)) {
-                            // build 报不是当前地图，先尝试自动 chooseMap 纠正
-                            try {
-                                JSONObject chooseResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId));
-                                if (chooseResp.optBoolean("success", false)) {
-                                    Log.record(TAG, "健康岛建造🏗️[检测到地图不一致，已自动切换至当前岛屿，准备重新建造]");
-                                    Thread.sleep(300);
-                                    continue; // 重新进入 while，按新的当前地图再建造
-                                } else {
-                                    Log.record(TAG, "健康岛建造🏗️[自动切换地图失败，请先在健康岛界面点进要建造的岛屿后再运行 Tk]");
-                                }
-                            } catch (Throwable e) {
-                                Log.printStackTrace(TAG, "健康岛建造自动切换地图失败", e);
-                                Log.record(TAG, "健康岛建造🏗️[当前地图不是 Tk 识别的地图，请先在健康岛界面点进要建造的岛屿后再运行 Tk]");
-                            }
-                        } else {
-                            Log.error(TAG, "build raw=" + buildResp);
-                        }
-                        break;
-                    }
-
-                    JSONObject data = buildResp.getJSONObject("data");
-                    JSONObject before = data.optJSONObject("beforeStageInfo");
-                    JSONObject end = data.optJSONObject("endStageInfo");
-                    if (before == null || end == null) {
-                        Log.error(TAG, "build 返回缺少阶段信息: " + buildResp);
-                        break;
-                    }
-
-                    String buildingId = end.optString("buildingId", "");
-                    int beforeProcess = before.optInt("buildingEnergyProcess", 0);
-                    int afterProcess = end.optInt("buildingEnergyProcess", beforeProcess);
-                    int finalNeed = end.optInt("buildingEnergyFinal", 0);
-                    int delta = afterProcess - beforeProcess;
-
-                    Log.other(TAG,
-                            "健康岛建造 🏗️ [地图" + mapId + "] 建筑=" + buildingId +
-                                    " 进度+" + delta + "(" + beforeProcess + "→" + afterProcess + "/" + finalNeed +
-                                    ") multiNum=" + multiNum);
-
-                    // 奖励日志
-                    JSONArray rewards = data.optJSONArray("rewards");
-                    if (rewards != null && rewards.length() > 0) {
-                        for (int i = 0; i < rewards.length(); i++) {
-                            JSONObject r = rewards.getJSONObject(i);
-                            String title = r.optString("title", r.optString("name", ""));
-                            String subTitle = r.optString("subTitle", "");
-                            Log.other(TAG, "建造奖励🎁[" + title + " " + subTitle + "]");
-                        }
-                    }
-
-                    // 简单延时，避免过快
-                    Thread.sleep(888);
+                JSONArray buildResults = buildData.optJSONArray("buildResults");
+                if (buildResults != null && buildResults.length() > 0) {
+                    return buildResults.length();
                 }
-
-                Log.record(TAG, "自动建造任务结束");
-
             } catch (Throwable t) {
-                Log.error(TAG, "neverlandAutoBuild err:");
                 Log.printStackTrace(TAG, t);
             }
+            return defaultMulti;
+        }
+
+        /**
+         * 提取建造奖励信息
+         *
+         * @param buildData 建造响应数据
+         * @return 奖励描述字符串
+         */
+        private String extractAwardInfo(JSONObject buildData) {
+            try {
+                JSONArray awards = buildData.optJSONArray("awards");
+                if (awards != null && awards.length() > 0) {
+                    return String.format(" | 获得奖励: %d 项", awards.length());
+                }
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+            }
+            return "";
         }
 
         // -------------------------------------------------------------------------
