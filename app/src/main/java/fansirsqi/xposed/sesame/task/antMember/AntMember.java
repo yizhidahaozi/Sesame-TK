@@ -2060,74 +2060,72 @@ public class AntMember extends ModelTask {
   /**
    * 净化逻辑
    */
-  private void doPurification() {
+private void doPurification() {
     try {
-      String homeRes = AntMemberRpcCall.zhimaTreeHomePage();
-      if (homeRes == null) return;
+        String homeRes = AntMemberRpcCall.zhimaTreeHomePage();
+        if (homeRes == null) return;
 
-      JSONObject homeJson = new JSONObject(homeRes);
-      if (!ResChecker.checkRes(TAG, homeJson)) return;
+        JSONObject homeJson = new JSONObject(homeRes);
+        if (!ResChecker.checkRes(TAG, homeJson)) return;
 
-      JSONObject result = homeJson.optJSONObject("extInfo").optJSONObject("zhimaTreeHomePageQueryResult");
-      if (result == null) return;
+        JSONObject result = homeJson.optJSONObject("extInfo")
+                                   .optJSONObject("zhimaTreeHomePageQueryResult");
+        if (result == null) return;
 
-      int currentScore = result.optInt("purificationScore", result.optInt("currentCleanNum", 0));
-      String treeCode = "ZHIMA_TREE";
-      if (result.has("trees")) {
-        JSONArray trees = result.getJSONArray("trees");
-        if (trees.length() > 0) {
-          treeCode = trees.getJSONObject(0).optString("treeCode", "ZHIMA_TREE");
-        }
-      }
+        // 获取净化分数（兼容 currentCleanNum）
+        int score = result.optInt("purificationScore", result.optInt("currentCleanNum", 0));
+        String treeCode = "ZHIMA_TREE";
 
-      if (currentScore <= 0) {
-        return;
-      }
-
-      Log.forest("芝麻树🌳[开始净化] 当前净化值: " + currentScore);
-
-      while (currentScore > 0) {
-        String cleanRes = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode);
-        if (cleanRes == null) break;
-
-        JSONObject cleanJson = new JSONObject(cleanRes);
-        if (ResChecker.checkRes(TAG, cleanJson)) {
-          JSONObject extInfo = cleanJson.optJSONObject("extInfo");
-
-          currentScore -= 100;
-
-          int newScore = -1;
-          int growthValue = -1;
-
-          if (extInfo != null) {
-            // 优先解析 CleanAndPushResult
-            JSONObject cleanResult = extInfo.optJSONObject("zhimaTreeCleanAndPushResult");
-            if (cleanResult != null) {
-              newScore = cleanResult.optInt("purificationScore", -1);
-              JSONObject treeInfo = cleanResult.optJSONObject("currentTreeInfo");
-              if (treeInfo != null) {
-                // 使用 scoreSummary 作为成长值
-                growthValue = treeInfo.optInt("scoreSummary", -1);
-              }
-            } else if (extInfo.has("purificationScore")) {
-              // 兼容旧逻辑或异常情况
-              newScore = extInfo.getInt("purificationScore");
+        // 尝试获取 remainPurificationClickNum（新逻辑）
+        int clicks = score / 100; // 默认兜底：按分数计算
+        if (result.has("trees") && result.getJSONArray("trees").length() > 0) {
+            JSONObject tree = result.getJSONArray("trees").getJSONObject(0);
+            treeCode = tree.optString("treeCode", "ZHIMA_TREE");
+            // 若服务端明确提供剩余点击次数，则优先使用
+            if (tree.has("remainPurificationClickNum")) {
+                clicks = Math.max(0, tree.optInt("remainPurificationClickNum", clicks));
             }
-          }
-
-          if (newScore != -1) currentScore = newScore;
-
-          String growthLog = (growthValue != -1) ? " 当前成长值:" + growthValue : "";
-          Log.forest("芝麻树🌳[净化成功] 剩余净化值:" + Math.max(0, currentScore) + growthLog + "✅");
-
-          Thread.sleep(1500);
-        } else {
-          break;
         }
-      }
+
+        if (clicks <= 0) {
+            Log.forest("芝麻树🌳[无需净化] 净化值不足（当前: " + score + "g，可点击: " + clicks + "次）");
+            return;
+         }
+
+
+        Log.forest("芝麻树🌳[开始净化] 可点击 " + clicks + " 次");
+
+        for (int i = 0; i < clicks; i++) {
+            String res = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode);
+            if (res == null) break;
+
+            JSONObject json = new JSONObject(res);
+            if (!ResChecker.checkRes(TAG, json)) break;
+
+            JSONObject ext = json.optJSONObject("extInfo");
+            if (ext == null) continue;
+
+            // 优先从标准路径取分数
+            int newScore = ext.optJSONObject("zhimaTreeCleanAndPushResult")
+                              .optInt("purificationScore", -1);
+            // 兼容旧结构：直接在 extInfo 顶层
+            if (newScore == -1) {
+                newScore = ext.optInt("purificationScore", score - (i + 1) * 100);
+            }
+
+            int growth = ext.optJSONObject("zhimaTreeCleanAndPushResult")
+                            .optJSONObject("currentTreeInfo")
+                            .optInt("scoreSummary", -1);
+
+            String log = "芝麻树🌳[净化成功] 第 " + (i + 1) + " 次 | 剩余: " + newScore + "g";
+            if (growth != -1) log += " | 成长值: " + growth;
+            Log.forest(log + " ✅");
+
+            Thread.sleep(1500);
+        }
 
     } catch (Exception e) {
-      Log.printStackTrace(TAG, e);
+        Log.printStackTrace(TAG, e);
     }
-  }
+}
 }
