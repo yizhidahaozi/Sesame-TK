@@ -253,7 +253,7 @@ object Notify {
 
     @SuppressLint("StaticFieldLeak")
     @JvmStatic
-    fun sendErrorNotification(title: String?, content: String?) {
+    fun sendNewNotification(title: String?, content: String?) {
         try {
             if (context == null) {
                 Log.error(TAG, "Context is null in sendErrorNotification, cannot proceed.")
