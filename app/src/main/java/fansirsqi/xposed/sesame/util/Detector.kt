@@ -3,27 +3,19 @@ package fansirsqi.xposed.sesame.util
 import android.content.Context
 import android.content.pm.PackageManager
 import fansirsqi.xposed.sesame.BuildConfig
-import java.io.File
 
 object Detector {
     private const val TAG = "Detector"
 
-    fun getLibPath(context: Context): String? {
-        var libSesamePath: String? = null
-        try {
-            val appInfo = context.packageManager.getApplicationInfo(
-                BuildConfig.APPLICATION_ID, 0
-            )
-            libSesamePath =
-                appInfo.nativeLibraryDir + File.separator + System.mapLibraryName("checker")
-            Log.runtime(TAG, "load libSesame success")
-        } catch (e: PackageManager.NameNotFoundException) {
-            ToastUtil.showToast(context, "请不要对应用宝隐藏TK模块")
-            Log.record(TAG, "请不要对应用宝隐藏TK模块")
-            Log.error(TAG, "getLibPath${e.message}")
-        }
-        return libSesamePath
-    }
+
+    private external fun init(context: Context)
+    external fun tips(context: Context, message: String?)
+    external fun isEmbeddedNative(context: Context): Boolean
+    external fun dangerous(context: Context)
+    external fun genWua(): String
+    external fun loadLibraryWithContextNative(context: Context, libraryName: String): Boolean
+    external fun getApiUrlWithKey(key: Int): String
+
 
     fun loadLibrary(libraryName: String): Boolean {
         try {
@@ -35,20 +27,12 @@ object Detector {
         }
     }
 
-    private external fun init(context: Context)
-    external fun tips(context: Context, message: String?)
-    external fun isEmbeddedNative(context: Context): Boolean
-    external fun dangerous(context: Context)
-
-    external fun getApiUrlWithKey(key: Int): String
-
     fun getApiUrl(key: Int): String {
         return if (BuildConfig.DEBUG) {
             getApiUrlWithKey(0x11)
         } else {
             getApiUrlWithKey(key)
         }
-
     }
 
     /**
