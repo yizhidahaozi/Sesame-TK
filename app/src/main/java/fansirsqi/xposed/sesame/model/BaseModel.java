@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.model;
 
 
+import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
@@ -24,7 +25,7 @@ public class BaseModel extends Model {
     @Getter
     public static final BooleanModelField stayAwake = new BooleanModelField("stayAwake", "保持唤醒", true);
 
-     /**
+    /**
      * //手动触发是否自动安排下次执行
      */
     @Getter
@@ -115,14 +116,14 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final BooleanModelField batteryPerm = new BooleanModelField("batteryPerm", "为支付宝申请后台运行权限", true);
-    
+
     /**
      * 验证码UI层拦截（阻止对话框显示）
      */
     @Getter
     public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false);
 
-    
+
     /**
      * 是否记录record日志
      */
@@ -184,7 +185,7 @@ public class BaseModel extends Model {
         // 配置已加载，更新验证码Hook状态
         try {
             fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
-                enableCaptchaUIHook.getValue()
+                    enableCaptchaUIHook.getValue()
             );
             Log.runtime(TAG, "✅ 验证码Hook配置已同步");
         } catch (Throwable t) {
@@ -210,9 +211,13 @@ public class BaseModel extends Model {
         modelFields.addField(errNotify);//异常通知开关
         modelFields.addField(setMaxErrorCount);//异常次数阈值
         modelFields.addField(newRpc);//是否启用新接口
-        modelFields.addField(debugMode);//是否开启抓包调试模式
-        modelFields.addField(sendHookData);//启用Hook数据转发
-        modelFields.addField(sendHookDataUrl);//Hook数据转发地址
+
+        if (BuildConfig.DEBUG) {
+            modelFields.addField(debugMode);//是否开启抓包调试模式
+            modelFields.addField(sendHookData);//启用Hook数据转发
+            modelFields.addField(sendHookDataUrl);//Hook数据转发地址
+        }
+
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限
         modelFields.addField(enableCaptchaUIHook);//验证码UI层拦截
         modelFields.addField(recordLog);//是否记录record日志
