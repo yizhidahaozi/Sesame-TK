@@ -323,14 +323,6 @@ public class ApplicationHook {
         ApplicationHook.offline = offline;
     }
 
-    /**
-     * 检查任务是否正在运行
-     *
-     * @return true: 任务正在运行, false: 任务未运行
-     */
-    public static boolean getIsTaskRunning() {
-        return isTaskRunning;
-    }
 
     private static volatile long lastExecTime = 0; // 添加为类成员变量
     public static volatile long nextExecutionTime = 0;
@@ -341,19 +333,17 @@ public class ApplicationHook {
         dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
         dayCalendar.set(Calendar.MINUTE, 0);
         dayCalendar.set(Calendar.SECOND, 0);
-    }
-
-    private final static Method deoptimizeMethod;
-
-    static {
         Method m = null;
         try {
+            //noinspection JavaReflectionMemberAccess
             m = XposedBridge.class.getDeclaredMethod("deoptimizeMethod", Member.class);
         } catch (Throwable t) {
             XposedBridge.log("E/" + TAG + " " + android.util.Log.getStackTraceString(t));
         }
         deoptimizeMethod = m;
     }
+
+    private final static Method deoptimizeMethod;
 
     static void deoptimizeMethod(Class<?> c) throws InvocationTargetException, IllegalAccessException {
         for (Method m : c.getDeclaredMethods()) {
@@ -407,8 +397,7 @@ public class ApplicationHook {
                     }
                 }
             } catch (Exception e) {
-                Log.runtime(TAG, "execAtTime err:：" + e.getMessage());
-                Log.printStackTrace(TAG, e);
+                Log.printStackTrace(TAG, "execAtTime err:：", e);
             }
 
             // 使用调度器（协程或 WorkManager）
@@ -422,8 +411,7 @@ public class ApplicationHook {
             ensureScheduler();
             SchedulerAdapter.scheduleExactExecution(delayMillis, nextExecutionTime);
         } catch (Exception e) {
-            Log.runtime(TAG, "scheduleNextExecution：" + e.getMessage());
-            Log.printStackTrace(TAG, e);
+            Log.printStackTrace(TAG, "scheduleNextExecution：", e);
         }
     }
 
@@ -438,8 +426,7 @@ public class ApplicationHook {
                 Detector.INSTANCE.loadLibrary(soFile.getName().replace(".so", "").replace("lib", ""));
             }
         } catch (Exception e) {
-            Log.error(TAG, "载入so库失败！！");
-            Log.printStackTrace(e);
+            Log.printStackTrace(TAG, "载入so库失败！！", e);
         }
     }
 
@@ -469,7 +456,7 @@ public class ApplicationHook {
 
     @SuppressLint("PrivateApi")
     private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
-        XposedBridge.log(TAG + "|handleHookLogic " + packageName + " success!");
+        XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
         if (hooked) return;
         hooked = true;
 
@@ -494,8 +481,7 @@ public class ApplicationHook {
             CaptchaHook.INSTANCE.setupHook(classLoader);
             Log.runtime(TAG, "验证码Hook系统已初始化");
         } catch (Throwable t) {
-            Log.runtime(TAG, "验证码Hook初始化失败");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "验证码Hook初始化失败", t);
         }
         try {
             // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
@@ -503,8 +489,7 @@ public class ApplicationHook {
                 Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
                 deoptimizeMethod(loadedApkClass);
             } catch (Throwable t) {
-                Log.runtime(TAG, "deoptimize makeApplicationInner err:");
-                Log.printStackTrace(TAG, t);
+                Log.printStackTrace(TAG, "deoptimize makeApplicationInner err:", t);
             }
             XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
                 @Override
@@ -558,10 +543,10 @@ public class ApplicationHook {
                         Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
 
-                    // 调试模式启动 HTTP 服务器
                     if (BuildConfig.DEBUG) {
                         try {
                             Log.runtime(TAG, "start service for debug rpc");
+                            // 使用管理器，仅主进程启动并防重复
                             fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.startIfNeeded(
                                     8080,
                                     "ET3vB^#td87sQqKaY*eMUJXP",
@@ -670,7 +655,7 @@ public class ApplicationHook {
                             service = appService;
                             mainTask = MainTask.newInstance("MAIN_TASK", () -> {
                                 // 使用 TaskLock 自动管理锁生命周期（重构：防止遗漏释放）
-                                try (TaskLock lock = new TaskLock()) {
+                                try (TaskLock ignored = new TaskLock()) {
                                     boolean isAlarmTriggered = alarmTriggeredFlag;
                                     if (isAlarmTriggered) {
                                         alarmTriggeredFlag = false; // Consume the flag
@@ -757,7 +742,7 @@ public class ApplicationHook {
                                 return;
                             Log.record(TAG, "支付宝前台服务被销毁");
                             Notify.updateStatusText("支付宝前台服务被销毁");
-                            destroyHandler(true);
+                            destroyHandler();
                             try {
                                 fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.stopIfRunning();
                             } catch (Throwable ignore) {
@@ -869,7 +854,7 @@ public class ApplicationHook {
             }
 
             if (init) {
-                destroyHandler(true); // 重新初始化时销毁旧的handler
+                destroyHandler(); // 重新初始化时销毁旧的handler
             }
 
             // 调度器确保可用
@@ -932,7 +917,7 @@ public class ApplicationHook {
                 Model.bootAllModel(classLoader);
                 Status.load(userId);
                 DataStore.INSTANCE.init(Files.CONFIG_DIR);
-                updateDay(userId);
+                updateDay();
                 String successMsg = "芝麻粒-TK 加载成功✨";
                 Log.record(successMsg);
                 Toast.show(successMsg);
@@ -952,29 +937,25 @@ public class ApplicationHook {
 
     /**
      * 销毁处理程序
-     *
-     * @param force 是否强制销毁
      */
-    static synchronized void destroyHandler(Boolean force) {
+    static synchronized void destroyHandler() {
         try {
-            if (force) {
-                GlobalThreadPools.INSTANCE.shutdownAndRestart();
-                if (service != null) {
-                    stopHandler();
-                    BaseModel.destroyData();
-                    Status.unload();
-                    Notify.stop();
-                    RpcIntervalLimit.INSTANCE.clearIntervalLimit();
-                    Config.unload();
-                    UserMap.unload();
-                }
-                // 协程调度器会自动清理，无需手动释放唤醒锁
-                synchronized (rpcBridgeLock) {
-                    if (rpcBridge != null) {
-                        rpcVersion = null;
-                        rpcBridge.unload();
-                        rpcBridge = null;
-                    }
+            GlobalThreadPools.INSTANCE.shutdownAndRestart();
+            if (service != null) {
+                stopHandler();
+                BaseModel.destroyData();
+                Status.unload();
+                Notify.stop();
+                RpcIntervalLimit.INSTANCE.clearIntervalLimit();
+                Config.unload();
+                UserMap.unload();
+            }
+            // 协程调度器会自动清理，无需手动释放唤醒锁
+            synchronized (rpcBridgeLock) {
+                if (rpcBridge != null) {
+                    rpcVersion = null;
+                    rpcBridge.unload();
+                    rpcBridge = null;
                 }
 //                init = false;
 //                service = null;
@@ -1085,13 +1066,6 @@ public class ApplicationHook {
      */
     public static void restartByBroadcast() {
         sendBroadcast(BroadcastActions.RESTART, "发送重启广播时出错:");
-    }
-
-    /**
-     * 通过广播发送立即执行一次任务的指令
-     */
-    public static void executeByBroadcast() {
-        sendBroadcast(BroadcastActions.EXECUTE, "发送执行广播时出错:");
     }
 
 
@@ -1236,7 +1210,7 @@ public class ApplicationHook {
                                 // Service 已就绪，可以初始化
                                 Log.record(TAG, "⚠️ 模块未初始化，开始初始化流程EXECUTE");
                                 GlobalThreadPools.INSTANCE.execute(() -> {
-                                    if (initHandler(true )) {
+                                    if (initHandler(true)) {
                                         Log.record(TAG, "✅ 初始化成功，开始执行任务EXECUTE");
                                         execHandler();
                                     }
