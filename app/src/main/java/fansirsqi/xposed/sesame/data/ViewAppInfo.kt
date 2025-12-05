@@ -72,25 +72,5 @@ object ViewAppInfo {
             }
             runType = RunType.LOADED
         }
-//        XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
-//            override fun onServiceBind(service: XposedService) {
-//                XposedBridge.log("XposedScope onServiceBind: $service")
-//                _service = service
-//                XposedBridge.log("Framework: ${service.frameworkName} ${service.frameworkVersion}")
-//                XposedBridge.log("API: ${service.apiVersion} FrameworkVersion${service.frameworkVersionCode}")
-//                // 服务连接成功 → 模块已激活
-//                runType = RunType.ACTIVE
-//            }
-//
-//            override fun onServiceDied(service: XposedService) {
-//                XposedBridge.log("Service died: ${service.frameworkName}")
-//                if (_service == service) {
-//                    _service = null
-//                    // 服务断开，但模块仍处于加载状态（代码仍在运行）
-//                    // 所以回退到 LOADED，而不是 DISABLE
-//                    runType = RunType.LOADED
-//                }
-//            }
-//        })
     }
 }
