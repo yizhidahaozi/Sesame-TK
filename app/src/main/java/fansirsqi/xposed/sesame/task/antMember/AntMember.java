@@ -59,6 +59,8 @@ public class AntMember extends ModelTask {
   private BooleanModelField sesameAlchemy;
   // 芝麻树
   private BooleanModelField enableZhimaTree;
+  //年度回顾
+  private BooleanModelField AnnualReview;
 
   @Override
   public ModelFields getFields() {
@@ -82,6 +84,7 @@ public class AntMember extends ModelTask {
     modelFields.addField(merchantMoreTask = new BooleanModelField("merchantMoreTask", "商家服务|积分任务", false));
     modelFields.addField(beanSignIn = new BooleanModelField("beanSignIn", "安心豆签到", false));
     modelFields.addField(beanExchangeBubbleBoost = new BooleanModelField("beanExchangeBubbleBoost", "安心豆兑换时光加速器", false));
+    modelFields.addField(AnnualReview = new BooleanModelField("AnnualReview", "年度回顾", false));
     return modelFields;
   }
 
@@ -138,6 +141,9 @@ public class AntMember extends ModelTask {
       }
       if (beanSignIn.getValue()) {
         beanSignIn();
+      }
+      if (AnnualReview.getValue()) {
+        doAnnualReview();
       }
       if (beanExchangeBubbleBoost.getValue()) {
         beanExchangeBubbleBoost();
@@ -341,6 +347,280 @@ public class AntMember extends ModelTask {
     }
   }
 
+
+  /**
+   * 年度回顾任务：通过 programInvoke 查询并自动完成任务
+   *
+   *
+   * 1) alipay.imasp.program.programInvoke + ..._task_reward_query 查询 playTaskOrderInfoList
+   * 2) 对于 taskStatus = "init" 的任务，使用 ..._task_reward_apply(code) 领取，得到 recordNo
+   * 3) 使用 ..._task_reward_process(code, recordNo) 上报完成，服务端自动发放成长值奖励
+   */
+  private void doAnnualReview() {
+    try {
+      Log.record(TAG + ".doAnnualReview", "年度回顾🎞[开始执行]");
+
+      String resp = AntMemberRpcCall.annualReviewQueryTasks();
+      if (resp == null || resp.isEmpty()) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[查询返回空]");
+        return;
+      }
+
+      JSONObject root;
+      try {
+        root = new JSONObject(resp);
+      } catch (Throwable e) {
+        Log.printStackTrace(TAG + ".doAnnualReview.parseRoot", e);
+        return;
+      }
+
+      if (!root.optBoolean("isSuccess", false)) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[查询失败]#" + resp);
+        return;
+      }
+
+      JSONObject components = root.optJSONObject("components");
+      if (components == null || components.length() == 0) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[components 为空]");
+        return;
+      }
+
+      JSONObject queryComp = components.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_QUERY_COMPONENT);
+      if (queryComp == null) {
+        // 兜底：取第一个组件
+        try {
+          java.util.Iterator<String> it = components.keys();
+          if (it.hasNext()) {
+            queryComp = components.optJSONObject(it.next());
+          }
+        } catch (Throwable ignored) {
+        }
+      }
+      if (queryComp == null) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[未找到查询组件]");
+        return;
+      }
+      if (!queryComp.optBoolean("isSuccess", true)) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[查询组件返回失败]");
+        return;
+      }
+
+      JSONObject content = queryComp.optJSONObject("content");
+      if (content == null) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[content 为空]");
+        return;
+      }
+
+      JSONArray taskList = content.optJSONArray("playTaskOrderInfoList");
+      if (taskList == null || taskList.length() == 0) {
+        Log.record(TAG + ".doAnnualReview", "年度回顾[当前无可处理任务]");
+        return;
+      }
+
+      int candidate = 0;
+      int applied = 0;
+      int processed = 0;
+      int failed = 0;
+
+      for (int i = 0; i < taskList.length(); i++) {
+        JSONObject task = taskList.optJSONObject(i);
+        if (task == null) {
+          continue;
+        }
+
+        String taskStatus = task.optString("taskStatus", "");
+        if (!"init".equals(taskStatus)) {
+          // 已完成/已领奖等状态直接跳过
+          continue;
+        }
+        candidate++;
+
+        String code = task.optString("code", "");
+        if (code.isEmpty()) {
+          JSONObject extInfo = task.optJSONObject("extInfo");
+          if (extInfo != null) {
+            code = extInfo.optString("taskId", "");
+          }
+        }
+        if (code.isEmpty()) {
+          failed++;
+          continue;
+        }
+
+        String taskName = code;
+        JSONObject displayInfo = task.optJSONObject("displayInfo");
+        if (displayInfo != null) {
+          String name = displayInfo.optString("taskName",
+                  displayInfo.optString("activityName", code));
+          if (!name.isEmpty()) {
+            taskName = name;
+          }
+        }
+
+        // ========== Step 1: 领取任务 (apply) ==========
+        String applyResp = AntMemberRpcCall.annualReviewApplyTask(code);
+        if (applyResp == null || applyResp.isEmpty()) {
+          Log.record(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#响应为空");
+          failed++;
+          continue;
+        }
+
+        JSONObject applyRoot;
+        try {
+          applyRoot = new JSONObject(applyResp);
+        } catch (Throwable e) {
+          Log.printStackTrace(TAG + ".doAnnualReview.parseApply", e);
+          failed++;
+          continue;
+        }
+        if (!applyRoot.optBoolean("isSuccess", false)) {
+          Log.record(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#" + applyResp);
+          failed++;
+          continue;
+        }
+        JSONObject applyComps = applyRoot.optJSONObject("components");
+        if (applyComps == null) {
+          failed++;
+          continue;
+        }
+        JSONObject applyComp = applyComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_APPLY_COMPONENT);
+        if (applyComp == null) {
+          try {
+            java.util.Iterator<String> it2 = applyComps.keys();
+            if (it2.hasNext()) {
+              applyComp = applyComps.optJSONObject(it2.next());
+            }
+          } catch (Throwable ignored) {
+          }
+        }
+        if (applyComp == null || !applyComp.optBoolean("isSuccess", true)) {
+          failed++;
+          continue;
+        }
+        JSONObject applyContent = applyComp.optJSONObject("content");
+        if (applyContent == null) {
+          failed++;
+          continue;
+        }
+        JSONObject claimedTask = applyContent.optJSONObject("claimedTask");
+        if (claimedTask == null) {
+          failed++;
+          continue;
+        }
+        String recordNo = claimedTask.optString("recordNo", "");
+        if (recordNo.isEmpty()) {
+          failed++;
+          continue;
+        }
+        applied++;
+
+        GlobalThreadPools.sleepCompat(500);
+
+        // ========== Step 2: 提交任务完成 (process) ==========
+        String processResp = AntMemberRpcCall.annualReviewProcessTask(code, recordNo);
+        if (processResp == null || processResp.isEmpty()) {
+          Log.record(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#响应为空");
+          failed++;
+          continue;
+        }
+
+        JSONObject processRoot;
+        try {
+          processRoot = new JSONObject(processResp);
+        } catch (Throwable e) {
+          Log.printStackTrace(TAG + ".doAnnualReview.parseProcess", e);
+          failed++;
+          continue;
+        }
+        if (!processRoot.optBoolean("isSuccess", false)) {
+          Log.record(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#" + processResp);
+          failed++;
+          continue;
+        }
+        JSONObject processComps = processRoot.optJSONObject("components");
+        if (processComps == null) {
+          failed++;
+          continue;
+        }
+        JSONObject processComp = processComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_PROCESS_COMPONENT);
+        if (processComp == null) {
+          try {
+            java.util.Iterator<String> it3 = processComps.keys();
+            if (it3.hasNext()) {
+              processComp = processComps.optJSONObject(it3.next());
+            }
+          } catch (Throwable ignored) {
+          }
+        }
+        if (processComp == null || !processComp.optBoolean("isSuccess", true)) {
+          failed++;
+          continue;
+        }
+        JSONObject processContent = processComp.optJSONObject("content");
+        if (processContent == null) {
+          failed++;
+          continue;
+        }
+        JSONObject processedTask = processContent.optJSONObject("processedTask");
+        if (processedTask == null) {
+          failed++;
+          continue;
+        }
+        String newStatus = processedTask.optString("taskStatus", "");
+        String rewardStatus = processedTask.optString("rewardStatus", "");
+
+        // ========== Step 3: 如仍未发奖，则调用 get_reward 领取奖励 ==========
+        if (!"success".equalsIgnoreCase(rewardStatus)) {
+          try {
+            String rewardResp = AntMemberRpcCall.annualReviewGetReward(code, recordNo);
+            if (rewardResp != null && !rewardResp.isEmpty()) {
+              JSONObject rewardRoot = new JSONObject(rewardResp);
+              if (rewardRoot.optBoolean("isSuccess", false)) {
+                JSONObject rewardComps = rewardRoot.optJSONObject("components");
+                if (rewardComps != null) {
+                  JSONObject rewardComp = rewardComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_GET_REWARD_COMPONENT);
+                  if (rewardComp == null) {
+                    try {
+                      java.util.Iterator<String> it4 = rewardComps.keys();
+                      if (it4.hasNext()) {
+                        rewardComp = rewardComps.optJSONObject(it4.next());
+                      }
+                    } catch (Throwable ignored) {
+                    }
+                  }
+                  if (rewardComp != null && rewardComp.optBoolean("isSuccess", true)) {
+                    JSONObject rewardContent = rewardComp.optJSONObject("content");
+                    if (rewardContent != null) {
+                      JSONObject rewardTask = rewardContent.optJSONObject("processedTask");
+                      if (rewardTask == null) {
+                        rewardTask = rewardContent.optJSONObject("claimedTask");
+                      }
+                      if (rewardTask != null) {
+                        String rs = rewardTask.optString("rewardStatus", "");
+                        if (!rs.isEmpty()) {
+                          rewardStatus = rs;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (Throwable e) {
+            Log.printStackTrace(TAG + ".doAnnualReview.getReward", e);
+          }
+        }
+
+        processed++;
+        Log.other("年度回顾🎞[任务完成]" + taskName + "#状态=" + newStatus + " 奖励状态=" + rewardStatus);
+      }
+
+      Log.record(TAG + ".doAnnualReview",
+              "年度回顾🎞[执行结束] 待处理=" + candidate + " 已领取=" + applied + " 已提交=" + processed + " 失败=" + failed);
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG + ".doAnnualReview", t);
+    }
+  }
 
   /**
    * 会员积分0元兑，权益道具兑换
@@ -1219,230 +1499,230 @@ public class AntMember extends ModelTask {
   }
 
   private void enableGameCenter() {
-        try {
-            // 1. 查询签到状态并尝试签到
-            try {
-                String resp = AntMemberRpcCall.querySignInBall();
-                JSONObject root = new JSONObject(resp);
-                if (!root.optBoolean("success")) {
-                    String msg = root.optString("errorMsg", root.optString("resultView", resp));
-                    Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#" + msg);
-                } else {
-                    JSONObject data = root.optJSONObject("data");
-                    JSONObject signModule = data != null ? data.optJSONObject("signInBallModule") : null;
-                    boolean signed = signModule != null && signModule.optBoolean("signInStatus", false);
-                    if (signed) {
-                        Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到]");
-                    } else {
-                        String signResp = AntMemberRpcCall.continueSignIn();
-                        GlobalThreadPools.sleepCompat(300);
-                        JSONObject signJo = new JSONObject(signResp);
-                        if (!signJo.optBoolean("success")) {
-                            String msg = signJo.optString("errorMsg", signJo.optString("resultView", signResp));
-                            Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + msg);
-                        } else {
-                            JSONObject signData = signJo.optJSONObject("data");
-                            String title = "";
-                            String desc = "";
-                            String type = "";
-                            if (signData != null) {
-                                JSONObject toast = signData.optJSONObject("autoSignInToastModule");
-                                if (toast != null) {
-                                    title = toast.optString("title", "");
-                                    desc = toast.optString("desc", "");
-                                    type = toast.optString("type", "");
-                                }
-                            }
-                            boolean toastSuccess = "SUCCESS".equalsIgnoreCase(type)
-                                    && !title.contains("失败")
-                                    && !desc.contains("失败");
-                            if (toastSuccess) {
-                                StringBuilder sb = new StringBuilder();
-                                sb.append("游戏中心🎮[每日签到成功]");
-                                if (!title.isEmpty()) {
-                                    sb.append("#").append(title);
-                                }
-                                if (!desc.isEmpty()) {
-                                    sb.append("#").append(desc);
-                                }
-                                Log.other(sb.toString());
-                            } else {
-                                StringBuilder sb = new StringBuilder();
-                                if (!title.isEmpty()) {
-                                    sb.append(title);
-                                }
-                                if (!desc.isEmpty()) {
-                                    if (sb.length() > 0) sb.append(" ");
-                                    sb.append(desc);
-                                }
-                                Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + (sb.length() > 0 ? sb.toString() : signResp));
-                            }
-                        }
-                    }
+    try {
+      // 1. 查询签到状态并尝试签到
+      try {
+        String resp = AntMemberRpcCall.querySignInBall();
+        JSONObject root = new JSONObject(resp);
+        if (!root.optBoolean("success")) {
+          String msg = root.optString("errorMsg", root.optString("resultView", resp));
+          Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#" + msg);
+        } else {
+          JSONObject data = root.optJSONObject("data");
+          JSONObject signModule = data != null ? data.optJSONObject("signInBallModule") : null;
+          boolean signed = signModule != null && signModule.optBoolean("signInStatus", false);
+          if (signed) {
+            Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到]");
+          } else {
+            String signResp = AntMemberRpcCall.continueSignIn();
+            GlobalThreadPools.sleepCompat(300);
+            JSONObject signJo = new JSONObject(signResp);
+            if (!signJo.optBoolean("success")) {
+              String msg = signJo.optString("errorMsg", signJo.optString("resultView", signResp));
+              Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + msg);
+            } else {
+              JSONObject signData = signJo.optJSONObject("data");
+              String title = "";
+              String desc = "";
+              String type = "";
+              if (signData != null) {
+                JSONObject toast = signData.optJSONObject("autoSignInToastModule");
+                if (toast != null) {
+                  title = toast.optString("title", "");
+                  desc = toast.optString("desc", "");
+                  type = toast.optString("type", "");
                 }
-            } catch (Throwable th) {
-                Log.runtime(TAG, "enableGameCenter.signIn err:");
-                Log.printStackTrace(TAG, th);
-            }
-
-            // 2. 查询任务列表,完成平台任务
-            try {
-                String resp = AntMemberRpcCall.queryGameCenterTaskList();
-                JSONObject root = new JSONObject(resp);
-                if (!root.optBoolean("success")) {
-                    String msg = root.optString("errorMsg", root.optString("resultView", resp));
-                    Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[任务列表查询失败]#" + msg);
-                } else {
-                    JSONObject data = root.optJSONObject("data");
-                    if (data != null) {
-                        JSONObject platformTaskModule = data.optJSONObject("platformTaskModule");
-                        if (platformTaskModule != null) {
-                            JSONArray platformTaskList = platformTaskModule.optJSONArray("platformTaskList");
-                            if (platformTaskList != null && platformTaskList.length() > 0) {
-                                int total = 0;
-                                int finished = 0;
-                                int failed = 0;
-                                String lastFailedTaskId = "";
-                                int lastFailedCount = 0;
-
-                                for (int i = 0; i < platformTaskList.length(); i++) {
-                                    JSONObject task = platformTaskList.optJSONObject(i);
-                                    if (task == null) continue;
-
-                                    String taskId = task.optString("taskId");
-                                    String status = task.optString("taskStatus");
-
-                                    if (taskId.isEmpty()) continue;
-                                    if (!"NOT_DONE".equals(status) && !"SIGNUP_COMPLETE".equals(status)) {
-                                        continue;
-                                    }
-
-                                    // 如果是上次失败的任务,计数加1
-                                    if (taskId.equals(lastFailedTaskId)) {
-                                        lastFailedCount++;
-                                        if (lastFailedCount >= 2) {
-                                            Log.record(TAG + ".enableGameCenter.tasks",
-                                                    "游戏中心🎮任务[" + task.optString("title") + "]连续失败2次,跳过");
-                                            continue;
-                                        }
-                                    } else {
-                                        // 新任务,重置计数
-                                        lastFailedTaskId = taskId;
-                                        lastFailedCount = 0;
-                                    }
-
-                                    total++;
-                                    String title = task.optString("title");
-                                    String subTitle = task.optString("subTitle");
-                                    boolean needSignUp = task.optBoolean("needSignUp", false);
-                                    int pointAmount = task.optInt("pointAmount", 0);
-
-                                    try {
-                                        // needSignUp 为 true 且是首次状态 NOT_DONE:先报名
-                                        if (needSignUp && "NOT_DONE".equals(status)) {
-                                            String signUpResp = AntMemberRpcCall.doTaskSignup(taskId);
-                                            GlobalThreadPools.sleepCompat(300);
-                                            JSONObject signUpJo = new JSONObject(signUpResp);
-                                            if (!signUpJo.optBoolean("success")) {
-                                                String msg = signUpJo.optString("errorMsg", signUpJo.optString("resultView", signUpResp));
-                                                Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮任务[" + title + "]报名失败#" + msg);
-                                                failed++;
-                                                continue;
-                                            }
-                                        }
-
-                                        // 完成任务
-                                        String doResp = AntMemberRpcCall.doTaskSend(taskId);
-                                        GlobalThreadPools.sleepCompat(300);
-                                        JSONObject doJo = new JSONObject(doResp);
-
-                                        if (doJo.optBoolean("success")) {
-                                            // 检查返回的任务状态
-                                            JSONObject doData = doJo.optJSONObject("data");
-                                            String resultStatus = doData != null ? doData.optString("taskStatus", "") : "";
-
-                                            if ("SIGNUP_COMPLETE".equals(resultStatus) || "NOT_DONE".equals(resultStatus)) {
-                                                // 状态未变更,记为失败
-                                                Log.record(TAG + ".enableGameCenter.tasks",
-                                                        "游戏中心🎮任务[" + title + "]状态未变更,可能无法完成");
-                                                failed++;
-                                            } else {
-                                                // 真正完成,重置失败计数
-                                                Log.other("游戏中心🎮任务[" + (subTitle.isEmpty() ? title : subTitle) + "]#完成,奖励" +
-                                                        pointAmount + "玩乐豆" + (needSignUp ? "(签到任务)" : ""));
-                                                finished++;
-                                                lastFailedTaskId = "";
-                                                lastFailedCount = 0;
-                                            }
-                                        } else {
-                                            String msg = doJo.optString("errorMsg", doJo.optString("resultView", doResp));
-                                            Log.record(TAG + ".enableGameCenter.tasks",
-                                                    "游戏中心🎮任务[" + title + "]完成失败#" + msg);
-                                            failed++;
-                                        }
-                                    } catch (Throwable e) {
-                                        Log.printStackTrace(TAG + ".enableGameCenter.tasks.doTask", e);
-                                        failed++;
-                                    }
-                                }
-
-                                if (total > 0) {
-                                    Log.record(TAG + ".enableGameCenter.tasks",
-                                            "游戏中心🎮[平台任务处理完成]#待做:" + total + " 完成:" + finished + " 失败:" + failed);
-                                } else {
-                                    Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[无待处理的平台任务]");
-                                }
-                            } else {
-                                Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[平台任务列表为空]");
-                            }
-                        }
-                    }
+              }
+              boolean toastSuccess = "SUCCESS".equalsIgnoreCase(type)
+                      && !title.contains("失败")
+                      && !desc.contains("失败");
+              if (toastSuccess) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("游戏中心🎮[每日签到成功]");
+                if (!title.isEmpty()) {
+                  sb.append("#").append(title);
                 }
-            } catch (Throwable th) {
-                Log.runtime(TAG, "enableGameCenter.tasks err:");
-                Log.printStackTrace(TAG, th);
-            }
-
-            // 3. 查询待收乐豆并使用一键收取接口
-            try {
-                String resp = AntMemberRpcCall.queryPointBallList();
-                JSONObject root = new JSONObject(resp);
-                if (!root.optBoolean("success")) {
-                    String msg = root.optString("errorMsg", root.optString("resultView", resp));
-                    Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[查询待收乐豆失败]#" + msg);
-                } else {
-                    JSONObject data = root.optJSONObject("data");
-                    JSONArray pointBallList = data != null ? data.optJSONArray("pointBallList") : null;
-                    if (pointBallList == null || pointBallList.length() == 0) {
-                        Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
-                    } else {
-                        String batchResp = AntMemberRpcCall.batchReceivePointBall();
-                        GlobalThreadPools.sleepCompat(300);
-                        JSONObject batchJo = new JSONObject(batchResp);
-                        if (batchJo.optBoolean("success")) {
-                            JSONObject batchData = batchJo.optJSONObject("data");
-                            int receiveAmount = batchData != null ? batchData.optInt("receiveAmount", 0) : 0;
-                            int totalAmount = batchData != null ? batchData.optInt("totalAmount", receiveAmount) : receiveAmount;
-                            if (receiveAmount > 0) {
-                                Log.other("游戏中心🎮[一键领取乐豆成功]#本次领取" + receiveAmount + " | 当前累计" + totalAmount + "玩乐豆");
-                            } else {
-                                Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
-                            }
-                        } else {
-                            String msg = batchJo.optString("errorMsg", batchJo.optString("resultView", batchResp));
-                            Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[一键领取乐豆失败]#" + msg);
-                        }
-                    }
+                if (!desc.isEmpty()) {
+                  sb.append("#").append(desc);
                 }
-            } catch (Throwable th) {
-                Log.runtime(TAG, "enableGameCenter.point err:");
-                Log.printStackTrace(TAG, th);
+                Log.other(sb.toString());
+              } else {
+                StringBuilder sb = new StringBuilder();
+                if (!title.isEmpty()) {
+                  sb.append(title);
+                }
+                if (!desc.isEmpty()) {
+                  if (sb.length() > 0) sb.append(" ");
+                  sb.append(desc);
+                }
+                Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + (sb.length() > 0 ? sb.toString() : signResp));
+              }
             }
-
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, t);
+          }
         }
+      } catch (Throwable th) {
+        Log.runtime(TAG, "enableGameCenter.signIn err:");
+        Log.printStackTrace(TAG, th);
+      }
+
+      // 2. 查询任务列表,完成平台任务
+      try {
+        String resp = AntMemberRpcCall.queryGameCenterTaskList();
+        JSONObject root = new JSONObject(resp);
+        if (!root.optBoolean("success")) {
+          String msg = root.optString("errorMsg", root.optString("resultView", resp));
+          Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[任务列表查询失败]#" + msg);
+        } else {
+          JSONObject data = root.optJSONObject("data");
+          if (data != null) {
+            JSONObject platformTaskModule = data.optJSONObject("platformTaskModule");
+            if (platformTaskModule != null) {
+              JSONArray platformTaskList = platformTaskModule.optJSONArray("platformTaskList");
+              if (platformTaskList != null && platformTaskList.length() > 0) {
+                int total = 0;
+                int finished = 0;
+                int failed = 0;
+                String lastFailedTaskId = "";
+                int lastFailedCount = 0;
+
+                for (int i = 0; i < platformTaskList.length(); i++) {
+                  JSONObject task = platformTaskList.optJSONObject(i);
+                  if (task == null) continue;
+
+                  String taskId = task.optString("taskId");
+                  String status = task.optString("taskStatus");
+
+                  if (taskId.isEmpty()) continue;
+                  if (!"NOT_DONE".equals(status) && !"SIGNUP_COMPLETE".equals(status)) {
+                    continue;
+                  }
+
+                  // 如果是上次失败的任务,计数加1
+                  if (taskId.equals(lastFailedTaskId)) {
+                    lastFailedCount++;
+                    if (lastFailedCount >= 2) {
+                      Log.record(TAG + ".enableGameCenter.tasks",
+                              "游戏中心🎮任务[" + task.optString("title") + "]连续失败2次,跳过");
+                      continue;
+                    }
+                  } else {
+                    // 新任务,重置计数
+                    lastFailedTaskId = taskId;
+                    lastFailedCount = 0;
+                  }
+
+                  total++;
+                  String title = task.optString("title");
+                  String subTitle = task.optString("subTitle");
+                  boolean needSignUp = task.optBoolean("needSignUp", false);
+                  int pointAmount = task.optInt("pointAmount", 0);
+
+                  try {
+                    // needSignUp 为 true 且是首次状态 NOT_DONE:先报名
+                    if (needSignUp && "NOT_DONE".equals(status)) {
+                      String signUpResp = AntMemberRpcCall.doTaskSignup(taskId);
+                      GlobalThreadPools.sleepCompat(300);
+                      JSONObject signUpJo = new JSONObject(signUpResp);
+                      if (!signUpJo.optBoolean("success")) {
+                        String msg = signUpJo.optString("errorMsg", signUpJo.optString("resultView", signUpResp));
+                        Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮任务[" + title + "]报名失败#" + msg);
+                        failed++;
+                        continue;
+                      }
+                    }
+
+                    // 完成任务
+                    String doResp = AntMemberRpcCall.doTaskSend(taskId);
+                    GlobalThreadPools.sleepCompat(300);
+                    JSONObject doJo = new JSONObject(doResp);
+
+                    if (doJo.optBoolean("success")) {
+                      // 检查返回的任务状态
+                      JSONObject doData = doJo.optJSONObject("data");
+                      String resultStatus = doData != null ? doData.optString("taskStatus", "") : "";
+
+                      if ("SIGNUP_COMPLETE".equals(resultStatus) || "NOT_DONE".equals(resultStatus)) {
+                        // 状态未变更,记为失败
+                        Log.record(TAG + ".enableGameCenter.tasks",
+                                "游戏中心🎮任务[" + title + "]状态未变更,可能无法完成");
+                        failed++;
+                      } else {
+                        // 真正完成,重置失败计数
+                        Log.other("游戏中心🎮任务[" + (subTitle.isEmpty() ? title : subTitle) + "]#完成,奖励" +
+                                pointAmount + "玩乐豆" + (needSignUp ? "(签到任务)" : ""));
+                        finished++;
+                        lastFailedTaskId = "";
+                        lastFailedCount = 0;
+                      }
+                    } else {
+                      String msg = doJo.optString("errorMsg", doJo.optString("resultView", doResp));
+                      Log.record(TAG + ".enableGameCenter.tasks",
+                              "游戏中心🎮任务[" + title + "]完成失败#" + msg);
+                      failed++;
+                    }
+                  } catch (Throwable e) {
+                    Log.printStackTrace(TAG + ".enableGameCenter.tasks.doTask", e);
+                    failed++;
+                  }
+                }
+
+                if (total > 0) {
+                  Log.record(TAG + ".enableGameCenter.tasks",
+                          "游戏中心🎮[平台任务处理完成]#待做:" + total + " 完成:" + finished + " 失败:" + failed);
+                } else {
+                  Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[无待处理的平台任务]");
+                }
+              } else {
+                Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[平台任务列表为空]");
+              }
+            }
+          }
+        }
+      } catch (Throwable th) {
+        Log.runtime(TAG, "enableGameCenter.tasks err:");
+        Log.printStackTrace(TAG, th);
+      }
+
+      // 3. 查询待收乐豆并使用一键收取接口
+      try {
+        String resp = AntMemberRpcCall.queryPointBallList();
+        JSONObject root = new JSONObject(resp);
+        if (!root.optBoolean("success")) {
+          String msg = root.optString("errorMsg", root.optString("resultView", resp));
+          Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[查询待收乐豆失败]#" + msg);
+        } else {
+          JSONObject data = root.optJSONObject("data");
+          JSONArray pointBallList = data != null ? data.optJSONArray("pointBallList") : null;
+          if (pointBallList == null || pointBallList.length() == 0) {
+            Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
+          } else {
+            String batchResp = AntMemberRpcCall.batchReceivePointBall();
+            GlobalThreadPools.sleepCompat(300);
+            JSONObject batchJo = new JSONObject(batchResp);
+            if (batchJo.optBoolean("success")) {
+              JSONObject batchData = batchJo.optJSONObject("data");
+              int receiveAmount = batchData != null ? batchData.optInt("receiveAmount", 0) : 0;
+              int totalAmount = batchData != null ? batchData.optInt("totalAmount", receiveAmount) : receiveAmount;
+              if (receiveAmount > 0) {
+                Log.other("游戏中心🎮[一键领取乐豆成功]#本次领取" + receiveAmount + " | 当前累计" + totalAmount + "玩乐豆");
+              } else {
+                Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
+              }
+            } else {
+              String msg = batchJo.optString("errorMsg", batchJo.optString("resultView", batchResp));
+              Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[一键领取乐豆失败]#" + msg);
+            }
+          }
+        }
+      } catch (Throwable th) {
+        Log.runtime(TAG, "enableGameCenter.point err:");
+        Log.printStackTrace(TAG, th);
+      }
+
+    } catch (Throwable t) {
+      Log.printStackTrace(TAG, t);
     }
+  }
 
   private void beanSignIn() {
     try {
@@ -2060,72 +2340,72 @@ public class AntMember extends ModelTask {
   /**
    * 净化逻辑
    */
-private void doPurification() {
+  private void doPurification() {
     try {
-        String homeRes = AntMemberRpcCall.zhimaTreeHomePage();
-        if (homeRes == null) return;
+      String homeRes = AntMemberRpcCall.zhimaTreeHomePage();
+      if (homeRes == null) return;
 
-        JSONObject homeJson = new JSONObject(homeRes);
-        if (!ResChecker.checkRes(TAG, homeJson)) return;
+      JSONObject homeJson = new JSONObject(homeRes);
+      if (!ResChecker.checkRes(TAG, homeJson)) return;
 
-        JSONObject result = homeJson.optJSONObject("extInfo")
-                                   .optJSONObject("zhimaTreeHomePageQueryResult");
-        if (result == null) return;
+      JSONObject result = homeJson.optJSONObject("extInfo")
+              .optJSONObject("zhimaTreeHomePageQueryResult");
+      if (result == null) return;
 
-        // 获取净化分数（兼容 currentCleanNum）
-        int score = result.optInt("purificationScore", result.optInt("currentCleanNum", 0));
-        String treeCode = "ZHIMA_TREE";
+      // 获取净化分数（兼容 currentCleanNum）
+      int score = result.optInt("purificationScore", result.optInt("currentCleanNum", 0));
+      String treeCode = "ZHIMA_TREE";
 
-        // 尝试获取 remainPurificationClickNum（新逻辑）
-        int clicks = score / 100; // 默认兜底：按分数计算
-        if (result.has("trees") && result.getJSONArray("trees").length() > 0) {
-            JSONObject tree = result.getJSONArray("trees").getJSONObject(0);
-            treeCode = tree.optString("treeCode", "ZHIMA_TREE");
-            // 若服务端明确提供剩余点击次数，则优先使用
-            if (tree.has("remainPurificationClickNum")) {
-                clicks = Math.max(0, tree.optInt("remainPurificationClickNum", clicks));
-            }
+      // 尝试获取 remainPurificationClickNum（新逻辑）
+      int clicks = score / 100; // 默认兜底：按分数计算
+      if (result.has("trees") && result.getJSONArray("trees").length() > 0) {
+        JSONObject tree = result.getJSONArray("trees").getJSONObject(0);
+        treeCode = tree.optString("treeCode", "ZHIMA_TREE");
+        // 若服务端明确提供剩余点击次数，则优先使用
+        if (tree.has("remainPurificationClickNum")) {
+          clicks = Math.max(0, tree.optInt("remainPurificationClickNum", clicks));
+        }
+      }
+
+      if (clicks <= 0) {
+        Log.forest("芝麻树🌳[无需净化] 净化值不足（当前: " + score + "g，可点击: " + clicks + "次）");
+        return;
+      }
+
+
+      Log.forest("芝麻树🌳[开始净化] 可点击 " + clicks + " 次");
+
+      for (int i = 0; i < clicks; i++) {
+        String res = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode);
+        if (res == null) break;
+
+        JSONObject json = new JSONObject(res);
+        if (!ResChecker.checkRes(TAG, json)) break;
+
+        JSONObject ext = json.optJSONObject("extInfo");
+        if (ext == null) continue;
+
+        // 优先从标准路径取分数
+        int newScore = ext.optJSONObject("zhimaTreeCleanAndPushResult")
+                .optInt("purificationScore", -1);
+        // 兼容旧结构：直接在 extInfo 顶层
+        if (newScore == -1) {
+          newScore = ext.optInt("purificationScore", score - (i + 1) * 100);
         }
 
-        if (clicks <= 0) {
-            Log.forest("芝麻树🌳[无需净化] 净化值不足（当前: " + score + "g，可点击: " + clicks + "次）");
-            return;
-         }
+        int growth = ext.optJSONObject("zhimaTreeCleanAndPushResult")
+                .optJSONObject("currentTreeInfo")
+                .optInt("scoreSummary", -1);
 
+        String log = "芝麻树🌳[净化成功] 第 " + (i + 1) + " 次 | 剩余: " + newScore + "g";
+        if (growth != -1) log += " | 成长值: " + growth;
+        Log.forest(log + " ✅");
 
-        Log.forest("芝麻树🌳[开始净化] 可点击 " + clicks + " 次");
-
-        for (int i = 0; i < clicks; i++) {
-            String res = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode);
-            if (res == null) break;
-
-            JSONObject json = new JSONObject(res);
-            if (!ResChecker.checkRes(TAG, json)) break;
-
-            JSONObject ext = json.optJSONObject("extInfo");
-            if (ext == null) continue;
-
-            // 优先从标准路径取分数
-            int newScore = ext.optJSONObject("zhimaTreeCleanAndPushResult")
-                              .optInt("purificationScore", -1);
-            // 兼容旧结构：直接在 extInfo 顶层
-            if (newScore == -1) {
-                newScore = ext.optInt("purificationScore", score - (i + 1) * 100);
-            }
-
-            int growth = ext.optJSONObject("zhimaTreeCleanAndPushResult")
-                            .optJSONObject("currentTreeInfo")
-                            .optInt("scoreSummary", -1);
-
-            String log = "芝麻树🌳[净化成功] 第 " + (i + 1) + " 次 | 剩余: " + newScore + "g";
-            if (growth != -1) log += " | 成长值: " + growth;
-            Log.forest(log + " ✅");
-
-            Thread.sleep(1500);
-        }
+        Thread.sleep(1500);
+      }
 
     } catch (Exception e) {
-        Log.printStackTrace(TAG, e);
+      Log.printStackTrace(TAG, e);
     }
-}
+  }
 }

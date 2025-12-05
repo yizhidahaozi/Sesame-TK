@@ -25,22 +25,6 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("alipay.antmember.biz.rpc.member.h5.receivePointByUser", args1);
     }
 
-    public static String receiveAllPointByUser() throws JSONException {
-//        [{"bizSource":"myTab","sourcePassMap":{"innerSource":"","passInfo":"{\"tc\":\"EXPIRING_POINT\"}","source":"myTab","unid":""}}]
-        JSONObject args = new JSONObject();
-        args.put("bizSource", "myTab");
-        JSONObject passMap = new JSONObject();
-        passMap.put("innerSource", "");
-        JSONObject passInfo = new JSONObject();
-        passInfo.put("tc", "EXPIRING_POINT");
-        passMap.put("passInfo", passInfo);
-        passMap.put("source", "myTab");
-        passMap.put("unid", "");
-        args.put("sourcePassMap", passMap);
-        String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.pointcert.h5.receiveAllPointByUser", params);
-    }
-
     public static String queryMemberSigninCalendar() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar",
                 "[{\"autoSignIn\":true,\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\"}]");
@@ -66,16 +50,6 @@ public class AntMemberRpcCall {
     public static String merchantSign() {
         return RequestManager.requestString("alipay.mrchservbase.mrchpoint.sqyj.homepage.signin.v1",
                 "[{}]");
-    }
-
-    public static String zcjSignInQuery() {
-        return RequestManager.requestString("alipay.mrchservbase.zcj.view.invoke",
-                "[{\"compId\":\"ZCJ_SIGN_IN_QUERY\"}]");
-    }
-
-    public static String zcjSignInExecute() {
-        return RequestManager.requestString("alipay.mrchservbase.zcj.view.invoke",
-                "[{\"compId\":\"ZCJ_SIGN_IN_EXECUTE\"}]");
     }
 
     public static String taskListQuery() {
@@ -113,19 +87,6 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("alipay.mrchservbase.mrchpoint.ball.receive",
                 "[{\"ballIds\":[\"" + ballIds
                         + "\"],\"channel\":\"MRCH_SELF\",\"outBizNo\":\"" + getUniqueId() + "\"}]");
-    }
-
-    /* 会员任务 */
-    public static String signPageTaskList() {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.signPageTaskList",
-                "[{\"sourceBusiness\":\"antmember\",\"spaceCode\":\"ant_member_xlight_task\"}]");
-    }
-
-    public static String applyTask(String darwinName, Long taskConfigId) {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.applyTask",
-                "[{\"darwinExpParams\":{\"darwinName\":\"" + darwinName
-                        + "\"},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskConfigId\":"
-                        + taskConfigId + "}]");
     }
 
     public static String executeTask(String bizParam, String bizSubType, String bizType, Long taskConfigId) {
@@ -191,15 +152,6 @@ public class AntMemberRpcCall {
     public static String queryPointBallList() {
         return RequestManager.requestString("com.alipay.gamecenteruprod.biz.rpc.v3.queryPointBallList",
                 "[{\"source\":\"ch_alipaysearch__chsub_normal\"}]");
-    }
-
-    /**
-     * 收取单个乐豆球
-     * 对应: com.alipay.gamecenteruprod.biz.rpc.v3.receivePointBall
-     */
-    public static String receivePointBall(String ballId) {
-        return RequestManager.requestString("com.alipay.gamecenteruprod.biz.rpc.v3.receivePointBall",
-                "[{\"ballId\":\"" + ballId + "\",\"source\":\"ch_alipaysearch__chsub_normal\"}]");
     }
 
     /**
@@ -321,14 +273,6 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * 获取保障金信息
-     */
-    public static String queryInsuredHome() {
-        return RequestManager.requestString("com.alipay.insplatformbff.insgift.accountService.queryAccountForPlat",
-                "[{\"includePolicy\":true,\"specialChannel\":\"wealth_entry\"}]");
-    }
-
-    /**
      * 获取所有可领取的保障金
      */
     public static String queryAvailableCollectInsuredGold() {
@@ -343,70 +287,6 @@ public class AntMemberRpcCall {
     public static String collectInsuredGold(JSONObject goldBallObj) {
         return RequestManager.requestString("com.alipay.insgiftbff.insgiftMain.gainMyAndFamilySumInsured",
                 goldBallObj.toString(), "insgiftbff", "gainMyAndFamilySumInsured", "insgiftMain");
-    }
-
-    /**
-     * 查询生活记录
-     *
-     * @return 结果
-     */
-    public static String promiseQueryHome() {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.queryHome", null);
-    }
-
-    /**
-     * 查询生活记录明细
-     *
-     * @param recordId recordId
-     * @return 结果
-     */
-    public static String promiseQueryDetail(String recordId) {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.queryDetail",
-                "[{\"recordId\":\"" + recordId + "\"}]");
-    }
-
-    /**
-     * 生活记录加入新纪录
-     *
-     * @param data data
-     * @return 结果
-     */
-    public static String promiseJoin(String data) {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.join",
-                "[" + data + "]");
-    }
-
-    /**
-     * 查询待领取的保障金
-     *
-     * @return 结果
-     */
-    public static String queryMultiSceneWaitToGainList() {
-        return RequestManager.requestString("com.alipay.insgiftbff.insgiftMain.queryMultiSceneWaitToGainList",
-                "[{\"entrance\":\"jkj_zhima_dairy66\",\"eventToWaitParamDTO\":{\"giftProdCode\":\"GIFT_UNIVERSAL_COVERAGE\"," +
-                        "\"rightNoList\":[\"UNIVERSAL_ACCIDENT\",\"UNIVERSAL_HOSPITAL\",\"UNIVERSAL_OUTPATIENT\"," +
-                        "\"UNIVERSAL_SERIOUSNESS\",\"UNIVERSAL_WEALTH\",\"UNIVERSAL_TRANS\",\"UNIVERSAL_FRAUD_LIABILITY\"]}," +
-                        "\"helpChildParamDTO\":{\"giftProdCode\":\"GIFT_HEALTH_GOLD_CHILD\",\"rightNoList\":[\"UNIVERSAL_ACCIDENT\"," +
-                        "\"UNIVERSAL_HOSPITAL\",\"UNIVERSAL_OUTPATIENT\",\"UNIVERSAL_SERIOUSNESS\",\"UNIVERSAL_WEALTH\"," +
-                        "\"UNIVERSAL_TRANS\",\"UNIVERSAL_FRAUD_LIABILITY\"]},\"priorityChannelParamDTO\":{\"giftProdCode\":" +
-                        "\"GIFT_UNIVERSAL_COVERAGE\",\"rightNoList\":[\"UNIVERSAL_ACCIDENT\",\"UNIVERSAL_HOSPITAL\"," +
-                        "\"UNIVERSAL_OUTPATIENT\",\"UNIVERSAL_SERIOUSNESS\",\"UNIVERSAL_WEALTH\",\"UNIVERSAL_TRANS\"," +
-                        "\"UNIVERSAL_FRAUD_LIABILITY\"]},\"signInParamDTO\":{\"giftProdCode\":\"GIFT_UNIVERSAL_COVERAGE\"," +
-                        "\"rightNoList\":[\"UNIVERSAL_ACCIDENT\",\"UNIVERSAL_HOSPITAL\",\"UNIVERSAL_OUTPATIENT\"," +
-                        "\"UNIVERSAL_SERIOUSNESS\",\"UNIVERSAL_WEALTH\",\"UNIVERSAL_TRANS\",\"UNIVERSAL_FRAUD_LIABILITY\"]}}]");
-    }
-
-    /**
-     * 领取保障金
-     *
-     * @param jsonObject jsonObject
-     * @return 结果
-     */
-    public static String gainMyAndFamilySumInsured(JSONObject jsonObject) throws JSONException {
-        jsonObject.put("disabled", false);
-        jsonObject.put("entrance", "jkj_zhima_dairy66");
-        return RequestManager.requestString("com.alipay.insgiftbff.insgiftMain.gainMyAndFamilySumInsured",
-                "[" + jsonObject + "]");
     }
 
     // 安心豆
@@ -531,9 +411,9 @@ public class AntMemberRpcCall {
      * }
      */
     public static String alchemyCompleteTimeLimitedTask(String templateId) {
-        String body = "{\n" +
+        String body = "[{\n" +
                 "    \"templateId\": \"" + templateId + "\"\n" +
-                "}";
+                "}]";
 
         return RequestManager.requestString(
                 "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask",
@@ -549,6 +429,144 @@ public class AntMemberRpcCall {
     public static String alchemyQueryListV3() {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
                 "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
+    }
+
+    // ================= 年度回顾（任务中心） =================
+    public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =
+            "independent_component_program2025111803036407";
+    public static final String ANNUAL_REVIEW_COMPONENT_PREFIX =
+            "independent_component_task_reward_v2_02888775";
+    public static final String ANNUAL_REVIEW_QUERY_COMPONENT =
+            ANNUAL_REVIEW_COMPONENT_PREFIX + "_independent_component_task_reward_query";
+    public static final String ANNUAL_REVIEW_APPLY_COMPONENT =
+            ANNUAL_REVIEW_COMPONENT_PREFIX + "_independent_component_task_reward_apply";
+    public static final String ANNUAL_REVIEW_PROCESS_COMPONENT =
+            ANNUAL_REVIEW_COMPONENT_PREFIX + "_independent_component_task_reward_process";
+    public static final String ANNUAL_REVIEW_Get =
+            ANNUAL_REVIEW_COMPONENT_PREFIX + "_independent_component_task_reward_process";
+    public static final String ANNUAL_REVIEW_GET_REWARD_COMPONENT =
+            ANNUAL_REVIEW_COMPONENT_PREFIX + "_independent_component_task_reward_get_reward";
+
+    private static JSONObject buildAnnualReviewBasePayload() throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("channel", "share");
+        root.put("cityCode", "110000");
+        root.put("operationParamIdentify", ANNUAL_REVIEW_OPERATION_IDENTIFY);
+        // 默认 source 为查询组件，具体请求中可覆盖
+        root.put("source", ANNUAL_REVIEW_QUERY_COMPONENT);
+        return root;
+    }
+
+    /**
+     * 年度回顾 - 查询任务列表
+     *
+     * 对应文档示例：components 中携带
+     *   independent_component_task_reward_v2_02888775_independent_component_task_reward_query
+     */
+    public static String annualReviewQueryTasks() {
+        try {
+            JSONObject body = buildAnnualReviewBasePayload();
+            JSONObject components = new JSONObject();
+            components.put(ANNUAL_REVIEW_QUERY_COMPONENT, new JSONObject());
+            body.put("components", components);
+            body.put("source", ANNUAL_REVIEW_QUERY_COMPONENT);
+
+            return RequestManager.requestString(
+                    "alipay.imasp.program.programInvoke",
+                    new JSONArray().put(body).toString()
+            );
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * 年度回顾 - 领取单个任务（apply）
+     *
+     * 请求示例参见文档：components 中携带
+     *   independent_component_task_reward_v2_02888775_independent_component_task_reward_apply
+     */
+    public static String annualReviewApplyTask(String code) {
+        try {
+            JSONObject body = buildAnnualReviewBasePayload();
+
+            JSONObject compBody = new JSONObject();
+            compBody.put("code", code);
+            compBody.put("consultAfterLuckDraw", "false");
+            compBody.put("skipLuckDrawConsult", "true");
+
+            JSONObject components = new JSONObject();
+            components.put(ANNUAL_REVIEW_APPLY_COMPONENT, compBody);
+
+            body.put("components", components);
+            body.put("source", ANNUAL_REVIEW_APPLY_COMPONENT);
+
+            return RequestManager.requestString(
+                    "alipay.imasp.program.programInvoke",
+                    new JSONArray().put(body).toString()
+            );
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * 年度回顾 - 提交任务完成（process）
+     *
+     * 请求示例参见文档：components 中携带
+     *   independent_component_task_reward_v2_02888775_independent_component_task_reward_process
+     */
+    public static String annualReviewProcessTask(String code, String recordNo) {
+        try {
+            JSONObject body = buildAnnualReviewBasePayload();
+
+            JSONObject compBody = new JSONObject();
+            compBody.put("code", code);
+            compBody.put("recordNo", recordNo);
+
+            JSONObject components = new JSONObject();
+            components.put(ANNUAL_REVIEW_PROCESS_COMPONENT, compBody);
+
+            body.put("components", components);
+            body.put("source", ANNUAL_REVIEW_PROCESS_COMPONENT);
+
+            return RequestManager.requestString(
+                    "alipay.imasp.program.programInvoke",
+                    new JSONArray().put(body).toString()
+            );
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * 年度回顾 - 领取奖励（get_reward）
+     *
+     * 在任务完成后，根据 code + recordNo 领取成长值奖励。
+     */
+    public static String annualReviewGetReward(String code, String recordNo) {
+        try {
+            JSONObject body = buildAnnualReviewBasePayload();
+
+            JSONObject compBody = new JSONObject();
+            compBody.put("code", code);
+            compBody.put("consultAfterLuckDraw", "false");
+            compBody.put("recordNo", recordNo);
+            compBody.put("skipLuckDrawConsult", "true");
+
+            JSONObject components = new JSONObject();
+            components.put(ANNUAL_REVIEW_GET_REWARD_COMPONENT, compBody);
+
+            body.put("components", components);
+            body.put("source", ANNUAL_REVIEW_GET_REWARD_COMPONENT);
+
+            return RequestManager.requestString(
+                    "alipay.imasp.program.programInvoke",
+                    new JSONArray().put(body).toString()
+            );
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     // ================= 芝麻树 =================

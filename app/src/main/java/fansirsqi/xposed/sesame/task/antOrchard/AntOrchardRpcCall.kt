@@ -3,13 +3,12 @@ package fansirsqi.xposed.sesame.task.antOrchard
 import fansirsqi.xposed.sesame.hook.RequestManager
 
 object AntOrchardRpcCall {
-    private const val VERSION = "20251128.01"
+    private const val VERSION = "20250812.01"
 
     fun orchardIndex(): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.orchardIndex",
-            "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
+        return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
+            "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
+                    + VERSION + "\"}]");
     }
 
     fun extraInfoGet(): String {
@@ -18,22 +17,6 @@ object AntOrchardRpcCall {
             "[{\"from\":\"entry\",\"requestType\":\"NORMAL\",\"sceneCode\":\"FUGUO\",\"source\":\"ch_alipaysearch__chsub_normal\",\"version\":\"$VERSION\"}]"
         )
     }
-
-
-    fun batchHireAnimalRecommend(orchardUserId: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.batchHireAnimalRecommend",
-            "[{\"orchardUserId\":\"$orchardUserId\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"sceneType\":\"weed\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    fun batchHireAnimal(recommendGroupList: List<String>): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.batchHireAnimal",
-            "[{\"recommendGroupList\":[${recommendGroupList.joinToString(",")}],\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"sceneType\":\"weed\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
 
     fun extraInfoSet(): String {
         return RequestManager.requestString(
@@ -68,13 +51,6 @@ object AntOrchardRpcCall {
         return RequestManager.requestString(
             "com.alipay.antorchard.drawLottery",
             "[{\"lotteryScene\":\"receiveLotteryPlus\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    fun orchardSyncIndex(): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.orchardSyncIndex",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"syncIndexTypes\":\"QUERY_MAIN_ACCOUNT_INFO\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -120,49 +96,6 @@ object AntOrchardRpcCall {
         return RequestManager.requestString(
             "com.alipay.antfarm.triggerTbTask",
             "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    fun orchardSelectSeed(): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.orchardSelectSeed",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"seedCode\":\"rp\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    /* 砸金蛋 */
-    fun queryGameCenter(): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.queryGameCenter",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    fun noticeGame(appId: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.noticeGame",
-            "[{\"appId\":\"$appId\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    fun submitUserAction(gameId: String): String {
-        return RequestManager.requestString(
-            "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserAction",
-            "[{\"actionCode\":\"enterGame\",\"gameId\":\"$gameId\",\"paladinxVersion\":\"2.0.13\",\"source\":\"gameFramework\"}]"
-        )
-    }
-
-    fun submitUserPlayDurationAction(gameAppId: String, source: String): String {
-        return RequestManager.requestString(
-            "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction",
-            "[{\"gameAppId\":\"$gameAppId\",\"playTime\":32,\"source\":\"$source\",\"statisticTag\":\"\"}]"
-        )
-    }
-
-    fun smashedGoldenEgg(): String {
-        return RequestManager.requestString(
-            "com.alipay.antorchard.smashedGoldenEgg",
-            "[{\"requestType\":\"NORMAL\",\"seneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
         )
     }
 
