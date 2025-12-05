@@ -478,9 +478,6 @@ public class WebSettingsActivity extends BaseActivity {
     }
 
     private void save() {
-        if (!ViewAppInfo.INSTANCE.getVeriftag()) {
-            ToastUtil.showToastWithDelay(this, "您是ALLG尊贵的SSSSSVIP,不需要授权码！", 100);
-        }
         if (Config.isModify(userId)) {
             if (Config.save(userId, false)) {
                 Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show();
