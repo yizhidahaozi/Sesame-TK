@@ -959,7 +959,6 @@ public class ApplicationHook {
                 }
 //                init = false;
 //                service = null;
-            } else {
                 ModelTask.stopAllTask();
             }
         } catch (Throwable th) {
@@ -1007,7 +1006,7 @@ public class ApplicationHook {
         ModelTask.stopAllTask();
     }
 
-    public static void updateDay(String userId) {
+    public static void updateDay() {
         Calendar nowCalendar = Calendar.getInstance();
         try {
             if (dayCalendar == null) {
