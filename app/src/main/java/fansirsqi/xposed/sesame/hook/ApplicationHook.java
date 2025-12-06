@@ -1168,7 +1168,7 @@ public class ApplicationHook {
                     } else {
                         delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
                     }
-
+                    Log.record("TAG", "🔄 准备重新登录，延迟 " + (delayMillis / 1000) + " 秒后执行");
                     // 使用调度器（协程或 WorkManager）
                     ensureScheduler();
                     SchedulerAdapter.scheduleDelayedExecution(delayMillis);

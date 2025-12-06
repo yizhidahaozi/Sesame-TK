@@ -147,7 +147,7 @@ class AntOrchard : ModelTask() {
             }
 
             // 许愿
-            if (orchardSpreadManureCountValue >= 3 && orchardSpreadManureCountValue < 10) {
+            if (orchardSpreadManureCountValue in 3..<10) {
                 querySubplotsActivity(3)
             } else if (orchardSpreadManureCountValue >= 10) {
                 querySubplotsActivity(10)

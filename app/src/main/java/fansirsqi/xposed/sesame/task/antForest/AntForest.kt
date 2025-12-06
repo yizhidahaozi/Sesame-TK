@@ -968,11 +968,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 后续任务流程
             // -------------------------------
             if (selfHomeObj != null) {
-                val processObj = if (isTeam(selfHomeObj)){
-                    selfHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember")
+                val processObj = if (isTeam(selfHomeObj)) {
+                    selfHomeObj.optJSONObject("teamHomeResult")
+                        ?.optJSONObject("mainMember")
                 } else {
                     selfHomeObj
                 }
+
                 if (collectWateringBubble!!.value) {
                     wateringBubbles(processObj)
                     tc.countDebug("收取浇水金球")
@@ -1333,14 +1335,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun handleUserProps(selfHomeObj: JSONObject) {
         try {
-            val usingUserProps = if(isTeam(selfHomeObj)) {
-                selfHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember")
-                    .optJSONArray("usingUserProps")
+            val usingUserProps = if (isTeam(selfHomeObj)) {
+                selfHomeObj.optJSONObject("teamHomeResult")
+                    ?.optJSONObject("mainMember")
+                    ?.optJSONArray("usingUserProps")
+                    ?: JSONArray()  // 提供默认值
             } else {
-                selfHomeObj.optJSONArray("usingUserPropsNew")
+                selfHomeObj.optJSONArray("usingUserPropsNew") ?: JSONArray()
             }
             canConsumeAnimalProp = true
-            if (usingUserProps == null || usingUserProps.length() == 0) {
+            if (usingUserProps.length() == 0) {
                 return  // 如果没有使用中的用户道具，直接返回
             }
             //            Log.runtime(TAG, "尝试遍历使用中的道具:" + usingUserProps);
@@ -1695,12 +1699,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         userId: String?
     ) {
         val jaBubbles = if (isTeam(userHomeObj)) {
-            userHomeObj.optJSONObject("teamHomeResult").optJSONObject("mainMember").optJSONArray("bubbles")
+            userHomeObj.optJSONObject("teamHomeResult")
+                ?.optJSONObject("mainMember")
+                ?.optJSONArray("bubbles")
         } else {
             userHomeObj.optJSONArray("bubbles")
-        }
-
-        if (jaBubbles == null || jaBubbles.length() == 0) return
+        } ?: JSONArray()
+        if (jaBubbles.length() == 0) return
 
         val userName = getAndCacheUserName(userId, userHomeObj, null)
         var waitingBubblesCount = 0
@@ -2713,12 +2718,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             var usingUserPropsNew = joHomePage.getJSONArray("loginUserUsingPropNew")
             if (usingUserPropsNew.length() == 0) {
-                usingUserPropsNew = if (isTeam(joHomePage)) {
-                    joHomePage.optJSONObject("teamHomeResult").optJSONObject("mainMember")
-                        .optJSONArray("usingUserProps")
+
+                val usingUserPropsNew = if (isTeam(joHomePage)) {
+                    joHomePage.optJSONObject("teamHomeResult")
+                        ?.optJSONObject("mainMember")
+                        ?.optJSONArray("usingUserProps")
                 } else {
-                    joHomePage.getJSONArray("usingUserPropsNew")
-                }
+                    joHomePage.optJSONArray("usingUserPropsNew")
+                } ?: JSONArray()  // 统一默认值
             }
             for (i in 0..<usingUserPropsNew.length()) {
                 val userUsingProp = usingUserPropsNew.getJSONObject(i)
@@ -4003,8 +4010,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val propGroup = AntForestRpcCall.getPropGroup(propType)
             if (isRenewable) {
                 // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
-                val checkResponseStr =
-                    AntForestRpcCall.consumeProp(propGroup, propId, propType, false)
+                val checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false)
                 val checkResponse = JSONObject(checkResponseStr)
                 // Log.record(TAG, "发送检查请求: " + checkResponse);
                 var resData = checkResponse.optJSONObject("resData")
@@ -4012,7 +4018,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     resData = checkResponse
                 }
                 val status = resData.optString("usePropStatus")
-                if ("NEED_CONFIRM_CAN_PROLONG" == status) {
+                if ("NEED_CONFIRM_CAN_PROLONG" == status || "REPLACE" == status) {
                     // 情况1: 需要二次确认 (真正地续写)
                     Log.record(TAG, propName + "需要二次确认，发送确认请求...")
                     GlobalThreadPools.sleepCompat(2000)
@@ -4022,7 +4028,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     Log.record(TAG, "发送确认请求: $jo")
                 } else {
                     // 其他所有情况都视为最终结果，通常是失败
-                    Log.record(TAG, "道具状态异常或使用失败。")
+                    // Log.record(TAG, "道具状态异常或使用失败12:"+ status)
                     jo = checkResponse
                 }
             } else {

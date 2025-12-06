@@ -1,7 +1,7 @@
 package fansirsqi.xposed.sesame.hook;
 
 import android.content.pm.PackageInfo;
-import android.os.Build;
+import androidx.core.content.pm.PackageInfoCompat;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
@@ -50,13 +50,8 @@ public class VersionHook {
                                         General.PACKAGE_NAME.equals(packageInfo.packageName)) {
 
                                     String versionName = packageInfo.versionName;
-                                    int versionCode = packageInfo.versionCode;
-                                    long longVersionCode = versionCode;
-
-                                    // Android P (API 28) 及以上使用 getLongVersionCode
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                        longVersionCode = packageInfo.getLongVersionCode();
-                                    }
+                                    long longVersionCode = PackageInfoCompat.getLongVersionCode(packageInfo);
+                                    int versionCode = (int) (longVersionCode);
 
                                     // 只在第一次捕获时记录日志
                                     if (capturedVersion == null && versionName != null) {

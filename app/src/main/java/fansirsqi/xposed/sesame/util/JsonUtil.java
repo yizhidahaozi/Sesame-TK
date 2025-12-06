@@ -36,7 +36,7 @@ public class JsonUtil {
         // 配置 ObjectMapper
         MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // 忽略未知属性
         MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false); // 忽略空对象
-        MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL); // 忽略空属性
+        MAPPER.setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL); // 忽略空属性
         MAPPER.setTimeZone(TimeZone.getDefault()); // 设置时区
         MAPPER.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())); // 设置日期格式
     }
