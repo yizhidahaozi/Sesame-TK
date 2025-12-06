@@ -121,11 +121,20 @@ public class AntMember extends ModelTask {
       if ((sesameTask.getValue() || collectSesame.getValue()) && isSesameOpened) {
         // 芝麻粒福利签到
         doSesameZmlCheckIn();
-        if (sesameTask.getValue()) {
-          doAllAvailableSesameTask();
-          handleGrowthGuideTasks();
+          if (Status.hasFlagToday("AntMember::doAllAvailableSesameTask")) {
+              Log.record(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行");
+          } else {
+              // 芝麻信用任务（今日首次）
+              Log.record(TAG, "🎮 开始执行芝麻信用任务（今日首次）");
+              doAllAvailableSesameTask();
+              handleGrowthGuideTasks();
+              Log.record(TAG, "✅ 芝麻信用任务已完成，今天不再执行");
+          }
 
-        }
+
+
+
+
         if (collectSesame.getValue()) {
           collectSesame(collectSesameWithOneClick.getValue());
         }
@@ -196,8 +205,7 @@ public class AntMember extends ModelTask {
         Log.printStackTrace(TAG + ".handleGrowthGuideTasks.queryGrowthGuideToDoList", e);
         return;
       }
-
-      if (resp == null || resp.isEmpty()) {
+      if (resp.isEmpty()) {
         Log.record(TAG + ".handleGrowthGuideTasks", "信誉任务列表返回空");
         return;
       }
@@ -861,7 +869,7 @@ public class AntMember extends ModelTask {
 
       // 如果所有任务都已完成或跳过（没有剩余可完成任务），关闭开关
       if (totalTasks > 0 && (completedTasks + skippedTasks) >= totalTasks) {
-        sesameTask.setValue(false);
+        Status.setFlagToday("AntMember::doAllAvailableSesameTask");
         Log.record(TAG, "芝麻信用💳[已全部完成任务，临时关闭]");
       }
     } catch (Throwable t) {

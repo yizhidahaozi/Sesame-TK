@@ -29,7 +29,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.newutil.DataStore
-import fansirsqi.xposed.sesame.newutil.DataStore.put
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.TaskStatus
@@ -3022,7 +3021,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             /* 3️⃣ 首次运行时把预设黑名单合并进去并立即落盘 */
             if (badTaskSet.isEmpty()) {
                 badTaskSet.addAll(presetBad)
-                put("badForestTaskSet", badTaskSet) // 持久化
+                DataStore.put("badForestTaskSet", badTaskSet) // 持久化
             }
 
             while (true) {
@@ -3112,7 +3111,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                         "完成森林任务失败超过1次$taskTitle\n$joFinishTask"
                                     ) // 记录完成任务失败信息
                                     badTaskSet.add(taskType)
-                                    put("badForestTaskSet", badTaskSet)
+                                    DataStore.put("badForestTaskSet", badTaskSet)
                                 } else {
                                     Log.forest("森林任务🧾️[$taskTitle]")
                                     doubleCheck = true // 标记需要重新检查任务
