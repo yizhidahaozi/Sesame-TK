@@ -102,22 +102,6 @@ public class AntMemberRpcCall {
                 "[{\"sourceBusiness\":\"signInAd\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    public static String rpcCall_signIn() {
-        String args1 = "[{\"sceneCode\":\"KOUBEI_INTEGRAL\",\"source\":\"ALIPAY_TAB\",\"version\":\"2.0\"}]";
-        return RequestManager.requestString("alipay.kbmemberprod.action.signIn", args1);
-    }
-
-    /**
-     * 黄金票收取
-     *
-     * @param str signInfo
-     * @return 结果
-     */
-    public static String goldBillCollect(String str) {
-        return RequestManager.requestString("com.alipay.wealthgoldtwa.goldbill.v2.index.collect",
-                "[{" + str + "\"trigger\":\"Y\"}]");
-    }
-
     /**
      * 游戏中心签到查询
      * 对应: com.alipay.gamecenteruprod.biz.rpc.v3.querySignInBall
@@ -426,8 +410,6 @@ public class AntMemberRpcCall {
         );
     }
 
-
-
     /**
      * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
      * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3
@@ -436,10 +418,6 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
                 "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
     }
-
-
-
-
 
     // ================= 年度回顾（任务中心） =================
     public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =
@@ -784,5 +762,106 @@ public class AntMemberRpcCall {
                 "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
                 data
         );
+    }
+
+    /**
+     * [新] 福利中心首页
+     */
+    public static String queryWelfareHome() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("isResume", true);
+            // 接口: com.alipay.finaggexpbff.needle.welfareCenter.index
+            return RequestManager.requestString("com.alipay.finaggexpbff.needle.welfareCenter.index",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * [新] 任务查询推送
+     */
+    public static String taskQueryPush(String taskId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("mode", 1); // 固定参数
+            args.put("taskId", taskId);
+
+            // 接口: com.alipay.wealthgoldtwa.needle.taskQueryPush
+            return RequestManager.requestString("com.alipay.wealthgoldtwa.needle.taskQueryPush",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 签到 / 领取奖励
+     * @param type "SIGN"
+     */
+    public static String welfareCenterTrigger(String type) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("type", type);
+            return RequestManager.requestString("com.alipay.finaggexpbff.needle.welfareCenter.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 任务触发/报名
+     */
+    public static String goldBillTaskTrigger(String taskId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("taskId", taskId);
+            return RequestManager.requestString("com.alipay.wealthgoldtwa.goldbill.v4.task.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * [新增] 查询黄金票提取页信息
+     * 用于获取最新的可用数量、基金ID (productId) 和 赠送份数 (bonusAmount)
+     */
+    public static String queryConsumeHome() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("tabBubbleDeliverParam", new JSONObject());
+            args.put("tabTypeDeliverParam", new JSONObject());
+            // 接口: com.alipay.wealthgoldtwa.needle.consume.query
+            return RequestManager.requestString("com.alipay.wealthgoldtwa.needle.consume.query",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * [新增] 提交提取黄金
+     * @param amount 提取数量 (如 100, 200, 2900)
+     * @param productId 基金ID
+     * @param bonusAmount 额外赠送数量
+     */
+    public static String submitConsume(int amount, String productId, int bonusAmount) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("exchangeAmount", amount);
+            // 计算金额：100份 = 0.10元。公式：份数 / 1000.0
+            args.put("exchangeMoney", String.format("%.2f", amount / 1000.0));
+            args.put("prizeType", "GOLD"); // 固定为黄金
+            args.put("productId", productId);
+            args.put("bonusAmount", bonusAmount);
+            // 接口: com.alipay.wealthgoldtwa.needle.consume.submit
+            return RequestManager.requestString("com.alipay.wealthgoldtwa.needle.consume.submit",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
