@@ -370,12 +370,17 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * [日志对应] 芝麻炼金-签到列表查询
+     * [日志对应] 芝麻炼 /金-签到列表查询
+     *
+     *
+     *      * @param checkInDate yyyyMMdd
+     *      * @param sceneCode   "zml" 对应芝麻粒福利签到, "alchemy" 对应芝麻炼金签到
+     *      *
      * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists
      */
-    public static String alchemyQueryCheckIn() {
+    public static String alchemyQueryCheckIn(String scenecode) {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists",
-                "[{\"sceneCode\":\"alchemy\",\"version\":\"2025-10-22\"}]");
+                "[{\"sceneCode\":\""+scenecode+"\",\"version\":\"2025-10-22\"}]");
     }
 
     /**
@@ -422,6 +427,7 @@ public class AntMemberRpcCall {
     }
 
 
+
     /**
      * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
      * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3
@@ -430,6 +436,10 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
                 "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
     }
+
+
+
+
 
     // ================= 年度回顾（任务中心） =================
     public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =

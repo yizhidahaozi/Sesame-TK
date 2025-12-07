@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import fansirsqi.xposed.sesame.data.StatusFlags;
 import fansirsqi.xposed.sesame.entity.MemberBenefit;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.ModelFields;
@@ -85,6 +86,7 @@ public class AntMember extends ModelTask {
     modelFields.addField(beanSignIn = new BooleanModelField("beanSignIn", "安心豆签到", false));
     modelFields.addField(beanExchangeBubbleBoost = new BooleanModelField("beanExchangeBubbleBoost", "安心豆兑换时光加速器", false));
     modelFields.addField(AnnualReview = new BooleanModelField("AnnualReview", "年度回顾", false));
+
     return modelFields;
   }
 
@@ -121,20 +123,15 @@ public class AntMember extends ModelTask {
       if ((sesameTask.getValue() || collectSesame.getValue()) && isSesameOpened) {
         // 芝麻粒福利签到
         doSesameZmlCheckIn();
-          if (Status.hasFlagToday("AntMember::doAllAvailableSesameTask")) {
-              Log.record(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行");
-          } else {
-              // 芝麻信用任务（今日首次）
-              Log.record(TAG, "🎮 开始执行芝麻信用任务（今日首次）");
-              doAllAvailableSesameTask();
-              handleGrowthGuideTasks();
-              Log.record(TAG, "✅ 芝麻信用任务已完成，今天不再执行");
-          }
-
-
-
-
-
+        if (Status.hasFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask)) {
+          Log.record(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行");
+        } else {
+          // 芝麻信用任务（今日首次）
+          Log.record(TAG, "🎮 开始执行芝麻信用任务（今日首次）");
+          doAllAvailableSesameTask();
+          handleGrowthGuideTasks();
+          Log.record(TAG, "✅ 芝麻信用任务已完成，今天不再执行");
+        }
         if (collectSesame.getValue()) {
           collectSesame(collectSesameWithOneClick.getValue());
         }
@@ -165,6 +162,7 @@ public class AntMember extends ModelTask {
       if (enableZhimaTree.getValue() && isSesameOpened) {
         doZhimaTree();
       }
+
       if (merchantSign.getValue() || merchantKmdk.getValue() || merchantMoreTask.getValue()) {
         JSONObject jo = new JSONObject(AntMemberRpcCall.transcodeCheck());
         if (!jo.optBoolean("success")) {
@@ -187,6 +185,14 @@ public class AntMember extends ModelTask {
         if (merchantMoreTask.getValue()) {
           doMerchantMoreTask();
         }
+
+
+
+
+
+
+
+
       }
     } catch (Throwable t) {
       Log.printStackTrace(TAG, t);
@@ -205,6 +211,7 @@ public class AntMember extends ModelTask {
         Log.printStackTrace(TAG + ".handleGrowthGuideTasks.queryGrowthGuideToDoList", e);
         return;
       }
+
       if (resp.isEmpty()) {
         Log.record(TAG + ".handleGrowthGuideTasks", "信誉任务列表返回空");
         return;
@@ -355,7 +362,6 @@ public class AntMember extends ModelTask {
     }
   }
 
-
   /**
    * 年度回顾任务：通过 programInvoke 查询并自动完成任务
    *
@@ -364,7 +370,7 @@ public class AntMember extends ModelTask {
    * 2) 对于 taskStatus = "init" 的任务，使用 ..._task_reward_apply(code) 领取，得到 recordNo
    * 3) 使用 ..._task_reward_process(code, recordNo) 上报完成，服务端自动发放成长值奖励
    */
-  private void doAnnualReview() {
+  private void doAnnualReview () {
     try {
       Log.record(TAG + ".doAnnualReview", "年度回顾🎞[开始执行]");
 
@@ -869,7 +875,7 @@ public class AntMember extends ModelTask {
 
       // 如果所有任务都已完成或跳过（没有剩余可完成任务），关闭开关
       if (totalTasks > 0 && (completedTasks + skippedTasks) >= totalTasks) {
-        Status.setFlagToday("AntMember::doAllAvailableSesameTask");
+        Status.setFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask);
         Log.record(TAG, "芝麻信用💳[已全部完成任务，临时关闭]");
       }
     } catch (Throwable t) {
@@ -1014,66 +1020,41 @@ public class AntMember extends ModelTask {
   }
 
   /**
-   * 芝麻粒信用福利签到
+   * 芝麻粒信用福利签到  与芝麻粒炼金的签到方法都一样 alchemyQueryCheckIn 只不过scenecode不一样
    * 基于 HomeV8RpcManager.queryServiceCard 返回的 serviceCardVOList
    * 通过 itemAttrs.checkInModuleVO.currentDateCheckInTaskVO 判断今日是否可签到
    */
   private void doSesameZmlCheckIn() {
     try {
-      String resp = AntMemberRpcCall.queryServiceCard();
-      JSONObject root = new JSONObject(resp);
-      if (!root.optBoolean("success", false)) {
-        // 部分环境会返回 resultCode/SUCCESS，这里简单兜底
-        if (!"SUCCESS".equals(root.optString("resultCode"))) {
-          return;
-        }
-      }
-      JSONArray cards = root.optJSONArray("serviceCardVOList");
-      if (cards == null || cards.length() == 0) {
-        return;
-      }
-      for (int i = 0; i < cards.length(); i++) {
-        JSONObject card = cards.optJSONObject(i);
-        if (card == null) continue;
-        JSONObject itemAttrs = card.optJSONObject("itemAttrs");
-        if (itemAttrs == null) continue;
-        JSONObject checkInModuleVO = itemAttrs.optJSONObject("checkInModuleVO");
-        if (checkInModuleVO == null) continue;
-        JSONObject currentDay = checkInModuleVO.optJSONObject("currentDateCheckInTaskVO");
-        if (currentDay == null) continue;
-        boolean currentDayFlag = currentDay.optBoolean("currentDay", false);
-        String status = currentDay.optString("status");
-        String checkInDate = currentDay.optString("checkInDate");
-        if (!currentDayFlag || checkInDate.isEmpty()) {
-          continue;
-        }
-        if ("COMPLETED".equals(status)) {
-          // 今日已签到
-          return;
-        }
-        if (!"CAN_COMPLETE".equals(status)) {
-          continue;
-        }
-        // 执行签到
-        String completeRes = AntMemberRpcCall.zmCheckInCompleteTask(checkInDate, "zml");
-        try {
-          JSONObject completeJo = new JSONObject(completeRes);
-          if (completeJo.optBoolean("success", false)) {
-            JSONObject data = completeJo.optJSONObject("data");
-            int num = 0;
-            if (data != null) {
-              num = data.optInt("zmlNum",
-                      data.optJSONObject("prize") != null ?
-                              data.optJSONObject("prize").optInt("num", 0) : 0);
-            }
-            Log.other("芝麻信用💳[芝麻粒签到成功]#获得" + num + "粒");
-          } else {
-            Log.runtime(TAG + ".doSesameZmlCheckIn", "芝麻粒签到失败:" + completeRes);
+      String checkInRes = AntMemberRpcCall.alchemyQueryCheckIn("zml");
+      JSONObject checkInJo = new JSONObject(checkInRes);
+      if (checkInJo.optBoolean("success")) {
+        JSONObject data = checkInJo.optJSONObject("data");
+        if (data != null) {
+          JSONObject currentDay = data.optJSONObject("currentDateCheckInTaskVO");
+          if (currentDay != null) {
+            String status = currentDay.optString("status");
+            String checkInDate = currentDay.optString("checkInDate");
+            if ("CAN_COMPLETE".equals(status) && !checkInDate.isEmpty()) {
+              // 信誉主页签到
+              String completeRes = AntMemberRpcCall.zmCheckInCompleteTask(checkInDate, "zml");
+              try {
+                JSONObject completeJo = new JSONObject(completeRes);
+                if (completeJo.optBoolean("success")) {
+                  JSONObject prize = completeJo.optJSONObject("data");
+                  int num = prize != null ? prize.optInt("zmlNum",
+                          prize.optJSONObject("prize") != null ?
+                                  prize.optJSONObject("prize").optInt("num", 0) : 0) : 0;
+                  Log.other("芝麻炼金⚗️[每日签到成功]#获得" + num + "粒");
+                } else {
+                  Log.runtime(TAG + ".doSesameAlchemy", "炼金签到失败:" + completeRes);
+                }
+              } catch (Throwable e) {
+                Log.printStackTrace(TAG + ".doSesameAlchemy.alchemyCheckInComplete", e);
+              }
+            } // status 为 COMPLETED 时不再重复签到
           }
-        } catch (Throwable e) {
-          Log.printStackTrace(TAG + ".doSesameZmlCheckIn.complete", e);
         }
-        return; // 找到并尝试签到一次后即可退出
       }
     } catch (Throwable t) {
       Log.printStackTrace(TAG + ".doSesameZmlCheckIn", t);
@@ -1517,6 +1498,12 @@ public class AntMember extends ModelTask {
           Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#" + msg);
         } else {
           JSONObject data = root.optJSONObject("data");
+
+          // 情况1：data 为 null 或 空对象 → 默认已经签到过
+          if (data == null || data.length() == 0) {
+            Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到](data为空)");
+            return;
+          }
           JSONObject signModule = data != null ? data.optJSONObject("signInBallModule") : null;
           boolean signed = signModule != null && signModule.optBoolean("signInStatus", false);
           if (signed) {
@@ -1859,7 +1846,7 @@ public class AntMember extends ModelTask {
       }
 
       // ================= Step 2: 自动签到 & 时段奖励 =================
-      String checkInRes = AntMemberRpcCall.alchemyQueryCheckIn();
+      String checkInRes = AntMemberRpcCall.alchemyQueryCheckIn("alchemy");
       JSONObject checkInJo = new JSONObject(checkInRes);
       if (checkInJo.optBoolean("success")) {
         JSONObject data = checkInJo.optJSONObject("data");

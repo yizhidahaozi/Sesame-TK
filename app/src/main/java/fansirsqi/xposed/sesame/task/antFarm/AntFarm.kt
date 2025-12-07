@@ -1184,22 +1184,35 @@ class AntFarm : ModelTask() {
                     addChildTask(ChildModelTask(taskId, "FA", Runnable {
                         try {
                             Log.record(TAG, "🔔 蹲点投喂任务触发")
-                            // 3️⃣ 执行喂食
-                            if (feedAnimal(ownerFarmId)) {
-                                Log.record(TAG, "✅ 投喂成功，刷新庄园状态")
-                                // 4️⃣ 重新进入庄园，获取最新状态
-                                enterFarm()
-                                // 同步最新状态
-                                syncAnimalStatus(ownerFarmId)
-                                // 5️⃣ 关键：重新执行喂养逻辑，计算并创建下一次蹲点
-                                kotlinx.coroutines.runBlocking {
-                                    handleAutoFeedAnimal()
-                                }
-                                Log.record(TAG, "🔄 下一次蹲点任务已创建")
-                            } else {
-                                Log.record(TAG, "⚠️ 投喂失败，可能饲料不足")
-                            }
+                            // 重新进入庄园，获取最新状态
+                            enterFarm()
+                            // 同步最新状态
+                            syncAnimalStatus(ownerFarmId)
+                            // 2️⃣ 检查小鸡状态（可能在睡觉或已经被喂过了）
+                            if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
+                                Log.record(TAG, "🍚 检测到小鸡饥饿，开始投喂")
 
+                                // 3️⃣ 执行喂食
+                                if (feedAnimal(ownerFarmId)) {
+                                    Log.record(TAG, "✅ 投喂成功，刷新庄园状态")
+
+                                    // 4️⃣ 重新进入庄园，获取最新状态
+                                    enterFarm()
+
+                                    // 5️⃣ 关键：重新执行喂养逻辑，计算并创建下一次蹲点
+                                    kotlinx.coroutines.runBlocking {
+                                        handleAutoFeedAnimal()
+                                    }
+
+                                    Log.record(TAG, "🔄 下一次蹲点任务已创建")
+                                } else {
+                                    Log.record(TAG, "⚠️ 投喂失败，可能饲料不足")
+                                }
+                            } else if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                                Log.record(TAG, "💤 小鸡正在睡觉，跳过本次投喂")
+                            } else if (AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
+                                Log.record(TAG, "😋 小鸡正在吃饭，可能已被其他逻辑喂食")
+                            }
                         } catch (e: Exception) {
                             Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
                             Log.printStackTrace(TAG, e)

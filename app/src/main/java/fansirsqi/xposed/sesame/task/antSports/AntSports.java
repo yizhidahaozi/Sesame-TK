@@ -208,7 +208,10 @@ public class AntSports extends ModelTask {
             }
 
             if (sportsTasks.getValue()) {
+                // 先执行原有运动任务面板逻辑
                 sportsTasks();
+                // 再处理首页推荐能量球对应的任务
+                sportsEnergyBubbleTask();
             }
 
             ClassLoader loader = ApplicationHook.getClassLoader();
@@ -431,6 +434,87 @@ public class AntSports extends ModelTask {
             }
         } catch (Exception e) {
             Log.printStackTrace(e);
+        }
+    }
+
+    /**
+     * 运动首页推荐能量球任务
+     * 根据看我.txt：queryEnergyBubbleModule → data.recBubbleList
+     * 只处理包含 channel 字段的条目，每个任务顺序执行一次，中间随机休息 1-3 秒
+     */
+    private void sportsEnergyBubbleTask() {
+        try {
+            JSONObject jo = new JSONObject(AntSportsRpcCall.queryEnergyBubbleModule());
+            if (!jo.optBoolean("success")) {
+                Log.runtime(TAG, "queryEnergyBubbleModule fail: " + jo.toString());
+                return;
+            }
+
+            JSONObject data = jo.optJSONObject("data");
+            if (data == null || !data.has("recBubbleList")) {
+                return;
+            }
+
+            JSONArray recBubbleList = data.optJSONArray("recBubbleList");
+            if (recBubbleList == null || recBubbleList.length() == 0) {
+                return;
+            }
+
+            for (int i = 0; i < recBubbleList.length(); i++) {
+                JSONObject bubble = recBubbleList.optJSONObject(i);
+                if (bubble == null) {
+                    continue;
+                }
+
+                // 只处理有 channel 字段的记录（广告任务），引导/订阅等不处理
+                String taskId = bubble.optString("channel", "");
+                if (taskId.isEmpty()) {
+                    continue;
+                }
+
+                String sourceName = bubble.optString("simpleSourceName", "");
+                int coinAmount = bubble.optInt("coinAmount", 0);
+
+                Log.record(TAG, "运动首页任务[开始完成：" + sourceName + "，taskId=" + taskId + "，coin=" + coinAmount + "]");
+
+                JSONObject completeRes = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
+                if (completeRes.optBoolean("success")) {
+                    JSONObject dataObj = completeRes.optJSONObject("data");
+                    int assetCoinAmount = 0;
+                    String taskFinishToast = "";
+                    if (dataObj != null) {
+                        assetCoinAmount = dataObj.optInt("assetCoinAmount", 0);
+                        taskFinishToast = dataObj.optString("taskFinishToast", "");
+                    }
+                    Log.other(TAG, "运动球任务✅[" + sourceName + "]#奖励" + assetCoinAmount + "💰 " );//+ taskFinishToast
+                } else {
+                    String errorCode = completeRes.optString("errorCode", "");
+                    String errorMsg = completeRes.optString("errorMsg", "");
+                    Log.record(TAG, "运动球任务❌[" + sourceName + "]#" + errorCode + " - " + errorMsg);
+                }
+
+                // 每处理一个任务随机休息 1-3 秒
+                int sleepMs = RandomUtil.nextInt(1000, 3000);
+                GlobalThreadPools.sleepCompat(sleepMs);
+            }
+
+            // 所有任务完成后调用 pickBubbleTaskEnergy 并获取余额
+            String result = AntSportsRpcCall.pickBubbleTaskEnergy();
+            JSONObject resultJson = new JSONObject(result);
+
+            if (resultJson.optBoolean("success")) {
+                JSONObject dataObj = resultJson.optJSONObject("data");
+                if (dataObj != null) {
+                    String balance = dataObj.optString("balance", "0");
+                    Log.other(TAG, "拾取能量球成功  当前余额: " + balance + "💰");
+
+                }
+            } else {
+                Log.record(TAG, "领取能量球任务失败: " + resultJson.optString("errorMsg", "未知错误"));
+            }
+        } catch (Throwable t) {
+            Log.runtime(TAG, "sportsEnergyBubbleTask err:");
+            Log.printStackTrace(TAG, t);
         }
     }
 
@@ -1526,7 +1610,7 @@ public class AntSports extends ModelTask {
                     // 固定顺序：1.签到 → 2.循环处理任务大厅 → 3.捡泡泡
                     neverlandDoSign();                 // 签到
                     loopHandleTaskCenter();            // 循环处理任务
-                   // handleHealthIslandTask();            // 循环处理任务中心的浏览任务
+                    handleHealthIslandTask();            // 循环处理任务中心的浏览任务
                     neverlandPickAllBubble();          // 拾取能量球
                 }
 
@@ -1699,62 +1783,69 @@ public class AntSports extends ModelTask {
             try {
                 Log.record(TAG, "开始检查健康岛浏览任务");
 
-                // 1. 查询健康岛任务信息
-                JSONObject taskInfoResp = new JSONObject(
-                        AntSportsRpcCall.NeverlandRpcCall.queryTaskInfo("health-island", "LIGHT_FEEDS_TASK")
-                );
+                boolean hasTask = true;  // 用于判断是否还有任务
 
-                if (!ResChecker.checkRes(TAG + "查询健康岛浏览任任务失败:", taskInfoResp)
-                        || !taskInfoResp.optBoolean("success", false)
-                        || taskInfoResp.optJSONObject("data") == null) {
+                while (hasTask) {
+                    // 1. 查询健康岛任务信息
+                    JSONObject taskInfoResp = new JSONObject(
+                            AntSportsRpcCall.NeverlandRpcCall.queryTaskInfo("health-island", "LIGHT_FEEDS_TASK")
+                    );
 
+                    if (!ResChecker.checkRes(TAG + "查询健康岛浏览任务失败:", taskInfoResp)
+                            || !taskInfoResp.optBoolean("success", false)
+                            || taskInfoResp.optJSONObject("data") == null) {
 
-                    Log.other(TAG, "健康岛浏览任务查询失败 ["+taskInfoResp+"] 请关闭此功能"+taskInfoResp);
-                    return;
-                }
+                        Log.other(TAG, "健康岛浏览任务查询失败 ["+taskInfoResp+"] 请关闭此功能");
+                        return;
+                    }
 
-                JSONArray taskInfos = taskInfoResp.getJSONObject("data").optJSONArray("taskInfos");
-                if (taskInfos == null || taskInfos.length() == 0) {
-                    Log.other(TAG, "健康岛任务列表为空");
-                    return;
-                }
+                    JSONArray taskInfos = taskInfoResp.getJSONObject("data").optJSONArray("taskInfos");
 
-                // 2. 遍历处理每个任务
-                for (int i = 0; i < taskInfos.length(); i++) {
-                    JSONObject taskInfo = taskInfos.getJSONObject(i);
-                    String encryptValue = taskInfo.optString("encryptValue");
-                    int energyNum = taskInfo.optInt("energyNum", 0);
-                    int viewSec = taskInfo.optInt("viewSec", 15);
-
-                    if (encryptValue.isEmpty()) {
-                        Log.error(TAG, "健康岛任务 encryptValue 为空，跳过");
+                    // 如果没有任务，跳出循环
+                    if (taskInfos == null || taskInfos.length() == 0) {
+                        Log.runtime(TAG, "健康岛浏览任务列表为空");
+                        hasTask = false;  // 停止循环
                         continue;
                     }
 
-                    Log.record(TAG, "健康岛浏览任务：能量+" + energyNum + "，需等待" + viewSec + "秒");
+                    // 2. 遍历处理每个任务
+                    for (int i = 0; i < taskInfos.length(); i++) {
+                        JSONObject taskInfo = taskInfos.getJSONObject(i);
+                        String encryptValue = taskInfo.optString("encryptValue");
+                        int energyNum = taskInfo.optInt("energyNum", 0);
+                        int viewSec = taskInfo.optInt("viewSec", 15);
 
-                    // 3. 等待浏览时间
-                    Thread.sleep(viewSec * 1000L);
+                        if (encryptValue.isEmpty()) {
+                            Log.error(TAG, "健康岛任务 encryptValue 为空，跳过");
+                            continue;
+                        }
 
-                    // 4. 领取奖励
-                    JSONObject receiveResp = new JSONObject(
-                            AntSportsRpcCall.NeverlandRpcCall.energyReceive(encryptValue, energyNum, "LIGHT_FEEDS_TASK")
-                    );
+                        Log.record(TAG, "健康岛浏览任务：能量+" + energyNum + "，需等待" + viewSec + "秒");
 
-                    if (ResChecker.checkRes(TAG + "领取健康岛任务奖励:", receiveResp)
-                            && receiveResp.optBoolean("success", false)) {
-                        Log.other(TAG, "✅ 健康岛任务完成，获得能量+" + energyNum);
-                    } else {
-                        Log.error(TAG, "健康岛任务领取失败: " + receiveResp);
+                        // 3. 等待浏览时间
+                        Thread.sleep(viewSec /3);
+
+                        // 4. 领取奖励
+                        JSONObject receiveResp = new JSONObject(
+                                AntSportsRpcCall.NeverlandRpcCall.energyReceive(encryptValue, energyNum, "LIGHT_FEEDS_TASK",null)
+                        );
+
+                        if (ResChecker.checkRes(TAG + "领取健康岛任务奖励:", receiveResp)
+                                && receiveResp.optBoolean("success", false)) {
+                            Log.other(TAG, "✅ 健康岛浏览任务完成，获得能量+" + energyNum);
+                        } else {
+                            Log.error(TAG, "健康岛任务领取失败: " + receiveResp);
+                        }
+
+                        Thread.sleep(1000); // 任务间隔
                     }
-
-                    Thread.sleep(1000); // 任务间隔
                 }
 
             } catch (Throwable t) {
                 Log.printStackTrace(TAG, "处理健康岛任务异常", t);
             }
         }
+
 
 
         /**
@@ -1877,38 +1968,88 @@ public class AntSports extends ModelTask {
                 }
 
                 List<String> ids = new ArrayList<>();
+                List<String> encryptValues = new ArrayList<>();  // 用于存储需要浏览的任务的 encryptValue
+
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject item = arr.getJSONObject(i);
-                    if (!item.optBoolean("initState") &&
-                            item.optString("medEnergyBallInfoRecordId").length() > 0) {
+                    String bubbleTaskStatus = item.optString("bubbleTaskStatus");
+                    String encryptValue = item.optString("encryptValue");
+                    int energyNum = item.optInt("energyNum", 0);  // 动态获取能量值
+                    int viewSec = item.optInt("viewSec", 15);  // 获取浏览时间
+
+                    // 如果任务状态为 INIT，并且有 encryptValue，添加到处理队列
+                    if ("INIT".equals(bubbleTaskStatus) && !encryptValue.isEmpty()) {
+                        encryptValues.add(encryptValue);
+                        Log.record(TAG, "找到可浏览任务： " + item.optString("title") + "，能量+" + energyNum + "，需等待" + viewSec + "秒");
+                    } else if (!item.optBoolean("initState") && item.optString("medEnergyBallInfoRecordId").length() > 0) {
+                        // 否则继续处理其他类型的任务
                         ids.add(item.getString("medEnergyBallInfoRecordId"));
                     }
                 }
 
-                if (ids.isEmpty()) {
-                    Log.record(TAG, "没有可领取的泡泡");
+                if (ids.isEmpty() && encryptValues.isEmpty()) {
+                    Log.record(TAG, "没有可领取的泡泡任务");
                     return;
                 }
 
-                Log.record(TAG, "健康岛 · 正在领取 " + ids.size() + " 个泡泡…");
-                JSONObject pick = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.pickBubbleTaskEnergy(ids));
+                // 处理普通泡泡任务
+                if (!ids.isEmpty()) {
+                    Log.record(TAG, "健康岛 · 正在领取 " + ids.size() + " 个泡泡…");
+                    JSONObject pick = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.pickBubbleTaskEnergy(ids));
 
-                if (!ResChecker.checkRes(TAG + "领取泡泡失败:", pick)
-                        || !pick.optBoolean("success", false)
-                        || pick.optJSONObject("data") == null) {
-                    Log.error(TAG, "pickBubbleTaskEnergy raw=" + pick);
-                    return;
+                    if (!ResChecker.checkRes(TAG + "领取泡泡失败:", pick)
+                            || !pick.optBoolean("success", false)
+                            || pick.optJSONObject("data") == null) {
+                        Log.error(TAG, "pickBubbleTaskEnergy raw=" + pick);
+                        return;
+                    }
+
+                    JSONObject data = pick.getJSONObject("data");
+                    Log.other(TAG, "捡泡泡成功 🎈 +" +
+                            data.optString("changeAmount") +
+                            " 余额：" + data.optString("balance"));
                 }
 
-                JSONObject data = pick.getJSONObject("data");
-                Log.other(TAG, "捡泡泡成功 🎈 +" +
-                        data.optString("changeAmount") +
-                        " 余额：" + data.optString("balance"));
+                // 处理需要浏览的任务 (和浏览任务类似)
+                for (String encryptValue : encryptValues) {
+                    Log.record(TAG, "开始浏览任务，任务 encryptValue: " + encryptValue);
+
+                    // 获取浏览任务对应的能量值和浏览时间
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject item = arr.getJSONObject(i);
+                        if (encryptValue.equals(item.optString("encryptValue"))) {
+                            int energyNum = item.optInt("energyNum", 0);
+                            int viewSec = item.optInt("viewSec", 15);
+                            String title =item.optString("title");
+                            //Log.record(TAG, "浏览任务 ["+title+"]+"+energyNum+"能量");
+
+                            // 3. 等待浏览时间
+                            Thread.sleep(viewSec * 1000L); // 假设每个浏览任务的时间是15秒
+
+                            // 4. 提交浏览任务，领取奖励
+                            JSONObject receiveResp = new JSONObject(
+                                    AntSportsRpcCall.NeverlandRpcCall.energyReceive(encryptValue, energyNum, "LIGHT_FEEDS_TASK","adBubble")
+                            );
+
+                            if (ResChecker.checkRes(TAG + "领取泡泡任务奖励:", receiveResp)
+                                    && receiveResp.optBoolean("success", false)) {
+                                Log.other(TAG, "✅ 浏览任务["+title+"]"+"完成，获得能量+" + energyNum);
+                            } else {
+                                Log.error(TAG, "浏览任务领取失败: " + receiveResp);
+                            }
+
+                            Thread.sleep(Math.round(1000 + Math.random() * 1000) ); // 任务随机1-2秒等待，我就不看15秒
+                            break;  // 找到对应任务后跳出循环
+                        }
+                    }
+                }
 
             } catch (Throwable t) {
                 Log.printStackTrace(TAG, "neverlandPickAllBubble err:", t);
             }
         }
+
+
 
         // -------------------------------------------------------------------------
         // 4. 自动走路任务处理
@@ -2029,7 +2170,7 @@ public class AntSports extends ModelTask {
                 Log.record(TAG, "健康岛自动走路建造执行完成 ✓");
 
             } catch (Throwable t) {
-                Log.error(TAG, "neverlandAutoTask 发生异常");
+                Log.error(TAG, "neverlandAutoTask 发生异常"+t.toString());
                 Log.printStackTrace(TAG, t);
             }
         }
