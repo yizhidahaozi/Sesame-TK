@@ -21,18 +21,6 @@ public final class StatusFlags {
     public static final String FLAG_NEVERLAND_STEPCOUNT = "Flag_Neverland_StepCount";  // 今日步数任务
 
 
-    // --------------------------------------------
-    // 任务系统（Task）相关
-    // --------------------------------------------
-
-
-    // --------------------------------------------
-    // 广告相关
-    // --------------------------------------------
-
-
-    // --------------------------------------------
-    // 其他（你以后可随时扩展）
-    // --------------------------------------------
+    public static final String FLAG_AntMember_doAllAvailableSesameTask = "AntMember::doAllAvailableSesameTask";  //芝麻信用任务
 
 }
