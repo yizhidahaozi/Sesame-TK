@@ -607,8 +607,6 @@ public class ApplicationHook {
                                 if (currentUid != null) {
                                     initHandler(true);  // 重新初始化
                                     lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
-//                                    TaskRunnerAdapter adapter = new TaskRunnerAdapter();
-//                                    adapter.run(); // 立即执行任务
                                     Log.record(TAG, "用户已切换");
                                     Toast.show("用户已切换");
                                     return;
@@ -957,8 +955,6 @@ public class ApplicationHook {
                     rpcBridge.unload();
                     rpcBridge = null;
                 }
-//                init = false;
-//                service = null;
                 ModelTask.stopAllTask();
             }
         } catch (Throwable th) {
@@ -990,8 +986,7 @@ public class ApplicationHook {
             boolean crossedMidnight = lastExecCalendar.get(Calendar.DAY_OF_YEAR) != currentCalendar.get(Calendar.DAY_OF_YEAR) ||
                     lastExecCalendar.get(Calendar.YEAR) != currentCalendar.get(Calendar.YEAR);
             // 如果超过最大不活动时间或者跨越了0点但已经过了一段时间
-            if (inactiveTime > MAX_INACTIVE_TIME ||
-                    (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
+            if (inactiveTime > MAX_INACTIVE_TIME || (crossedMidnight && currentCalendar.get(Calendar.HOUR_OF_DAY) >= 1)) {
                 Log.record(TAG, "⚠️ 检测到长时间未执行(" + (inactiveTime / 60000) + "分钟)，可能跨越0点，尝试重新登录");
                 reLogin();
             }
