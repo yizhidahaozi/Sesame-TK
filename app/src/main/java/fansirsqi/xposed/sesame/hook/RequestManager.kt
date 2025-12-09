@@ -19,9 +19,8 @@ object RequestManager {
             Log.runtime("RequestManager", "RPC 返回 null: $method")
             return ""
         }
-        // 检查是否为空字符串
-        if (result.trim { it <= ' ' }.isEmpty()) {
-            Log.runtime("RequestManager", "RPC 返回空字符串: $method")
+        if (result.isBlank() || result.isEmpty() || result.trim { it <= ' ' }.isEmpty()) {
+            Log.runtime("RequestManager", "RPC 响应为空: $method")
             return ""
         }
         return result
