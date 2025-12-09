@@ -13,6 +13,7 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
+import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
 import lombok.Setter;
 
 import org.luckypray.dexkit.DexKitBridge;
@@ -72,6 +73,8 @@ public class ApplicationHook {
     @Setter
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
+
+    static String finalProcessName = "";
 
 
     /**
@@ -466,7 +469,7 @@ public class ApplicationHook {
         } else if (rawParam instanceof XposedModuleInterface.PackageLoadedParam) {
             processName = XposedEnv.INSTANCE.getProcessName();
         }
-        final String finalProcessName = processName;
+        finalProcessName = processName;
 
         Log.runtime(TAG, "🔀 当前进程: " + finalProcessName);
 
@@ -498,8 +501,7 @@ public class ApplicationHook {
                     appContext = (Context) param.args[0];
 
                     // 在主进程和小组件进程中注册广播接收器
-                    if (General.PACKAGE_NAME.equals(finalProcessName) ||
-                            (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
+                    if (General.PACKAGE_NAME.equals(finalProcessName) || (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
                         registerBroadcastReceiver(appContext);
                     }
 
@@ -511,8 +513,7 @@ public class ApplicationHook {
                         // 回退方案: 使用传统 PackageManager 获取
                         Log.runtime(TAG, "⚠️ Hook 未捕获到版本号,使用回退方案");
                         try {
-                            PackageInfo pInfo = appContext.getPackageManager()
-                                    .getPackageInfo(packageName, 0);
+                            PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                             if (pInfo.versionName != null) {
                                 alipayVersion = new AlipayVersion(pInfo.versionName);
                                 Log.runtime(TAG, "📦 支付宝版本(回退): " + pInfo.versionName);
@@ -526,8 +527,7 @@ public class ApplicationHook {
                                 alipayVersion = new AlipayVersion(""); // 空版本
                             }
                         } catch (Exception e) {
-                            Log.runtime(TAG, "❌ 获取版本号失败");
-                            Log.printStackTrace(TAG, e);
+                            Log.printStackTrace(TAG, "❌ 获取版本号失败", e);
                             alipayVersion = new AlipayVersion(""); // 空版本
                         }
                     }
@@ -537,8 +537,7 @@ public class ApplicationHook {
                     loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
 
                     // 特殊版本处理 (如果使用 Hook 获取的版本)
-                    if (VersionHook.hasVersion() &&
-                            "10.7.26.8100".equals(alipayVersion.getVersionString())) {
+                    if (VersionHook.hasVersion() && "10.7.26.8100".equals(alipayVersion.getVersionString())) {
                         HookUtil.INSTANCE.fuckAccounLimit(classLoader);
                         Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
@@ -547,31 +546,15 @@ public class ApplicationHook {
                         try {
                             Log.runtime(TAG, "start service for debug rpc");
                             // 使用管理器，仅主进程启动并防重复
-                            fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.INSTANCE.startIfNeeded(
+                            ModuleHttpServerManager.INSTANCE.startIfNeeded(
                                     8080,
                                     "ET3vB^#td87sQqKaY*eMUJXP",
                                     XposedEnv.processName,
                                     General.PACKAGE_NAME
                             );
                         } catch (Throwable e) {
-                            Log.printStackTrace(e);
+                            Log.printStackTrace(TAG, "forward services started error: ", e);
                         }
-                    }
-
-                    // 后台运行权限检查
-                    if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
-                        if (BaseModel.getBatteryPerm().getValue() &&
-                                !PermissionUtil.checkBatteryPermissions()) {
-                            Log.record(TAG, "支付宝无始终在后台运行权限,准备申请");
-                            mainHandler.postDelayed(
-                                    () -> {
-                                        if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
-                                            Toast.show("请授予支付宝始终在后台运行权限");
-                                        }
-                                    },
-                                    2000);
-                        }
-                        batteryPermissionChecked = true;
                     }
 
                     super.afterHookedMethod(param);
@@ -626,8 +609,7 @@ public class ApplicationHook {
                     });
             Log.runtime(TAG, "hook login successfully");
         } catch (Throwable t) {
-            Log.runtime(TAG, "hook login err");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "hook login err",t);
         }
         try {
             XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onCreate",
@@ -794,17 +776,15 @@ public class ApplicationHook {
 
             // 清理旧唤醒任务
             unsetWakenAtTimeAlarm();
-
             // 设置0点唤醒
             Calendar calendar = Calendar.getInstance();
             calendar.add(Calendar.DAY_OF_MONTH, 1);
             resetToMidnight(calendar);
-
             boolean success = SchedulerAdapter.scheduleWakeupAlarm(calendar.getTimeInMillis(), 0, true);
             if (success) {
                 Log.record(TAG, "⏰ 设置0点定时任务成功");
             } else {
-                Log.runtime(TAG, "⏰ 设置0点定时任务失败");
+                Log.error(TAG, "⏰ 设置0点定时任务失败");
             }
 
             // 设置自定义时间点唤醒
@@ -823,7 +803,7 @@ public class ApplicationHook {
                             }
                         }
                     } catch (Exception e) {
-                        Log.runtime(TAG, "设置自定义唤醒时间失败: " + e.getMessage());
+                        Log.printStackTrace(TAG,"设置自定义唤醒时间失败:", e);
                     }
                 }
                 if (successCount > 0) {
@@ -831,8 +811,7 @@ public class ApplicationHook {
                 }
             }
         } catch (Exception e) {
-            Log.runtime(TAG, "setWakenAtTimeAlarm err:");
-            Log.printStackTrace(TAG, e);
+            Log.printStackTrace(TAG,"setWakenAtTimeAlarm err:", e);
         }
     }
 
@@ -903,13 +882,24 @@ public class ApplicationHook {
                     rpcVersion = rpcBridge.getVersion();
                 }
 
+                //!!注意⚠️所有BaseModel相关配置需要在 Config.load(userId)//initHandler;之后获取才有意义！！否则都取的默认值
                 if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
-                    HookUtil.INSTANCE.hookRpcBridgeExtension(
-                            classLoader,
-                            BaseModel.getSendHookData().getValue(),
-                            BaseModel.getSendHookDataUrl().getValue()
-                    );
+                    HookUtil.INSTANCE.hookRpcBridgeExtension(classLoader, BaseModel.getSendHookData().getValue(), BaseModel.getSendHookDataUrl().getValue());
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
+                }
+                // 后台运行权限检查!!
+                if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
+                    if (BaseModel.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
+                        Log.record(TAG, "支付宝无始终在后台运行权限,准备申请");
+                        mainHandler.postDelayed(
+                                () -> {
+                                    if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
+                                        Toast.show("请授予支付宝始终在后台运行权限");
+                                    }
+                                },
+                                2000);
+                    }
+                    batteryPermissionChecked = true;
                 }
 
                 Model.bootAllModel(classLoader);
@@ -958,8 +948,7 @@ public class ApplicationHook {
                 ModelTask.stopAllTask();
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "stopHandler err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "stopHandler err:", th);
         }
     }
 
