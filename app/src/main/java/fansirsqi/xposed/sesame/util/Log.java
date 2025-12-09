@@ -139,7 +139,7 @@ public class Log {
      * @return true=应该打印，false=已重复太多次
      */
     private static boolean shouldPrintError(Throwable th) {
-        if (th == null) return true;
+        if (th == null) return false;
 
         // 提取错误特征（类名+消息的前50个字符）
         String errorSignature = th.getClass().getSimpleName() + ":" +
@@ -156,49 +156,45 @@ public class Log {
         // 如果是第3次，记录一个汇总信息
         if (currentCount == MAX_DUPLICATE_ERRORS) {
             runtime("⚠️ 错误【" + errorSignature + "】已出现" + currentCount + "次，后续将不再打印详细堆栈");
-            return false;
+            return true;
         }
 
         // 超过最大次数后不再打印
-        if (currentCount > MAX_DUPLICATE_ERRORS) {
-            return false;
-        }
-
-        return true;
+        return currentCount > MAX_DUPLICATE_ERRORS;
     }
 
     public static void printStackTrace(Throwable th) {
-        if (!shouldPrintError(th)) return;
+        if (shouldPrintError(th)) return;
         String stackTrace = "error: " + android.util.Log.getStackTraceString(th);
         error(stackTrace);
     }
 
     public static void printStackTrace(String msg, Throwable th) {
-        if (!shouldPrintError(th)) return;
+        if (shouldPrintError(th)) return;
         String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(th);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(String TAG, String msg, Throwable th) {
-        if (!shouldPrintError(th)) return;
+        if (shouldPrintError(th)) return;
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(th);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(Exception e) {
-        if (!shouldPrintError(e)) return;
+        if (shouldPrintError(e)) return;
         String stackTrace = "Exception error: " + android.util.Log.getStackTraceString(e);
         error(stackTrace);
     }
 
     public static void printStackTrace(String msg, Exception e) {
-        if (!shouldPrintError(e)) return;
+        if (shouldPrintError(e)) return;
         String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(String TAG, String msg, Exception e) {
-        if (!shouldPrintError(e)) return;
+        if (shouldPrintError(e)) return;
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
     }
