@@ -210,6 +210,8 @@ public class ChouChouLe {
                     }
                 }
                 Log.record(TAG, "浏览广告任务[没有可用广告或不支持，使用普通完成方式]");
+            }else {
+                Log.record(TAG, "浏览广告任务[没有可用Token，请手动看一起广告]");
             }
 
             // 没有token或广告任务失败，使用普通完成方式
@@ -325,7 +327,7 @@ public class ChouChouLe {
 
             int drawTimes = jo.optInt("drawTimes", 0);
             for (int i = 0; i < drawTimes; i++) {
-                drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachine());
+                drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachineIP());
                 GlobalThreadPools.sleepCompat(5 * 1000L);
             }
 
@@ -356,7 +358,7 @@ public class ChouChouLe {
             int drawTimes = jo.optInt("drawTimes", 0);
 
             for (int i = 0; i < drawTimes; i++) {
-                drawPrize("日常抽抽乐", AntFarmRpcCall.DrawPrize(activityId));
+                drawPrize("日常抽抽乐", AntFarmRpcCall.drawMachineDaily(activityId));
                 GlobalThreadPools.sleepCompat(5 * 1000L);
             }
 
@@ -375,11 +377,19 @@ public class ChouChouLe {
         try {
             JSONObject jo = new JSONObject(response);
             if (ResChecker.checkRes(TAG, jo)) {
-                String title = jo.optString("title", "未知奖品");
-                int prizeNum = jo.optInt("prizeNum", 1);
-                Log.farm(prefix + "🎁[领取: " + title + "*" + prizeNum + "]");
+
+                JSONObject prize = jo.optJSONObject("drawMachinePrize");
+                if (prize != null) {
+                    String title = prize.optString("title",
+                            prize.optString("prizeName", "未知奖品"));
+                  //  int prizeNum = prize.optInt("awardCount", 1);
+
+                    Log.farm(prefix + "🎁[领取: " + title  +"]");
+                } else {
+                    Log.farm(prefix + "🎁[领取: 未知奖品]"+response);
+                }
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
+
 }

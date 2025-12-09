@@ -896,14 +896,26 @@ public static String clickForGiftV2(String foodType, int giftIndex) {
         );
     }
 
+
     /**
-     * 执行抽奖
+     * 执行抽奖（IP抽抽乐）
      *
      * @return 返回结果JSON字符串
      */
-    public static String drawMachine() {
+    public static String drawMachineIP() {
         return RequestManager.requestString("com.alipay.antfarm.drawMachine",
                 "[{\"requestType\":\"RPC\",\"scene\":\"ipDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"ip_ccl\"}]");
+    }
+
+    /**
+     * 执行抽奖（普通抽抽乐）
+     *
+     * @param activityId 活动ID
+     * @return 返回结果JSON字符串
+     */
+    public static String drawMachineDaily(String activityId) {
+        return RequestManager.requestString("com.alipay.antfarm.drawMachine",
+                "[{\"activityId\":\"" + activityId + "\",\"requestType\":\"RPC\",\"scene\":\"dailyDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"icon\"}]");
     }
 
     /**
