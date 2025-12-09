@@ -14,7 +14,6 @@ import lombok.Getter;
 
 public abstract class Model {
     private static final String TAG = "Model";
-
     private static final Map<String, ModelConfig> modelConfigMap = new LinkedHashMap<>();
     private static final Map<String, ModelConfig> readOnlyModelConfigMap = Collections.unmodifiableMap(modelConfigMap);
     private static final Map<ModelGroup, Map<String, ModelConfig>> groupModelConfigMap = new LinkedHashMap<>();
@@ -54,11 +53,14 @@ public abstract class Model {
 
     public abstract ModelFields getFields();
 
-    public void prepare() {}
+    public void prepare() {
+    }
 
-    public void boot(ClassLoader classLoader) {}
+    public void boot(ClassLoader classLoader) {
+    }
 
-    public void destroy() {}
+    public void destroy() {
+    }
 
     public static Map<String, ModelConfig> getModelConfigMap() {
         return readOnlyModelConfigMap;
@@ -77,7 +79,7 @@ public abstract class Model {
         if (modelClazz.isInstance(model)) {
             return modelClazz.cast(model);
         } else {
-            Log.error(TAG,"Model " + modelClazz.getSimpleName() + " not found.");
+            Log.error(TAG, "Model " + modelClazz.getSimpleName() + " not found.");
             return null;
         }
     }
@@ -94,14 +96,9 @@ public abstract class Model {
                 String modelCode = modelConfig.getCode();
                 modelConfigMap.put(modelCode, modelConfig);
                 ModelGroup group = modelConfig.getGroup();
-                Map<String, ModelConfig> modelConfigMap = groupModelConfigMap.get(group);
-                if (modelConfigMap == null) {
-                    modelConfigMap = new LinkedHashMap<>();
-                    groupModelConfigMap.put(group, modelConfigMap);
-                }
+                Map<String, ModelConfig> modelConfigMap = groupModelConfigMap.computeIfAbsent(group, k -> new LinkedHashMap<>());
                 modelConfigMap.put(modelCode, modelConfig);
-            } catch (IllegalAccessException | InstantiationException | NoSuchMethodException |
-                     InvocationTargetException e) {
+            } catch (IllegalAccessException | InstantiationException | NoSuchMethodException | InvocationTargetException e) {
                 Log.printStackTrace(e);
             }
         }
