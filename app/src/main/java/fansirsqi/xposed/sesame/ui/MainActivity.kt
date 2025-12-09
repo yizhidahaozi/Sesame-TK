@@ -6,7 +6,6 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -19,6 +18,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
@@ -45,9 +46,9 @@ import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.io.File
 
 //   欢迎自己打包 欢迎大佬pr
 //   项目开源且公益  维护都是自愿
@@ -153,7 +154,7 @@ class MainActivity : BaseActivity() {
     // 比如在 Activity 的 onConfigurationChanged 中
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        v?.refresh() // 主动刷新水印颜色
+        v.refresh() // 主动刷新水印颜色
     }
 
     /**
@@ -210,7 +211,7 @@ class MainActivity : BaseActivity() {
      * 并启用清空功能和禁用自动换行
      */
     private fun openLogFile(logFile: File) {
-        val fileUri = Uri.parse("file://${logFile.absolutePath}")
+        val fileUri = "file://${logFile.absolutePath}".toUri()
         val intent = Intent(this, HtmlViewerActivity::class.java).apply {
             data = fileUri
             putExtra("nextLine", false)
@@ -226,7 +227,7 @@ class MainActivity : BaseActivity() {
      * 如果没有可用浏览器则显示错误提示
      */
     private fun openGitHub() {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Fansirsqi/Sesame-TK"))
+        val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Fansirsqi/Sesame-TK".toUri())
         try {
             startActivity(intent)
         } catch (e: Exception) {
@@ -312,7 +313,7 @@ class MainActivity : BaseActivity() {
                 val intent = Intent(this, HtmlViewerActivity::class.java)
                 intent.putExtra("nextLine", false)
                 intent.putExtra("canClear", true)
-                intent.data = Uri.parse(data)
+                intent.data = data.toUri()
                 startActivity(intent)
                 return true
             }
@@ -323,7 +324,7 @@ class MainActivity : BaseActivity() {
                     val errorIt = Intent(this, HtmlViewerActivity::class.java)
                     errorIt.putExtra("nextLine", false)
                     errorIt.putExtra("canClear", true)
-                    errorIt.data = Uri.parse(errorData)
+                    errorIt.data = errorData.toUri()
                     startActivity(errorIt)
                 }
                 return true
@@ -335,7 +336,7 @@ class MainActivity : BaseActivity() {
                 val otherIt = Intent(this, HtmlViewerActivity::class.java)
                 otherIt.putExtra("nextLine", false)
                 otherIt.putExtra("canClear", true)
-                otherIt.data = Uri.parse(recordData)
+                otherIt.data = recordData.toUri()
                 startActivity(otherIt)
                 return true
             }
@@ -345,7 +346,7 @@ class MainActivity : BaseActivity() {
                 val allIt = Intent(this, HtmlViewerActivity::class.java)
                 allIt.putExtra("nextLine", false)
                 allIt.putExtra("canClear", true)
-                allIt.data = Uri.parse(runtimeData)
+                allIt.data = runtimeData.toUri()
                 startActivity(allIt)
                 return true
             }
@@ -355,7 +356,7 @@ class MainActivity : BaseActivity() {
                 val captureIt = Intent(this, HtmlViewerActivity::class.java)
                 captureIt.putExtra("nextLine", false)
                 captureIt.putExtra("canClear", true)
-                captureIt.data = Uri.parse(captureData)
+                captureIt.data = captureData.toUri()
                 startActivity(captureIt)
                 return true
             }
@@ -511,6 +512,7 @@ class MainActivity : BaseActivity() {
             showPasswordDialog(action)
         }
     }
+    @SuppressLint("SetTextI18n")
     private fun showPasswordDialog(onSuccess: () -> Unit) {
         // 父布局
         val container = android.widget.LinearLayout(this).apply {
@@ -519,7 +521,7 @@ class MainActivity : BaseActivity() {
         }
 
         // 上方提示文字
-        val label = android.widget.TextView(this).apply {
+        val label = TextView(this).apply {
             text = "非必要情况无需查看异常日志\n（有困难联系闲鱼卖家帮你处理）"
             textSize = 16f
             setTextColor(android.graphics.Color.DKGRAY)
@@ -573,7 +575,7 @@ class MainActivity : BaseActivity() {
             )
 
             val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            positiveButton.setTextColor(android.graphics.Color.parseColor("#3F51B5"))
+            positiveButton.setTextColor("#3F51B5".toColorInt())
             positiveButton.setOnClickListener {
                 val password = editText.text.toString()
                 if (password == "Sesame-TK") {
