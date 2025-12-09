@@ -89,3 +89,7 @@ serve-debug/webhook.db
 # Cursor IDE
 .cursorignore
 /.cursor/rules/zh.mdc
+
+# debug ui
+/serve-debug/web
+webui_debug*
