@@ -93,11 +93,7 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.wakeUp", args1);
     }
 
-    public static String queryLoveCabin(String userId) {
-        String args1 = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"ENTERFARM\",\"userId\":\"" +
-                userId + "\",\"version\":\"" + VERSION + "\"}]";
-        return RequestManager.requestString("com.alipay.antfarm.queryLoveCabin", args1);
-    }
+
 
     public static String rewardFriend(String consistencyKey, String friendId, String productNum, String time) {
         String args1 = "[{\"canMock\":true,\"consistencyKey\":\"" + consistencyKey
@@ -537,65 +533,9 @@ public class AntFarmRpcCall {
         return "ANTFARM_DRAW_TIMES_TASK";
     }
 
-    /**
-     * 查询抽抽乐任务列表
-     *
-     * @param drawType 抽奖类型
-     * @return 返回结果
-     * @throws JSONException 异常
-     */
-    public static String chouchouleListFarmTask(String drawType) throws JSONException {
-        String taskSceneCode = chouchouleSelector(drawType);
-        JSONObject args = new JSONObject();
-        args.put("requestType", "NORMAL");
-        args.put("sceneCode", "ANTFARM");
-        args.put("source", "H5");
-        args.put("taskSceneCode", taskSceneCode);
-        args.put("topTask", "");
-        String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", params);
-    }
-
-    /**
-     * 执行抽抽乐任务
-     *
-     * @param drawType 抽奖类型
-     * @param bizKey   任务ID
-     * @return 返回结果
-     * @throws JSONException 异常
-     */
-    public static String chouchouleDoFarmTask(String drawType, String bizKey) throws JSONException {
-        String taskSceneCode = chouchouleSelector(drawType);
-        JSONObject args = new JSONObject();
-        args.put("bizKey", bizKey);
-        args.put("requestType", "RPC");
-        args.put("sceneCode", "ANTFARM");
-        args.put("source", "H5");
-        args.put("taskSceneCode", taskSceneCode);
-        String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.antfarm.doFarmTask", params);
-    }
 
 
-    /**
-     * 领取抽抽乐任务奖励-抽奖次数
-     *
-     * @param drawType 抽奖类型
-     * @param taskId   任务ID
-     * @return 返回结果
-     * @throws JSONException 异常
-     */
-    public static String chouchouleReceiveFarmTaskAward(String drawType, String taskId) throws JSONException {
-        String taskSceneCode = chouchouleSelector(drawType);
-        JSONObject args = new JSONObject();
-        args.put("requestType", "RPC");
-        args.put("sceneCode", "ANTFARM");
-        args.put("source", "H5");
-        args.put("taskId", taskId);
-        args.put("taskSceneCode", taskSceneCode);
-        String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", params);
-    }
+
 
     /**
      * IP抽抽乐查询活动与抽奖次数
@@ -604,12 +544,8 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.queryDrawMachineActivity", "[{\"otherScenes\":[\"dailyDrawMachine\"],\"requestType\":\"RPC\",\"scene\":\"ipDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"ip_ccl\"}]");
     }
 
-    /**
-     * IP抽抽乐抽奖
-     **/
-    public static String drawMachine() {
-        return RequestManager.requestString("com.alipay.antfarm.drawMachine", "[{\"requestType\":\"RPC\",\"scene\":\"ipDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"ip_ccl\"}]");
-    }
+
+
 
     public static String hireAnimal(String farmId, String animalId) {
         return RequestManager.requestString("com.alipay.antfarm.hireAnimal",
@@ -621,10 +557,7 @@ public class AntFarmRpcCall {
                 "[{\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"chouchoule\"}]");
     }
 
-    public static String DrawPrize(String activityId) {
-        return RequestManager.requestString("com.alipay.antfarm.DrawPrize",
-                "[{\"activityId\":\"" + activityId + "\",\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"icon\"}]");
-    }
+
 
     public static String drawGameCenterAward() {
         return RequestManager.requestString("com.alipay.antfarm.drawGameCenterAward",
@@ -861,4 +794,212 @@ public static String clickForGiftV2(String foodType, int giftIndex) {
     String data = "[{\"foodType\":\"" + foodType + "\",\"giftIndex\":" + giftIndex + ",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"ANTFOREST\",\"version\":\"" + VERSION + "\"}]";
     return RequestManager.requestString("com.alipay.antfarm.clickForGiftV2", data);
 }
+
+
+
+    /**
+     * 查询抽抽乐活动信息
+     *
+     * @param userId 用户ID
+     * @return 返回结果JSON字符串
+     */
+    public static String queryLoveCabin(String userId) {
+        String args1 = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"ENTERFARM\",\"userId\":\"" +
+                userId + "\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.queryLoveCabin", args1);
+    }
+
+    /**
+     * 查询抽抽乐任务列表（新版统一接口）
+     *
+     * @param drawType 抽奖类型 "dailyDraw" 或 "ipDraw"
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String chouchouleListFarmTask(String drawType) throws JSONException {
+        String taskSceneCode = "dailyDraw".equals(drawType) ?
+                "ANTFARM_DAILY_DRAW_TASK" : "ANTFARM_IP_DRAW_TASK";
+
+        JSONObject args = new JSONObject();
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("signSceneCode", "");
+        args.put("source", "H5");
+        args.put("taskSceneCode", taskSceneCode);
+        args.put("topTask", "");
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", params);
+    }
+
+    /**
+     * 执行抽抽乐任务
+     *
+     * @param drawType 抽奖类型
+     * @param bizKey 任务ID
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String chouchouleDoFarmTask(String drawType, String bizKey) throws JSONException {
+        String taskSceneCode = "dailyDraw".equals(drawType) ?
+                "ANTFARM_DAILY_DRAW_TASK" : "ANTFARM_IP_DRAW_TASK";
+
+        JSONObject args = new JSONObject();
+        args.put("bizKey", bizKey);
+        args.put("requestType", "RPC");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", "H5");
+        args.put("taskSceneCode", taskSceneCode);
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.antfarm.doFarmTask", params);
+    }
+
+    /**
+     * 领取抽抽乐任务奖励
+     *
+     * @param drawType 抽奖类型
+     * @param taskId 任务ID
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String chouchouleReceiveFarmTaskAward(String drawType, String taskId) throws JSONException {
+        String taskSceneCode = "dailyDraw".equals(drawType) ?
+                "ANTFARM_DAILY_DRAW_TASK" : "ANTFARM_IP_DRAW_TASK";
+        String awardType = "dailyDraw".equals(drawType) ?
+                "DAILY_DRAW_TIMES" : "FAMILY_DRAW_TIME";
+
+        JSONObject args = new JSONObject();
+        args.put("awardType", awardType);
+        args.put("requestType", "RPC");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", "icon");
+        args.put("taskId", taskId);
+        args.put("taskSceneCode", taskSceneCode);
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", params);
+    }
+
+    /**
+     * 查询抽抽乐活动详情（新版统一接口）
+     *
+     * @param scene 主场景 "dailyDrawMachine" 或 "ipDrawMachine"
+     * @param otherScene 其他场景
+     * @return 返回结果JSON字符串
+     */
+    public static String queryDrawMachineActivity_New(String scene, String otherScene) {
+        return RequestManager.requestString(
+                "com.alipay.antfarm.queryDrawMachineActivity",
+                "[{\"otherScenes\":[\"" + otherScene + "\"],"
+                        + "\"requestType\":\"RPC\","
+                        + "\"scene\":\"" + scene + "\","
+                        + "\"sceneCode\":\"ANTFARM\","
+                        + "\"source\":\"icon\"}]"
+        );
+    }
+
+    /**
+     * 执行抽奖
+     *
+     * @return 返回结果JSON字符串
+     */
+    public static String drawMachine() {
+        return RequestManager.requestString("com.alipay.antfarm.drawMachine",
+                "[{\"requestType\":\"RPC\",\"scene\":\"ipDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"ip_ccl\"}]");
+    }
+
+    /**
+     * 执行抽奖（指定活动ID）
+     *
+     * @param activityId 活动ID
+     * @return 返回结果JSON字符串
+     */
+    public static String DrawPrize(String activityId) {
+        return RequestManager.requestString("com.alipay.antfarm.DrawPrize",
+                "[{\"activityId\":\"" + activityId + "\",\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"icon\"}]");
+    }
+
+    /**
+     * 广告插件接口 - 获取广告任务
+     *
+     * @param referToken 引用Token
+     * @param spaceCode 广告位代码
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String xlightPlugin(String referToken, String spaceCode) throws JSONException {
+        JSONObject positionRequest = new JSONObject();
+        JSONObject referInfo = new JSONObject();
+        referInfo.put("referToken", referToken);
+        positionRequest.put("referInfo", referInfo);
+        positionRequest.put("spaceCode", spaceCode);
+
+        JSONObject sdkPageInfo = new JSONObject();
+        sdkPageInfo.put("adComponentType", "GUESS_PRICE");
+        sdkPageInfo.put("adComponentVersion", "4.28.66");
+        sdkPageInfo.put("networkType", "WIFI");
+        sdkPageInfo.put("pageFrom", "ch_url-https://render.alipay.com/p/yuyan/180020380000000182/prizeMachine.html");
+        sdkPageInfo.put("pageNo", 1);
+        sdkPageInfo.put("pageUrl", "https://render.alipay.com/p/yuyan/180020010001256918/antfarm-landing.html?caprMode=sync");
+        sdkPageInfo.put("session", "u_0c09f_b010f");
+        sdkPageInfo.put("unionAppId", "2060090000304921");
+        sdkPageInfo.put("xlightRuntimeSDKversion", "4.28.66");
+        sdkPageInfo.put("xlightSDKType", "h5");
+        sdkPageInfo.put("xlightSDKVersion", "4.28.66");
+
+        JSONObject args = new JSONObject();
+        args.put("positionRequest", positionRequest);
+        args.put("sdkPageInfo", sdkPageInfo);
+
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.adexchange.ad.facade.xlightPlugin", params);
+    }
+
+    /**
+     * 完成广告任务
+     *
+     * @param playBizId 播放业务ID
+     * @param playEventInfo 播放事件信息
+     * @param iepTaskType 任务类型
+     * @param iepTaskSceneCode 任务场景代码
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String finishAdTask(String playBizId, JSONObject playEventInfo,
+                                      String iepTaskType, String iepTaskSceneCode) throws JSONException {
+        JSONObject extendInfo = new JSONObject();
+        extendInfo.put("iepTaskSceneCode", iepTaskSceneCode);
+        extendInfo.put("iepTaskType", iepTaskType);
+        extendInfo.put("playEndingStatus", "success");
+
+        JSONObject args = new JSONObject();
+        args.put("extendInfo", extendInfo);
+        args.put("playBizId", playBizId);
+        args.put("playEventInfo", playEventInfo);
+        args.put("source", "adx");
+
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.interaction.finish", params);
+    }
+
+    /**
+     * 完成普通任务（无广告）
+     *
+     * @param taskType 任务类型
+     * @param sceneCode 场景代码
+     * @param outBizNo 外部业务号
+     * @return 返回结果JSON字符串
+     * @throws JSONException JSON异常
+     */
+    public static String finishTask(String taskType, String sceneCode, String outBizNo) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("outBizNo", outBizNo);
+        args.put("requestType", "RPC");
+        args.put("sceneCode", sceneCode);
+        args.put("source", "ADBASICLIB");
+        args.put("taskType", taskType);
+
+        String params = "[" + args + "]";
+        return RequestManager.requestString("com.alipay.antiep.finishTask", params);
+    }
+
+
 }
