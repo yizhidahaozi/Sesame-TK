@@ -2192,12 +2192,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         } else { // 普通好友
             val needCollectEnergy =
                 collectEnergy!!.value && !jsonCollectMap.contains(userId)
-            val needHelpProtect =
-                helpFriendCollectType!!.value != HelpFriendCollectType.NONE && obj.optBoolean(
-                    "canProtectBubble"
-                ) && Status.canProtectBubbleToday(selfId)
-            val needCollectGiftBox =
-                collectGiftBox!!.value && obj.optBoolean("canCollectGiftBox")
+            val needHelpProtect = helpFriendCollectType!!.value != HelpFriendCollectType.NONE && obj.optBoolean("canProtectBubble") && Status.canProtectBubbleToday(selfId)
+            val needCollectGiftBox = collectGiftBox!!.value && obj.optBoolean("canCollectGiftBox")
             if (!needCollectEnergy && !needHelpProtect && !needCollectGiftBox) {
                 //   Log.record(TAG, "    普通好友: [$userName$userId], 所有条件不满足，跳过")
                 return
