@@ -10,7 +10,6 @@ plugins {
     alias(libs.plugins.rikka.tools.refine)
 }
 var isCIBuild: Boolean = System.getenv("CI").toBoolean()
-var abilities = listOf("armeabi-v7a", "arm64-v8a","x86","x86_64")
 
 //isCIBuild = true // 没有c++源码时开启CI构建, push前关闭
 
@@ -25,7 +24,7 @@ android {
             abi {
                 isEnable = true
                 reset()
-                include("armeabi-v7a", "arm64-v8a","x86","x86_64")
+                include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
                 isUniversalApk = true
             }
         }
@@ -63,7 +62,7 @@ android {
 
         versionCode = gitCommitCount
         val buildTag = "beta"
-        versionName = "v0.2.8.rc$gitCommitCount-$buildTag"
+        versionName = "v0.2.9.rc$gitCommitCount-$buildTag"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
@@ -73,7 +72,7 @@ android {
 
         if (isCIBuild) {
             ndk {
-                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a","x86","x86_64"))
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
             }
         }
 
@@ -92,7 +91,7 @@ android {
     }
 
     compileOptions {
-        isCoreLibraryDesugaringEnabled = true
+        isCoreLibraryDesugaringEnabled = false//关闭脱糖
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -135,8 +134,8 @@ android {
         externalNativeBuild {
             cmake {
                 path = cmakeFile
-                version = "4.1.2"
-                ndkVersion = "29.0.14206865"
+//                version = "4.1.2"  //不要随意改这个了答应我
+                ndkVersion = "29.0.14206865" //这个也是 答应我就这样吧
             }
         }
     }
@@ -211,10 +210,9 @@ dependencies {
     implementation(libs.okhttp)                    // OkHttp 网络请求库
     implementation(libs.dexkit)                    // DEX 文件分析工具
     implementation(libs.jackson.kotlin)            // Jackson Kotlin 支持
-    implementation(libs.mmkv)                      // 腾讯 MMKV 高性能键值存储
 
     // 核心库脱糖和系统 API 访问
-    coreLibraryDesugaring(libs.desugar)            // Java 8+ API 脱糖支持
+//    coreLibraryDesugaring(libs.desugar)            // Java 8+ API 脱糖支持
 
     implementation(libs.hiddenapibypass)           // 隐藏 API 访问绕过
 
