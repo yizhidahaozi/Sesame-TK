@@ -21,6 +21,7 @@ import kotlin.math.min
  * @author: ghostxx
  * @date: 2025/9/17
  * @description: 全局协程调度器，用于统一管理应用内的协程，提供结构化并发和生命周期管理。
+ * @update: 修复了 R8 编译器在处理 Java 兼容方法时的元数据崩溃问题
  */
 object GlobalThreadPools {
     private const val TAG = "GlobalThreadPools"
@@ -37,31 +38,19 @@ object GlobalThreadPools {
     private val COMPUTE_PARALLELISM = max(2, min(CPU_COUNT - 1, 4))
 
     /**
-     * 全局协程作用域
-     * 用于启动不绑定到特定生命周期的长寿命协程
-     * 使用SupervisorJob确保一个协程的失败不会影响其他协程
-     */
-//    private val globalScope = CoroutineScope(
-//        SupervisorJob() +
-//        Dispatchers.Default +
-//        CoroutineName("SesameGlobalScope")
-//    )
-
-    /**
      * 创建一个新的协程作用域。
      * 这是一个私有辅助函数，用于在初始化和重置时创建作用域。
      */
     private fun createScope(): CoroutineScope = CoroutineScope(
         SupervisorJob() +
-        Dispatchers.Default +
-        CoroutineName("SesameGlobalScope")
+                Dispatchers.Default +
+                CoroutineName("SesameGlobalScope")
     )
 
     /**
      * 全局协程作用域
      * 用于启动不绑定到特定生命周期的长寿命协程
-     * 使用SupervisorJob确保一个协程的失败不会影响其他协程
-     * 改为 var 并使用 @Volatile 以支持在会话切换时进行重置
+     * 使用 @Volatile 以支持在会话切换时进行重置
      */
     @Volatile
     private var globalScope = createScope()
@@ -74,7 +63,7 @@ object GlobalThreadPools {
     val computeDispatcher = Dispatchers.Default.limitedParallelism(COMPUTE_PARALLELISM)
 
     /**
-     * 在全局协程作用域中执行一个任务。
+     * 在全局协程作用域中执行一个任务 (Kotlin 专用)。
      *
      * @param block 要执行的挂起函数代码块
      * @param context 可选的协程上下文，默认使用计算调度器
@@ -97,7 +86,7 @@ object GlobalThreadPools {
     }
 
     /**
-     * 提交一个可返回结果的任务。
+     * 提交一个可返回结果的任务 (Kotlin 专用)。
      *
      * @param T 结果类型
      * @param context 可选的协程上下文，默认使用计算调度器
@@ -115,40 +104,42 @@ object GlobalThreadPools {
 
     /**
      * 兼容Java的执行方法
+     * 【修复】直接调用 launch，而不是嵌套调用 execute(block)，避免 R8 元数据错误
      *
      * @param command 要执行的Runnable任务
      * @return 代表任务的Job对象
      */
     @JvmOverloads
     fun execute(command: Runnable?, context: CoroutineContext = computeDispatcher): Job {
-        return execute(context) {
-            command?.run()
+        return globalScope.launch(context) {
+            try {
+                command?.run()
+            } catch (_: CancellationException) {
+                // 忽略
+            } catch (e: Exception) {
+                Log.error(TAG, "Java任务执行异常: ${e.message}")
+                Log.printStackTrace(e)
+            }
         }
     }
 
     /**
      * 兼容Java的提交方法
+     * 【修复】直接调用 async，而不是嵌套调用 submit(block)
      *
      * @param task 要提交的Runnable任务
      * @return 代表任务的Deferred对象
      */
     @JvmOverloads
     fun submit(task: Runnable?, context: CoroutineContext = computeDispatcher): Deferred<Unit> {
-        return submit(context) {
+        return globalScope.async(context) {
             task?.run()
         }
     }
 
-
     /**
      * 关闭并重启全局协程作用域。
-     *
-     * 此方法会立即取消当前作用域中的所有正在运行的协程，
-     * 然后创建一个全新的、干净的作用域以供后续任务使用。
-     *
      * 主要用于用户切换账号等需要彻底清理会话资源的场景。
-     *
-     * 此方法是线程安全的。
      */
     @Synchronized
     fun shutdownAndRestart() {
@@ -160,18 +151,11 @@ object GlobalThreadPools {
         Log.record(TAG, "全局协程池已重置。")
     }
 
-
     /**
      * 协程兼容的暂停方法
-     * 优先使用协程delay，在非协程环境中降级到Thread.sleep
-     *
-     * @param millis 要暂停的毫秒数
      */
     @JvmStatic
     fun sleepCompat(millis: Long) {
         CoroutineUtils.sleepCompat(millis)
     }
-
-
-
 }
