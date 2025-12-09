@@ -49,8 +49,7 @@ object ModuleHttpServerManager {
             Log.runtime(TAG, "HTTP 服务启动成功，端口: $port")
             true
         } catch (t: Throwable) {
-            Log.runtime(TAG, "HTTP 服务启动失败: ${t.message}")
-            Log.printStackTrace(t)
+            Log.printStackTrace(TAG, "HTTP 服务启动失败:", t)
             false
         }
     }
@@ -66,8 +65,7 @@ object ModuleHttpServerManager {
                 Log.runtime(TAG, "HTTP 服务已停止")
             }
         } catch (t: Throwable) {
-            Log.runtime(TAG, "HTTP 服务停止异常: ${t.message}")
-            Log.printStackTrace(t)
+            Log.printStackTrace(TAG, "HTTP 服务停止异常:", t)
         } finally {
             server = null
         }
