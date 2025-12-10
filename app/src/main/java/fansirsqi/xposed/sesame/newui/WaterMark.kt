@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.graphics.toColorInt
 import androidx.core.graphics.withRotation
+import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifuids
 import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlin.random.Random
@@ -43,7 +44,7 @@ class WatermarkView(context: Context) : View(context) {
                     "UID${index + 1}: $uid"
                 }
             }
-            val combinedLines = prefixLines + uidLines + suffix
+            val combinedLines = prefixLines + uidLines + suffix + versionLines
             field = combinedLines.joinToString("\n")
             textLines = combinedLines
             updateTextColor() // 根据当前模式更新颜色
@@ -162,5 +163,11 @@ class WatermarkView(context: Context) : View(context) {
             )
             return watermarkView
         }
+
+        /** 模块版本和构建时间的固定信息行 */
+        private val versionLines = listOf(
+            "版本信息: ${BuildConfig.VERSION}.${BuildConfig.BUILD_TYPE} 📦",
+            "构建时间: ${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME} ⏰"
+        )
     }
 }

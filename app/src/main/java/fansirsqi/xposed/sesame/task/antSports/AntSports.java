@@ -459,7 +459,7 @@ public class AntSports extends ModelTask {
             if (recBubbleList == null || recBubbleList.length() == 0) {
                 return;
             }
-
+            boolean hasCompletedTask = false; // 标志位：是否至少完成了一个任务
             for (int i = 0; i < recBubbleList.length(); i++) {
                 JSONObject bubble = recBubbleList.optJSONObject(i);
                 if (bubble == null) {
@@ -479,6 +479,7 @@ public class AntSports extends ModelTask {
 
                 JSONObject completeRes = new JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId));
                 if (completeRes.optBoolean("success")) {
+                    hasCompletedTask = true; // 成功完成至少一个任务
                     JSONObject dataObj = completeRes.optJSONObject("data");
                     int assetCoinAmount = 0;
                     String taskFinishToast = "";
@@ -498,20 +499,23 @@ public class AntSports extends ModelTask {
                 GlobalThreadPools.sleepCompat(sleepMs);
             }
 
-            // 所有任务完成后调用 pickBubbleTaskEnergy 并获取余额
-            String result = AntSportsRpcCall.pickBubbleTaskEnergy();
-            JSONObject resultJson = new JSONObject(result);
+            if (hasCompletedTask) {  // 先判断是否有完成任务
+                String result = AntSportsRpcCall.pickBubbleTaskEnergy();
+                JSONObject resultJson = new JSONObject(result);
 
-            if (resultJson.optBoolean("success")) {
-                JSONObject dataObj = resultJson.optJSONObject("data");
-                if (dataObj != null) {
-                    String balance = dataObj.optString("balance", "0");
-                    Log.other(TAG, "拾取能量球成功  当前余额: " + balance + "💰");
-
+                if (resultJson.optBoolean("success")) {
+                    JSONObject dataObj = resultJson.optJSONObject("data");
+                    if (dataObj != null) {
+                        String balance = dataObj.optString("balance", "0");
+                        Log.other(TAG, "拾取能量球成功  当前余额: " + balance + "💰");
+                    }
+                } else {
+                    Log.record(TAG, "领取能量球任务失败: " + resultJson.optString("errorMsg", "未知错误"));
                 }
             } else {
-                Log.record(TAG, "领取能量球任务失败: " + resultJson.optString("errorMsg", "未知错误"));
+                Log.record(TAG, "未完成任何任务，跳过领取能量球");
             }
+
         } catch (Throwable t) {
             Log.runtime(TAG, "sportsEnergyBubbleTask err:");
             Log.printStackTrace(TAG, t);
@@ -1609,7 +1613,12 @@ public class AntSports extends ModelTask {
                 {
                     // 固定顺序：1.签到 → 2.循环处理任务大厅 → 3.捡泡泡
                     neverlandDoSign();                 // 签到
-                    loopHandleTaskCenter();            // 循环处理任务
+                    if(!Status.hasFlagToday(StatusFlags.FLAG_ANTSPORTS_TASKCENTER_DONE))
+                    {
+                        loopHandleTaskCenter();            // 循环处理任务
+                    }else Log.record(TAG, "今日已执行完成 健康岛大厅任务，跳过执行");
+
+
                     handleHealthIslandTask();            // 循环处理任务中心的浏览任务
                     neverlandPickAllBubble();          // 拾取能量球
                 }
@@ -1696,7 +1705,8 @@ public class AntSports extends ModelTask {
                 try {
                     // 1. 检查失败次数是否超限
                     if (errorCount >= MAX_ERROR_COUNT) {
-                        Log.error(TAG, "任务处理失败次数达到上限（" + MAX_ERROR_COUNT + "次），停止循环");
+                        Log.error(TAG, "任务处理失败次数达到上限（" + MAX_ERROR_COUNT + "次），停止循环并设置今日不再执行");
+                        Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_TASKCENTER_DONE); // 标记今日不再执行
                         break;
                     }
 
@@ -1719,12 +1729,15 @@ public class AntSports extends ModelTask {
                     }
 
                     // 3. 筛选出待完成的任务，只保留 PROMOKERNEL_TASK 和 LIGHT_TASK
-                    List<JSONObject> pendingTasks = filterPendingTasks(taskList).stream()
-                            .filter(task -> {
-                                String type = task.optString("taskType", "");
-                                return "PROMOKERNEL_TASK".equals(type) || "LIGHT_TASK".equals(type);
-                            })
-                            .toList();
+                    List<JSONObject> pendingTasks = new ArrayList<>();
+                    for (int i = 0; i < taskList.length(); i++) {
+                        JSONObject task = taskList.optJSONObject(i);
+                        if (task == null) continue;
+                        String type = task.optString("taskType", "");
+                        if ("PROMOKERNEL_TASK".equals(type) || "LIGHT_TASK".equals(type)) {
+                            pendingTasks.add(task);
+                        }
+                    }
 
                     // 4. 如果本次获取到的任务中没有可处理任务，则认为后续也无法执行，直接退出
                     if (pendingTasks.isEmpty()) {
@@ -1749,6 +1762,12 @@ public class AntSports extends ModelTask {
                     if (currentBatchError > 0) {
                         errorCount += currentBatchError;
                         Log.error(TAG, "本次批次处理失败 " + currentBatchError + " 个任务，累计失败次数：" + errorCount);
+                        // 如果失败次数达到上限，也设置今日不再执行
+                        if (errorCount >= MAX_ERROR_COUNT) {
+                            Log.error(TAG, "任务处理失败次数达到上限，设置今日不再执行");
+                            Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_TASKCENTER_DONE);
+                            break;
+                        }
                     } else {
                         Log.other(TAG, "本次批次任务全部处理成功");
                     }
@@ -1764,6 +1783,12 @@ public class AntSports extends ModelTask {
                 } catch (Throwable t) {
                     errorCount++;
                     Log.printStackTrace(TAG, "任务循环处理异常，累计失败次数：" + errorCount, t);
+                    // 如果异常导致累计失败次数达到上限，也设置今日不再执行
+                    if (errorCount >= MAX_ERROR_COUNT) {
+                        Log.error(TAG, "任务循环异常累计失败次数达到上限，设置今日不再执行");
+                        Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_TASKCENTER_DONE);
+                        break;
+                    }
                     try {
                         Thread.sleep(TASK_LOOP_DELAY);
                     } catch (InterruptedException ie) {
@@ -1775,6 +1800,8 @@ public class AntSports extends ModelTask {
 
             Log.record(TAG, "任务大厅循环处理结束");
         }
+
+
 
         /**
          * 处理健康岛浏览任务
@@ -2005,9 +2032,13 @@ public class AntSports extends ModelTask {
                     }
 
                     JSONObject data = pick.getJSONObject("data");
-                    Log.other(TAG, "捡泡泡成功 🎈 +" +
-                            data.optString("changeAmount") +
-                            " 余额：" + data.optString("balance"));
+                    String changeAmount = data.optString("changeAmount", "0");
+                    String balance = data.optString("balance", "0");
+                    if ("0".equals(changeAmount)) {
+                        Log.record(TAG, "健康岛 · 本次未获得任何能量");
+                    } else {
+                        Log.other(TAG, "捡泡泡成功 🎈 +" + changeAmount + " 余额：" + balance);
+                    }
                 }
 
                 // 处理需要浏览的任务 (和浏览任务类似)

@@ -33,7 +33,7 @@ class AntOrchard : ModelTask() {
         )
     }
 
-    private var userId: String? = null
+    private var userId: String? = UserMap.currentUid
     private var treeLevel: String? = null
     private var wuaList: Array<String>? = null
     private var executeIntervalInt: Int = 0
@@ -74,12 +74,10 @@ class AntOrchard : ModelTask() {
                 Log.record(TAG, "⏸ 当前为只收能量时间停止执行${name}任务！")
                 false
             }
-
             TaskCommon.IS_MODULE_SLEEP_TIME -> {
                 Log.record(TAG, "💤 模块休眠时间停止执行${name}任务！")
                 false
             }
-
             else -> true
         }
     }
@@ -111,11 +109,9 @@ class AntOrchard : ModelTask() {
                 .toString()
 
 
-            userId = UserMap.currentUid
 
             if (userId == null) {
-                Log.error(TAG, "无法获取 userId")
-                return
+                userId= UserMap.currentUid
             }
 
             // 七日礼包
@@ -203,10 +199,10 @@ class AntOrchard : ModelTask() {
                             val awardCount = spreadManureStage.getInt("awardCount")
                             val joo = JSONObject(AntOrchardRpcCall.receiveTaskAward(sceneCode, taskType))
                             if (joo.optBoolean("success")) {
-                                Log.forest(TAG, "丰收礼包🎁[肥料*$awardCount]")
+                                Log.forest(TAG,"丰收礼包🎁[肥料*$awardCount]")
                             } else {
-                                Log.record(TAG, "农场 丰收礼包 错误：" + joo.getString("desc"))
-                                Log.runtime(TAG, "农场 丰收礼包 错误：" + joo.toString())
+                                Log.record(TAG,"农场 丰收礼包 错误："+joo.getString("desc"))
+                                Log.runtime(TAG,"农场 丰收礼包 错误："+joo.toString())
                             }
                         }
                     }
@@ -230,28 +226,28 @@ class AntOrchard : ModelTask() {
                     val wateringLeftTimes = accountInfo.getInt("wateringLeftTimes")
 
                     if (count > 20) {
-                        Log.runtime(TAG, "一次浇水不超过 $count 次避免任务时间过长")
+                        Log.runtime(TAG,"一次浇水不超过 $count 次避免任务时间过长")
                         return
                     }
 
                     if (happyPoint < wateringCost) {
-                        Log.runtime(TAG, "农场肥料不足以施肥 $wateringCost")
+                        Log.runtime(TAG,"农场肥料不足以施肥 $wateringCost")
                         return
                     }
 
                     if (wateringLeftTimes == 0) {
-                        Log.runtime(TAG, "剩余施肥次数为 0")
+                        Log.runtime(TAG,"剩余施肥次数为 0")
                         return
                     }
 
                     if (200 - wateringLeftTimes < orchardSpreadManureCount.value) {
                         val wua = getWua()
-                        Log.runtime(TAG, "set Wua $wua")
-                        val spreadManureData = JSONObject(AntOrchardRpcCall.orchardSpreadManure(wua))
+                        Log.runtime(TAG,"set Wua $wua")
+                        val spreadManureData = JSONObject(AntOrchardRpcCall.orchardSpreadManure(wua,"ch_appcenter__chsub_9patch"))
 
                         if (spreadManureData.getString("resultCode") != "100") {
-                            Log.record(TAG, "农场 orchardSpreadManure 错误：" + spreadManureData.getString("resultDesc"))
-                            Log.runtime(TAG, "农场 orchardSpreadManure 错误：" + spreadManureData.toString())
+                            Log.record(TAG,"农场 orchardSpreadManure 错误："+spreadManureData.getString("resultDesc"))
+                            Log.runtime(TAG,"农场 orchardSpreadManure 错误："+spreadManureData.toString())
                             return
                         }
 
@@ -265,8 +261,7 @@ class AntOrchard : ModelTask() {
                         if (!canSpreadManureContinue(
                                 seedStage.getInt("totalValue"),
                                 spreadTaobaoData.getJSONObject("currentStage").getInt("totalValue")
-                            )
-                        ) {
+                            )) {
                             Status.spreadManureToday(userId!!)
                             return
                         }
@@ -299,12 +294,12 @@ class AntOrchard : ModelTask() {
                 val setResponse = JSONObject(AntOrchardRpcCall.extraInfoSet())
 
                 if (setResponse.getString("resultCode") == "100") {
-                    Log.forest(TAG, "每日肥料💩[${todayFertilizerNum}g]")
+                    Log.forest(TAG,"每日肥料💩[${todayFertilizerNum}g]")
                 } else {
-                    Log.runtime(TAG, setResponse.toString())
+                    Log.runtime(TAG,setResponse.toString())
                 }
             } else {
-                Log.runtime(TAG, jo.toString())
+                Log.runtime(TAG,jo.toString())
             }
         } catch (t: Throwable) {
             Log.runtime(TAG, "extraInfoGet err:")
@@ -334,12 +329,12 @@ class AntOrchard : ModelTask() {
                                 val jo4 = userEverydayGiftItems.getJSONObject(j)
                                 if (jo4.getString("itemId") == itemId) {
                                     val awardCount = jo4.optInt("awardCount", 1)
-                                    Log.forest(TAG, "七日礼包🎁[获得肥料]#${awardCount}g")
+                                    Log.forest(TAG,"七日礼包🎁[获得肥料]#${awardCount}g")
                                     break
                                 }
                             }
                         } else {
-                            Log.runtime(TAG, jo3.toString())
+                            Log.runtime(TAG,jo3.toString())
                         }
                     } else {
                         Log.record(TAG, "七日礼包已领取")
@@ -411,8 +406,7 @@ class AntOrchard : ModelTask() {
                         if (limitStr.isNotEmpty()) {
                             try {
                                 rightsTimesLimit = limitStr.toInt()
-                            } catch (ignored: Throwable) {
-                            }
+                            } catch (ignored: Throwable) {}
                         }
                     }
 
@@ -442,10 +436,10 @@ class AntOrchard : ModelTask() {
                 if (actionType == "TRIGGER" || actionType == "ADD_HOME" || actionType == "PUSH_SUBSCRIBE") {
                     val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
                     if (finishResponse.optBoolean("success")) {
-                        Log.forest(TAG, "农场任务🧾[$title]")
+                        Log.forest(TAG,"农场任务🧾[$title]")
                     } else {
-                        Log.record(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")
-                        Log.runtime(TAG, "农场任务🧾[$title]$finishResponse")
+                        Log.record(TAG,"农场任务🧾[$title]${finishResponse.optString("desc")}")
+                        Log.runtime(TAG,"农场任务🧾[$title]$finishResponse")
                     }
                 }
             }
@@ -466,7 +460,7 @@ class AntOrchard : ModelTask() {
                         .getInt("awardCount")
                     Log.forest("农场签到📅[获得肥料]#${awardCount}g")
                 } else {
-                    Log.runtime(TAG, joSign.toString())
+                    Log.runtime(TAG,joSign.toString())
                 }
             } else {
                 Log.record(TAG, "农场今日已签到")
@@ -495,15 +489,15 @@ class AntOrchard : ModelTask() {
 
                     val jo3 = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
                     if (jo3.getString("resultCode") == "100") {
-                        Log.forest(TAG, "领取奖励🎖️[$title]#${awardCount}g肥料")
+                        Log.forest(TAG,"领取奖励🎖️[$title]#${awardCount}g肥料")
                     } else {
-                        Log.record(TAG, jo3.getString("resultDesc"))
-                        Log.runtime(TAG, jo3.toString())
+                        Log.record(TAG,jo3.getString("resultDesc"))
+                        Log.runtime(TAG,jo3.toString())
                     }
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
-                Log.runtime(TAG, response)
+                Log.record(TAG,jo.getString("resultDesc"))
+                Log.runtime(TAG,response)
             }
         } catch (t: Throwable) {
             Log.runtime(TAG, "triggerTbTask err:")
@@ -541,14 +535,13 @@ class AntOrchard : ModelTask() {
                             if (optionKey != null) {
                                 val jo5 = JSONObject(AntOrchardRpcCall.triggerSubplotsActivity(activityId, "WISH", optionKey))
                                 if (jo5.getString("resultCode") == "100") {
-                                    Log.farm(TAG, "农场许愿✨[每日施肥$taskRequire 次]")
+                                    Log.farm(TAG,"农场许愿✨[每日施肥$taskRequire 次]")
                                 } else {
-                                    Log.record(TAG, jo5.getString("resultDesc"))
-                                    Log.runtime(TAG, jo5.toString())
+                                    Log.record(TAG,jo5.getString("resultDesc"))
+                                    Log.runtime(TAG,jo5.toString())
                                 }
                             }
                         }
-
                         "FINISHED" -> {
                             val jo3 = JSONObject(AntOrchardRpcCall.receiveOrchardRights(activityId, "WISH"))
                             if (jo3.getString("resultCode") == "100") {
@@ -556,15 +549,15 @@ class AntOrchard : ModelTask() {
                                 querySubplotsActivity(taskRequire)
                                 return
                             } else {
-                                Log.record(TAG, jo3.getString("resultDesc"))
-                                Log.runtime(TAG, jo3.toString())
+                                Log.record(TAG,jo3.getString("resultDesc"))
+                                Log.runtime(TAG,jo3.toString())
                             }
                         }
                     }
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
-                Log.runtime(TAG, response)
+                Log.record(TAG,jo.getString("resultDesc"))
+                Log.runtime(TAG,response)
             }
         } catch (t: Throwable) {
             Log.runtime(TAG, "querySubplotsActivity err:")

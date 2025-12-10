@@ -335,89 +335,7 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
     }
 
-    /**
-     * 芝麻炼金/积分首页
-     */
-    public static String alchemyQueryHome() {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.queryHome",
-                "[{}]");
-    }
 
-    /**
-     * [日志对应] 芝麻炼金-执行炼金
-     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy
-     * Params: [null]
-     */
-    public static String alchemyExecute() {
-        // 日志中 requestData 为 [null]
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy", "[null]");
-    }
-
-    /**
-     * [日志对应] 芝麻炼 /金-签到列表查询
-     *
-     *
-     *      * @param checkInDate yyyyMMdd
-     *      * @param sceneCode   "zml" 对应芝麻粒福利签到, "alchemy" 对应芝麻炼金签到
-     *      *
-     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists
-     */
-    public static String alchemyQueryCheckIn(String scenecode) {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists",
-                "[{\"sceneCode\":\""+scenecode+"\",\"version\":\"2025-10-22\"}]");
-    }
-
-    /**
-     * [日志对应] 芝麻炼金-时段奖励查询 (午饭/晚饭)
-     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask
-     */
-    public static String alchemyQueryTimeLimitedTask() {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask",
-                "[{}]");
-    }
-
-    /**
-     * [日志对应] 芝麻炼金-完成时段任务 (午饭/晚饭)
-     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask
-     *
-     * 请求示例:
-     * {
-     *     "templateId": "wujianli"
-     * }
-     *
-     * 返回示例:
-     * {
-     *     "ariverRpcTraceId": "client`aBYSOR/y0xEDACWu2y9mPoqMPhTTaIz_5694806",
-     *     "data": {
-     *         "degrade": false,
-     *         "toast": "领取成功,得10芝麻粒",
-     *         "zmlNum": 10
-     *     },
-     *     "resultCode": "SUCCESS",
-     *     "resultView": "成功",
-     *     "success": true,
-     *     "traceId": "21d0e34417646521077286391ee43a"
-     * }
-     */
-    public static String alchemyCompleteTimeLimitedTask(String templateId) {
-        String body = "[{\n" +
-                "    \"templateId\": \"" + templateId + "\"\n" +
-                "}]";
-
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask",
-                body
-        );
-    }
-
-    /**
-     * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
-     * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3
-     */
-    public static String alchemyQueryListV3() {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
-                "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
-    }
 
     // ================= 年度回顾（任务中心） =================
     public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =
@@ -648,121 +566,8 @@ public class AntMemberRpcCall {
         }
     }
 
-    /**
-     * 信誉获取任务列表（成长任务）
-     * <p>
-     * 对应抓包：
-     * <pre>
-     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList
-     *   requestData: [{"guideBehaviorId":"yuebao_7d","invokeVersion":"1.0.2025.10.27","switchNewPage":true}]
-     * </pre>
-     * 说明：
-     * <ul>
-     *   <li>__apiCallStartTime / __apiNativeCallId 属于容器层元数据，不需要拼在 requestData 里</li>
-     *   <li>guideBehaviorId 用来指定「引导任务」的入口，通常传 yuebao_7d 即可拉全量列表</li>
-     *   <li>invokeVersion 建议保持和抓包一致，方便服务器做灰度控制</li>
-     * </ul>
-     *
-     * @param guideBehaviorId 抓包中的 guideBehaviorId，例如 "yuebao_7d"
-     * @param invokeVersion   抓包中的 invokeVersion，例如 "1.0.2025.10.27"
-     */
-    public static String queryGrowthGuideToDoList(String guideBehaviorId, String invokeVersion) {
-        if (guideBehaviorId == null || guideBehaviorId.isEmpty()) {
-            guideBehaviorId = "yuebao_7d";
-        }
-        if (invokeVersion == null || invokeVersion.isEmpty()) {
-            // 默认使用抓包中观察到的版本号，避免服务端按版本做限流/灰度
-            invokeVersion = "1.0.2025.10.27";
-        }
-        String data = "[{" +
-                "\"guideBehaviorId\":\"" + guideBehaviorId + "\"," +
-                "\"invokeVersion\":\"" + invokeVersion + "\"," +
-                "\"switchNewPage\":true" +
-                "}]";
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList",
-                data
-        );
-    }
 
-    /**
-     * 信誉任务「领取任务 / 触发接收」接口。
-     * <p>
-     * 对应抓包：
-     * <pre>
-     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect
-     *   requestData: [{"behaviorId":"babanongchang_7d"}]
-     * </pre>
-     * behaviorId 直接来自 queryToDoList 返回的 toDoList[i].behaviorId。
-     */
-    public static String openBehaviorCollect(String behaviorId) {
-        String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect",
-                data
-        );
-    }
 
-    /**
-     * 查询每日答题题目（每日问答）。
-     *
-     * 对应抓包：
-     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz
-     *   requestData: [{"behaviorId":"meiriwenda"}]
-     *
-     * @param behaviorId 行为 ID（例如 "meiriwenda"）
-     */
-    public static String queryDailyQuiz(String behaviorId) {
-        String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz",
-                data
-        );
-    }
-
-    /**
-     * 提交每日答题结果。
-     *
-     * 对应抓包：
-     *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask
-     *   requestData: [{
-     *       "behaviorId":"meiriwenda",
-     *       "bizDate":1764564388751,
-     *       "extInfo":{
-     *           "answerId":"20250925_3_0",
-     *           "answerStatus":"RIGHT",
-     *           "questionId":"20250925_3"
-     *       }
-     *   }]
-     *
-     * @param behaviorId    行为 ID（meiriwenda）
-     * @param bizDate       业务时间戳（直接使用 queryDailyQuiz 返回的 data.bizDate）
-     * @param answerId      选中的答案 ID（data.questionVo.rightAnswer.answerId）
-     * @param questionId    题目 ID（data.questionVo.questionId）
-     * @param answerStatus  答案状态：RIGHT / WRONG
-     */
-    public static String pushDailyTask(String behaviorId, long bizDate,
-                                       String answerId, String questionId,
-                                       String answerStatus) {
-        if (answerStatus == null || answerStatus.isEmpty()) {
-            answerStatus = "RIGHT";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("[{\"behaviorId\":\"")
-                .append(behaviorId)
-                .append("\",\"bizDate\":")
-                .append(bizDate)
-                .append(",\"extInfo\":{")
-                .append("\"answerId\":\"").append(answerId).append("\",")
-                .append("\"answerStatus\":\"").append(answerStatus).append("\",")
-                .append("\"questionId\":\"").append(questionId).append("\"")
-                .append("}}]");
-        String data = sb.toString();
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
-                data
-        );
-    }
 
     /**
      * [新] 福利中心首页
@@ -862,6 +667,317 @@ public class AntMemberRpcCall {
                     new JSONArray().put(args).toString());
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    //芝麻信誉 部分
+    public static class Zmxy {
+        private static String Version="2025-10-22";
+        //芝麻粒炼金
+
+        /**
+         * 信誉获取任务列表（成长任务）
+         * <p>
+         * 对应抓包：
+         * <pre>
+         *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList
+         *   requestData: [{"guideBehaviorId":"yuebao_7d","invokeVersion":"1.0.2025.10.27","switchNewPage":true}]
+         * </pre>
+         * 说明：
+         * <ul>
+         *   <li>__apiCallStartTime / __apiNativeCallId 属于容器层元数据，不需要拼在 requestData 里</li>
+         *   <li>guideBehaviorId 用来指定「引导任务」的入口，通常传 yuebao_7d 即可拉全量列表</li>
+         *   <li>invokeVersion 建议保持和抓包一致，方便服务器做灰度控制</li>
+         * </ul>
+         *
+         * @param guideBehaviorId 抓包中的 guideBehaviorId，例如 "yuebao_7d"
+         * @param invokeVersion   抓包中的 invokeVersion，例如 "1.0.2025.10.27"
+         */
+        public static String queryGrowthGuideToDoList(String guideBehaviorId, String invokeVersion) {
+            if (guideBehaviorId == null || guideBehaviorId.isEmpty()) {
+                guideBehaviorId = "yuebao_7d";
+            }
+            if (invokeVersion == null || invokeVersion.isEmpty()) {
+                // 默认使用抓包中观察到的版本号，避免服务端按版本做限流/灰度
+                invokeVersion = "1.0.2025.10.27";
+            }
+            String data = "[{" +
+                    "\"guideBehaviorId\":\"" + guideBehaviorId + "\"," +
+                    "\"invokeVersion\":\"" + invokeVersion + "\"," +
+                    "\"switchNewPage\":true" +
+                    "}]";
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.queryToDoList",
+                    data
+            );
+        }
+
+        /**
+         * 信誉任务「领取任务 / 触发接收」接口。
+         * <p>
+         * 对应抓包：
+         * <pre>
+         *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect
+         *   requestData: [{"behaviorId":"babanongchang_7d"}]
+         * </pre>
+         * behaviorId 直接来自 queryToDoList 返回的 toDoList[i].behaviorId。
+         */
+        public static String openBehaviorCollect(String behaviorId) {
+            String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.openBehaviorCollect",
+                    data
+            );
+        }
+
+        /**
+         * 查询每日答题题目（每日问答）。
+         *
+         * 对应抓包：
+         *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz
+         *   requestData: [{"behaviorId":"meiriwenda"}]
+         *
+         * @param behaviorId 行为 ID（例如 "meiriwenda"）
+         */
+        public static String queryDailyQuiz(String behaviorId) {
+            String data = "[{\"behaviorId\":\"" + behaviorId + "\"}]";
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.queryDailyQuiz",
+                    data
+            );
+        }
+
+        /**
+         * 提交每日答题结果。
+         *
+         * 对应抓包：
+         *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask
+         *   requestData: [{
+         *       "behaviorId":"meiriwenda",
+         *       "bizDate":1764564388751,
+         *       "extInfo":{
+         *           "answerId":"20250925_3_0",
+         *           "answerStatus":"RIGHT",
+         *           "questionId":"20250925_3"
+         *       }
+         *   }]
+         *
+         * @param behaviorId    行为 ID（meiriwenda）
+         * @param bizDate       业务时间戳（直接使用 queryDailyQuiz 返回的 data.bizDate）
+         * @param answerId      选中的答案 ID（data.questionVo.rightAnswer.answerId）
+         * @param questionId    题目 ID（data.questionVo.questionId）
+         * @param answerStatus  答案状态：RIGHT / WRONG
+         */
+        public static String pushDailyTask(String behaviorId, long bizDate,
+                                           String answerId, String questionId,
+                                           String answerStatus) {
+            if (answerStatus == null || answerStatus.isEmpty()) {
+                answerStatus = "RIGHT";
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("[{\"behaviorId\":\"")
+                    .append(behaviorId)
+                    .append("\",\"bizDate\":")
+                    .append(bizDate)
+                    .append(",\"extInfo\":{")
+                    .append("\"answerId\":\"").append(answerId).append("\",")
+                    .append("\"answerStatus\":\"").append(answerStatus).append("\",")
+                    .append("\"questionId\":\"").append(questionId).append("\"")
+                    .append("}}]");
+            String data = sb.toString();
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
+                    data
+            );
+        }
+
+
+        /**
+         * 提交信用知识视频答题（shipingwenda）
+         *
+         * 对应抓包：
+         *   Method: com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask
+         *
+         * requestData:
+         * [{
+         *     "behaviorId": "shipingwenda",
+         *     "bizDate": 1765254295706,
+         *     "extInfo": {
+         *         "answerId": "A",
+         *         "answerStatus": "RIGHT",
+         *         "questionId": "question3"
+         *     }
+         * }]
+         *
+         * @param bizDate      业务时间戳
+         * @param answerId     选中的答案 ID
+         * @param questionId   题目 ID
+         * @param answerStatus RIGHT / WRONG，默认 RIGHT
+         */
+        public static String pushVideoQuizTask(long bizDate,
+                                               String answerId,
+                                               String questionId,
+                                               String answerStatus) {
+
+            if (answerStatus == null || answerStatus.isEmpty()) {
+                answerStatus = "RIGHT";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("[{")
+                    .append("\"behaviorId\":\"shipingwenda\",")
+                    .append("\"bizDate\":").append(bizDate).append(',')
+                    .append("\"extInfo\":{")
+                    .append("\"answerId\":\"").append(answerId).append("\",")
+                    .append("\"answerStatus\":\"").append(answerStatus).append("\",")
+                    .append("\"questionId\":\"").append(questionId).append("\"")
+                    .append("}")
+                    .append("}]");
+
+            String data = sb.toString();
+
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
+                    data
+            );
+        }
+
+        /**
+         * 查询芝麻分进度
+         * 接口: com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryScoreProgress
+         */
+        public static String queryScoreProgress() {
+            try {
+                JSONObject args = new JSONObject();
+                args.put("needTotalProcess", "TRUE");
+                args.put("queryGuideInfo", true);
+                args.put("switchNewPage", true);
+
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryScoreProgress",
+                        new JSONArray().put(args).toString()
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        /**
+         * 领取进度球
+         * 接口: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall
+         */
+        public static String collectProgressBall(String... ballIds) {
+            try {
+                JSONObject args = new JSONObject();
+                JSONArray arr = new JSONArray();
+                for (String id : ballIds) arr.put(id);
+                args.put("ballIdList", arr);
+
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall",
+                        new JSONArray().put(args).toString()
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+        public static class Alchemy {
+            /**
+             * 芝麻炼金/积分首页
+             */
+            public static String alchemyQueryHome() {
+                return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.queryHome",
+                        "[{}]");
+            }
+
+            /**
+             * [日志对应] 芝麻炼金-执行炼金
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy
+             * Params: [null]
+             */
+            public static String alchemyExecute() {
+                // 日志中 requestData 为 [null]
+                return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.alchemy", "[{}]");
+            }
+
+            /**
+             * [日志对应] 芝麻炼 /金-签到列表查询
+             *
+             *
+             *      * @param checkInDate yyyyMMdd
+             *      * @param sceneCode   "zml" 对应芝麻粒福利签到, "alchemy" 对应芝麻炼金签到
+             *      *
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists
+             */
+            public static String alchemyQueryCheckIn(String scenecode) {
+                return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists",
+                        "[{\"sceneCode\":\""+scenecode+"\",\"version\":\""+Version+"\"}]");
+            }
+
+            /**
+             * [日志对应] 芝麻炼金-时段奖励查询 (午饭/晚饭)
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask
+             */
+            public static String alchemyQueryTimeLimitedTask() {
+                return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.queryTask",
+                        "[{}]");
+            }
+
+            /**
+             * [日志对应] 芝麻炼金-完成时段任务 (午饭/晚饭)
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask
+             *
+             * 请求示例:
+             * {
+             *     "templateId": "wujianli"
+             * }
+             *
+             * 返回示例:
+             * {
+             *     "ariverRpcTraceId": "client`aBYSOR/y0xEDACWu2y9mPoqMPhTTaIz_5694806",
+             *     "data": {
+             *         "degrade": false,
+             *         "toast": "领取成功,得10芝麻粒",
+             *         "zmlNum": 10
+             *     },
+             *     "resultCode": "SUCCESS",
+             *     "resultView": "成功",
+             *     "success": true,
+             *     "traceId": "21d0e34417646521077286391ee43a"
+             * }
+             */
+            public static String alchemyCompleteTimeLimitedTask(String templateId) {
+                String body = "[{\n" +
+                        "    \"templateId\": \"" + templateId + "\"\n" +
+                        "}]";
+
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.TimeLimitedTaskRpcManager.completeTask",
+                        body
+                );
+            }
+
+            /**
+             * [日志对应] 芝麻炼金-任务列表 V3 (参数精确匹配日志)
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3
+             */
+            public static String alchemyQueryListV3() {
+                return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
+                        "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
+            }
+            /**
+             * [日志对应] 芝麻炼金 - 领取奖励
+             *
+             * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.claimAward
+             */
+            public static String claimAward() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.claimAward",
+                        "[{}]"
+                );
+            }
         }
     }
 }

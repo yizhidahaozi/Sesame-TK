@@ -56,13 +56,17 @@ object AntOrchardRpcCall {
 
     /**
      * 施肥
+     * @param wua 用户标识
+     * @param source 来源标识，可自定义
      */
-    fun orchardSpreadManure(wua: String): String {
+    @JvmStatic  // 重点：让 Java 能直接用类名调用
+    fun orchardSpreadManure(wua: String, source: String): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSpreadManure",
-            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
         )
     }
+
 
     fun receiveTaskAward(sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
@@ -104,6 +108,7 @@ object AntOrchardRpcCall {
     //        return ApplicationHook.requestString("com.alipay.antiep.shareP2P",
     //                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]")
     //    }
+
     fun achieveBeShareP2P(shareId: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.achieveBeShareP2P",
