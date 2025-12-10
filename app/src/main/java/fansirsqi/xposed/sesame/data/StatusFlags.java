@@ -21,6 +21,15 @@ public final class StatusFlags {
     public static final String FLAG_NEVERLAND_STEPCOUNT = "Flag_Neverland_StepCount";  // 今日步数任务
 
 
-    public static final String FLAG_AntMember_doAllAvailableSesameTask = "AntMember::doAllAvailableSesameTask";  //芝麻信用任务
+    public static final String FLAG_AntMember_doAllAvailableSesameTask = "AntMember::doAllAvailableSesameTask";  //
+
+    // --------------------------------------------
+    // 芝麻粒炼金 次日奖励标记
+    // --------------------------------------------
+    public static final String FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD = "zmxy::alchemy::nextDayAward";
+
+
+    // 运动任务大厅-今日是否已尝试循环处理
+    public static final String FLAG_ANTSPORTS_TASKCENTER_DONE = "Flag_AntSports_TaskCenter_Done";
 
 }

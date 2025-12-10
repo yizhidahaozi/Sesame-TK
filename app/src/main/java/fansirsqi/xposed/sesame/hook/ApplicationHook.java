@@ -14,8 +14,10 @@ import androidx.annotation.NonNull;
 
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
+import kotlin.Unit;
 import lombok.Setter;
 
+import org.json.JSONObject;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
@@ -65,7 +67,8 @@ import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModuleInterface;
 import kotlin.jvm.JvmStatic;
 import lombok.Getter;
-
+import fansirsqi.xposed.sesame.util.maps.IdMapManager;
+import fansirsqi.xposed.sesame.util.maps.VipDataIdMap;
 public class ApplicationHook {
     static final String TAG = ApplicationHook.class.getSimpleName();
     public XposedInterface xposedInterface = null;
@@ -887,6 +890,62 @@ public class ApplicationHook {
                     HookUtil.INSTANCE.hookRpcBridgeExtension(classLoader, BaseModel.getSendHookData().getValue(), BaseModel.getSendHookDataUrl().getValue());
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
                 }
+
+                // 注册 VIPHook handler，用于抓取蚂蚁庄园广告 referToken
+                VIPHook.INSTANCE.registerRpcHandler("com.alipay.adexchange.ad.facade.xlightPlugin", new kotlin.jvm.functions.Function1<JSONObject, Unit>() {
+                    @Override
+                    public Unit invoke(JSONObject paramsJson) {
+                        try {
+
+                            // paramsJson 就是完整 RPC 数据
+                            // 找 positionRequest → referInfo → referToken
+                            JSONObject positionRequest = paramsJson.optJSONObject("positionRequest");
+                            if (positionRequest == null) {
+                                Log.error("VIPHook", "未找到 positionRequest");
+                                return Unit.INSTANCE;
+                            }
+
+                            JSONObject referInfo = positionRequest.optJSONObject("referInfo");
+                            if (referInfo == null) {
+                                Log.error("VIPHook", "未找到 referInfo");
+                                return Unit.INSTANCE;
+                            }
+
+                            String token = referInfo.optString("referToken", "");
+                            if (token.isEmpty()) {
+                                Log.error("VIPHook", "referToken 为空");
+                                return Unit.INSTANCE;
+                            }
+
+                            // 取得当前用户 UID
+                            String userId = UserMap.getCurrentUid();
+                            if (userId == null || userId.isEmpty()) {
+                                Log.error("VIPHook", "无法保存 referToken：当前用户ID为空");
+                                return Unit.INSTANCE;
+                            }
+
+                            // --- 与你的 fishpond riskToken 完全一样的保存逻辑 ---
+                            VipDataIdMap vipData = IdMapManager.getInstance(VipDataIdMap.class);
+                            vipData.load(userId);
+
+                            // 存储键名：AntFarmReferToken
+                            vipData.add("AntFarmReferToken", token);
+
+                            boolean saved = vipData.save(userId);
+                            if (saved) {
+                                Log.other("VIPHook", "捕获到蚂蚁庄园 referToken 并已保存到 vipdata.json, uid=" + userId);
+                            } else {
+                                Log.error("VIPHook", "保存 vipdata.json 失败, uid=" + userId);
+                            }
+
+                        } catch (Exception e) {
+                            Log.error("VIPHook", "解析 referToken 失败: " + e.getMessage());
+                        }
+
+                        return Unit.INSTANCE;
+                    }
+                });
+
                 // 后台运行权限检查!!
                 if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
                     if (BaseModel.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
