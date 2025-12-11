@@ -14,8 +14,7 @@ data class UserEnergyPattern(
     val avgResponseTime: Long = 1000L,    // 平均响应时间
     val lastCollectTime: Long = 0L,       // 上次收取时间
     val isActiveUser: Boolean = true      // 是否活跃用户
-) {
-}
+)
 
 /**
  * 用户能量模式管理器
