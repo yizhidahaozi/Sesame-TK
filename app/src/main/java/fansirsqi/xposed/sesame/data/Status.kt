@@ -1,8 +1,7 @@
 package fansirsqi.xposed.sesame.data
 
 import com.fasterxml.jackson.databind.JsonMappingException
-import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
-import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.task.antForest.AntForest
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.JsonUtil
@@ -10,116 +9,90 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.StringUtil
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
-import lombok.Data
-import lombok.Getter
-import java.io.File
 import java.util.Calendar
 import java.util.Date
-import java.util.Objects
 
-@Data
 class Status {
-    // ===========================forest
-    private val waterFriendLogList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
 
-    private val cooperateWaterList: MutableSet<String?> = HashSet<String?>() //合作浇水
-    private val reserveLogList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
-    private val ancientTreeCityCodeList: MutableSet<String?> = HashSet<String?>() //古树
-    private val protectBubbleList: MutableSet<String?> = HashSet<String?>()
-    private val exchangeDoubleCard = 0 // 活力值兑换双倍卡
-    private val exchangeTimes = 0
-    private val exchangeTimesLongTime = 0
-    private val doubleTimes = 0
-    private val exchangeEnergyShield = false //活力值兑换能量保护罩
-    private val exchangeCollectHistoryAnimal7Days = false
-    private val exchangeCollectToFriendTimes7Days = false
-    private val youthPrivilege = true
-    private val studentTask = true
-    private val VitalityStoreList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
+    // =========================== forest
+    var waterFriendLogList: MutableMap<String, Int> = HashMap()
+    var cooperateWaterList: MutableSet<String> = HashSet() // 合作浇水
+    var reserveLogList: MutableMap<String, Int> = HashMap()
+    var ancientTreeCityCodeList: MutableSet<String> = HashSet() // 古树
+    var protectBubbleList: MutableSet<String> = HashSet()
+    var doubleTimes: Int = 0
+    var exchangeEnergyShield: Boolean = false // 活力值兑换能量保护罩
+    var exchangeCollectHistoryAnimal7Days: Boolean = false
+    var exchangeCollectToFriendTimes7Days: Boolean = false
+    var youthPrivilege: Boolean = true
+    var studentTask: Boolean = true
+    var vitalityStoreList: MutableMap<String, Int> = HashMap() // 注意命名规范首字母小写
 
-    // ===========================farm
-    private var answerQuestion = false
-    private val feedFriendLogList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
-    private val visitFriendLogList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
+    // =========================== farm
+    var answerQuestion: Boolean = false
+    var feedFriendLogList: MutableMap<String, Int> = HashMap()
+    var visitFriendLogList: MutableMap<String, Int> = HashMap()
 
     // 可以存各种今日计数（步数、次数等）
-    private val intFlagMap: MutableMap<String?, Int?> = HashMap<String?, Int?>() //2025/12/4  GSMT  用来存储int类型数据，无需再重复定义
+    // 2025/12/4 GSMT 用来存储int类型数据，无需再重复定义
+    var intFlagMap: MutableMap<String, Int> = HashMap()
 
-    private var dailyAnswerList: MutableSet<String?>? = HashSet<String?>()
-    private val donationEggList: MutableSet<String?> = HashSet<String?>()
-    private var useAccelerateToolCount = 0
+    var dailyAnswerList: MutableSet<String> = HashSet()
+    var donationEggList: MutableSet<String> = HashSet()
+    var useAccelerateToolCount: Int = 0
 
-    /**
-     * 小鸡换装
-     */
-    private var canOrnament = true
-    private val animalSleep = false
+    /** 小鸡换装 */
+    var canOrnament: Boolean = true
+    var animalSleep: Boolean = false
 
-    // =============================stall
-    private val stallHelpedCountLogList: MutableMap<String?, Int?> = HashMap<String?, Int?>()
-    private val spreadManureList: MutableSet<String?> = HashSet<String?>()
-    private val stallP2PHelpedList: MutableSet<String?> = HashSet<String?>()
-    private var canStallDonate = true
+    // ============================= stall
+    var stallHelpedCountLogList: MutableMap<String, Int> = HashMap()
+    var spreadManureList: MutableSet<String> = HashSet()
+    var stallP2PHelpedList: MutableSet<String> = HashSet()
+    var canStallDonate: Boolean = true
 
-    // ==========================sport
-    private val syncStepList: MutableSet<String?> = HashSet<String?>()
-    private val exchangeList: MutableSet<String?> = HashSet<String?>()
+    // ========================== sport
+    var syncStepList: MutableSet<String> = HashSet()
+    var exchangeList: MutableSet<String> = HashSet()
 
-    /**
-     * 捐运动币
-     */
-    private var donateCharityCoin = false
+    /** 捐运动币 */
+    var donateCharityCoin: Boolean = false
 
-    // =======================other
-    private val memberSignInList: MutableSet<String?> = HashSet<String?>()
-    private val flagList: MutableSet<String?> = HashSet<String?>()
+    // ======================= other
+    var memberSignInList: MutableSet<String> = HashSet()
+    val flagList: MutableSet<String> = HashSet()
 
-    /**
-     * 口碑签到
-     */
-    private var kbSignIn: Long = 0
+    /** 口碑签到 */
+    var kbSignIn: Long = 0
 
-    /**
-     * 保存时间
-     */
-    private var saveTime: Long? = 0L
+    /** 保存时间 */
+    var saveTime: Long = 0L
 
-    /**
-     * 新村助力好友，已上限的用户
-     */
-    private val antStallAssistFriend: MutableSet<String?> = HashSet<String?>()
+    /** 新村助力好友，已上限的用户 */
+    var antStallAssistFriend: MutableSet<String> = HashSet()
 
-    /**
-     * 新村-罚单已贴完的用户
-     */
-    private val canPasteTicketTime: MutableSet<String?> = HashSet<String?>()
+    /** 新村-罚单已贴完的用户 */
+    var canPasteTicketTime: MutableSet<String> = HashSet()
 
-    /**
-     * 绿色经营，收取好友金币已完成用户
-     */
-    private val greenFinancePointFriend: MutableSet<String?> = HashSet<String?>()
+    /** 绿色经营，收取好友金币已完成用户 */
+    var greenFinancePointFriend: MutableSet<String> = HashSet()
 
-    /**
-     * 绿色经营，评级领奖已完成用户
-     */
-    private val greenFinancePrizesMap: MutableMap<String?, Int?> = HashMap<String?, Int?>()
+    /** 绿色经营，评级领奖已完成用户 */
+    var greenFinancePrizesMap: MutableMap<String, Int> = HashMap()
 
-    /**
-     * 农场助力
-     */
-    private val antOrchardAssistFriend: MutableSet<String?> = HashSet<String?>()
+    /** 农场助力 */
+    var antOrchardAssistFriend: MutableSet<String> = HashSet()
 
-    /**
-     * 会员权益
-     */
-    private val memberPointExchangeBenefitLogList: MutableSet<String?> = HashSet<String?>()
-
+    /** 会员权益 */
+    var memberPointExchangeBenefitLogList: MutableSet<String> = HashSet()
 
     companion object {
-        private val TAG: String = Status::class.java.getSimpleName()
+        private val TAG = Status::class.java.simpleName
 
-        @Getter
-        private val INSTANCE = Status()
+        @JvmStatic
+        val INSTANCE: Status = Status()
+
+        @JvmStatic
         val currentDayTimestamp: Long
             get() {
                 val calendar = Calendar.getInstance()
@@ -127,358 +100,324 @@ class Status {
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)
                 calendar.set(Calendar.MILLISECOND, 0)
-                return calendar.getTimeInMillis() // 返回当天零点时间戳
+                return calendar.timeInMillis
             }
 
-
-        fun getVitalityCount(skuId: String?): Int {
-            var exchangedCount = Status.getINSTANCE().getVitalityStoreList().get(skuId)
-            if (exchangedCount == null) {
-                exchangedCount = 0
-            }
-            return exchangedCount
+        @JvmStatic
+        fun getVitalityCount(skuId: String): Int {
+            return INSTANCE.vitalityStoreList[skuId] ?: 0
         }
 
-        fun canVitalityExchangeToday(skuId: String?, count: Int): Boolean {
-            return !hasFlagToday("forest::VitalityExchangeLimit::" + skuId) && getVitalityCount(skuId) < count
+        @JvmStatic
+        fun canVitalityExchangeToday(skuId: String, count: Int): Boolean {
+            return !hasFlagToday("forest::VitalityExchangeLimit::$skuId") && getVitalityCount(skuId) < count
         }
 
-        fun vitalityExchangeToday(skuId: String?) {
-            val count: Int = getVitalityCount(skuId) + 1
-            Status.getINSTANCE().getVitalityStoreList().put(skuId, count)
+        @JvmStatic
+        fun vitalityExchangeToday(skuId: String) {
+            val count = getVitalityCount(skuId) + 1
+            INSTANCE.vitalityStoreList[skuId] = count
             save()
         }
 
+        @JvmStatic
         fun canAnimalSleep(): Boolean {
-            return !Status.getINSTANCE().getAnimalSleep()
+            return !INSTANCE.animalSleep
         }
 
+        @JvmStatic
         fun animalSleep() {
-            if (!Status.getINSTANCE().getAnimalSleep()) {
-                Status.getINSTANCE().setAnimalSleep(true)
+            if (!INSTANCE.animalSleep) {
+                INSTANCE.animalSleep = true
                 save()
             }
         }
 
-        fun canWaterFriendToday(id: String?, newCount: Int): Boolean {
-            var id = id
-            id = UserMap.getCurrentUid() + "-" + id
-            val count = Status.getINSTANCE().getWaterFriendLogList().get(id)
-            if (count == null) {
-                return true
-            }
+        @JvmStatic
+        fun canWaterFriendToday(id: String, newCount: Int): Boolean {
+            val key = "${UserMap.currentUid}-$id"
+            val count = INSTANCE.waterFriendLogList[key] ?: return true
             return count < newCount
         }
 
-        fun waterFriendToday(id: String?, count: Int) {
-            var id = id
-            id = UserMap.getCurrentUid() + "-" + id
-            Status.getINSTANCE().getWaterFriendLogList().put(id, count)
+        @JvmStatic
+        fun waterFriendToday(id: String, count: Int) {
+            val key = "${UserMap.currentUid}-$id"
+            INSTANCE.waterFriendLogList[key] = count
             save()
         }
 
-        fun getReserveTimes(id: String?): Int {
-            val count = Status.getINSTANCE().getReserveLogList().get(id)
-            if (count == null) {
-                return 0
-            }
-            return count
+        @JvmStatic
+        fun getReserveTimes(id: String): Int {
+            return INSTANCE.reserveLogList[id] ?: 0
         }
 
-        fun canReserveToday(id: String?, count: Int): Boolean {
+        @JvmStatic
+        fun canReserveToday(id: String, count: Int): Boolean {
             return getReserveTimes(id) < count
         }
 
-        fun reserveToday(id: String?, newCount: Int) {
-            var count = Status.getINSTANCE().getReserveLogList().get(id)
-            if (count == null) {
-                count = 0
-            }
-            Status.getINSTANCE().getReserveLogList().put(id, count + newCount)
+        @JvmStatic
+        fun reserveToday(id: String, newCount: Int) {
+            val count = INSTANCE.reserveLogList[id] ?: 0
+            INSTANCE.reserveLogList[id] = count + newCount
             save()
         }
 
-        fun canCooperateWaterToday(uid: String?, coopId: String?): Boolean {
-            return !Status.getINSTANCE().getCooperateWaterList().contains(uid + "_" + coopId)
+        @JvmStatic
+        fun canCooperateWaterToday(uid: String, coopId: String): Boolean {
+            return !INSTANCE.cooperateWaterList.contains("${uid}_$coopId")
         }
 
+        @JvmStatic
         fun cooperateWaterToday(uid: String?, coopId: String?) {
-            val v = uid + "_" + coopId
-            if (!Status.getINSTANCE().getCooperateWaterList().contains(v)) {
-                Status.getINSTANCE().getCooperateWaterList().add(v)
+            val v = "${uid}_$coopId"
+            if (INSTANCE.cooperateWaterList.add(v)) {
                 save()
             }
         }
 
-        fun canAncientTreeToday(cityCode: String?): Boolean {
-            return !Status.getINSTANCE().getAncientTreeCityCodeList().contains(cityCode)
+        @JvmStatic
+        fun canAncientTreeToday(cityCode: String): Boolean {
+            return !INSTANCE.ancientTreeCityCodeList.contains(cityCode)
         }
 
-        fun ancientTreeToday(cityCode: String?) {
-            if (!Status.getINSTANCE().getAncientTreeCityCodeList().contains(cityCode)) {
-                Status.getINSTANCE().getAncientTreeCityCodeList().add(cityCode)
+        @JvmStatic
+        fun ancientTreeToday(cityCode: String) {
+            if (INSTANCE.ancientTreeCityCodeList.add(cityCode)) {
                 save()
             }
         }
 
+        @JvmStatic
         fun canAnswerQuestionToday(): Boolean {
-            return !Status.getINSTANCE().answerQuestion
+            return !INSTANCE.answerQuestion
         }
 
+        @JvmStatic
         fun answerQuestionToday() {
-            if (!Status.getINSTANCE().answerQuestion) {
-                Status.getINSTANCE().answerQuestion = true
+            if (!INSTANCE.answerQuestion) {
+                INSTANCE.answerQuestion = true
                 save()
             }
         }
 
-        fun canFeedFriendToday(id: String?, newCount: Int): Boolean {
-            val count = Status.getINSTANCE().feedFriendLogList.get(id)
-            if (count == null) {
-                return true
-            }
+        @JvmStatic
+        fun canFeedFriendToday(id: String, newCount: Int): Boolean {
+            val count = INSTANCE.feedFriendLogList[id] ?: return true
             return count < newCount
         }
 
-        fun feedFriendToday(id: String?) {
-            var count = Status.getINSTANCE().feedFriendLogList.get(id)
-            if (count == null) {
-                count = 0
-            }
-            Status.getINSTANCE().feedFriendLogList.put(id, count + 1)
+        @JvmStatic
+        fun feedFriendToday(id: String) {
+            val count = INSTANCE.feedFriendLogList[id] ?: 0
+            INSTANCE.feedFriendLogList[id] = count + 1
             save()
         }
 
-        fun canVisitFriendToday(id: String?, newCount: Int): Boolean {
-            var id = id
-            id = UserMap.getCurrentUid() + "-" + id
-            val count = Status.getINSTANCE().visitFriendLogList.get(id)
-            if (count == null) {
-                return true
-            }
+        @JvmStatic
+        fun canVisitFriendToday(id: String, newCount: Int): Boolean {
+            val key = "${UserMap.currentUid}-$id"
+            val count = INSTANCE.visitFriendLogList[key] ?: return true
             return count < newCount
         }
 
-        fun visitFriendToday(id: String?, newCount: Int) {
-            var id = id
-            id = UserMap.getCurrentUid() + "-" + id
-            Status.getINSTANCE().visitFriendLogList.put(id, newCount)
+        @JvmStatic
+        fun visitFriendToday(id: String, newCount: Int) {
+            val key = "${UserMap.currentUid}-$id"
+            INSTANCE.visitFriendLogList[key] = newCount
             save()
         }
 
-        fun canMemberSignInToday(uid: String?): Boolean {
-            return !Status.getINSTANCE().memberSignInList.contains(uid)
+        @JvmStatic
+        fun canMemberSignInToday(uid: String): Boolean {
+            return !INSTANCE.memberSignInList.contains(uid)
         }
 
-        fun memberSignInToday(uid: String?) {
-            if (!Status.getINSTANCE().memberSignInList.contains(uid)) {
-                Status.getINSTANCE().memberSignInList.add(uid)
+        @JvmStatic
+        fun memberSignInToday(uid: String) {
+            if (INSTANCE.memberSignInList.add(uid)) {
                 save()
             }
         }
 
+        @JvmStatic
         fun canUseAccelerateTool(): Boolean {
-            return Status.getINSTANCE().useAccelerateToolCount < 8
+            return INSTANCE.useAccelerateToolCount < 8
         }
 
+        @JvmStatic
         fun useAccelerateTool() {
-            Status.getINSTANCE().useAccelerateToolCount += 1
+            INSTANCE.useAccelerateToolCount += 1
             save()
         }
 
-
-        fun canDonationEgg(uid: String?): Boolean {
-            return !Status.getINSTANCE().donationEggList.contains(uid)
+        @JvmStatic
+        fun canDonationEgg(uid: String): Boolean {
+            return !INSTANCE.donationEggList.contains(uid)
         }
 
-        fun donationEgg(uid: String?) {
-            if (!Status.getINSTANCE().donationEggList.contains(uid)) {
-                Status.getINSTANCE().donationEggList.add(uid)
+        @JvmStatic
+        fun donationEgg(uid: String) {
+            if (INSTANCE.donationEggList.add(uid)) {
                 save()
             }
         }
 
-        fun canSpreadManureToday(uid: String?): Boolean {
-            return !Status.getINSTANCE().spreadManureList.contains(uid)
+        @JvmStatic
+        fun canSpreadManureToday(uid: String): Boolean {
+            return !INSTANCE.spreadManureList.contains(uid)
         }
 
-        fun spreadManureToday(uid: String?) {
-            if (!Status.getINSTANCE().spreadManureList.contains(uid)) {
-                Status.getINSTANCE().spreadManureList.add(uid)
+        @JvmStatic
+        fun spreadManureToday(uid: String) {
+            if (INSTANCE.spreadManureList.add(uid)) {
                 save()
             }
         }
 
-        /**
-         * 是否可以新村助力
-         *
-         * @return true是，false否
-         */
+        @JvmStatic
         fun canAntStallAssistFriendToday(): Boolean {
-            return !Status.getINSTANCE().antStallAssistFriend.contains(UserMap.getCurrentUid())
+            return !INSTANCE.antStallAssistFriend.contains(UserMap.currentUid)
         }
 
-        /**
-         * 设置新村助力已到上限
-         */
+        @JvmStatic
         fun antStallAssistFriendToday() {
-            val uid = UserMap.getCurrentUid()
-            if (!Status.getINSTANCE().antStallAssistFriend.contains(uid)) {
-                Status.getINSTANCE().antStallAssistFriend.add(uid)
+            if (INSTANCE.antStallAssistFriend.add(UserMap.currentUid)) {
                 save()
             }
         }
 
-        // 农场助力
+        @JvmStatic
         fun canAntOrchardAssistFriendToday(): Boolean {
-            return !Status.getINSTANCE().antOrchardAssistFriend.contains(UserMap.getCurrentUid())
+            return !INSTANCE.antOrchardAssistFriend.contains(UserMap.currentUid)
         }
 
+        @JvmStatic
         fun antOrchardAssistFriendToday() {
-            val uid = UserMap.getCurrentUid()
-            if (!Status.getINSTANCE().antOrchardAssistFriend.contains(uid)) {
-                Status.getINSTANCE().antOrchardAssistFriend.add(uid)
+            if (INSTANCE.antOrchardAssistFriend.add(UserMap.currentUid)) {
                 save()
             }
         }
 
+        @JvmStatic
         fun canProtectBubbleToday(uid: String?): Boolean {
-            return !Status.getINSTANCE().getProtectBubbleList().contains(uid)
+            return !INSTANCE.protectBubbleList.contains(uid)
         }
 
+        @JvmStatic
         fun protectBubbleToday(uid: String?) {
-            if (!Status.getINSTANCE().getProtectBubbleList().contains(uid)) {
-                Status.getINSTANCE().getProtectBubbleList().add(uid)
-                save()
+            if (uid != null) {
+                if (INSTANCE.protectBubbleList.add(uid)) {
+                    save()
+                }
+            } else {
+                Log.error("protectBubbleToday uid is null")
             }
         }
 
-        /**
-         * 是否可以贴罚单
-         *
-         * @return true是，false否
-         */
+        @JvmStatic
         fun canPasteTicketTime(): Boolean {
-            return !Status.getINSTANCE().canPasteTicketTime.contains(UserMap.getCurrentUid())
+            return !INSTANCE.canPasteTicketTime.contains(UserMap.currentUid)
         }
 
-        /**
-         * 罚单贴完了
-         */
+        @JvmStatic
         fun pasteTicketTime() {
-            if (Status.getINSTANCE().canPasteTicketTime.contains(UserMap.getCurrentUid())) {
-                return
+            if (INSTANCE.canPasteTicketTime.add(UserMap.currentUid)) {
+                save()
             }
-            Status.getINSTANCE().canPasteTicketTime.add(UserMap.getCurrentUid())
-            save()
         }
 
+        @JvmStatic
         fun canDoubleToday(): Boolean {
-            val task: AntForest? = ModelTask.getModel<AntForest?>(AntForest::class.java)
-            if (task == null) {
-                return false
-            }
-            return Status.getINSTANCE().getDoubleTimes() < Objects.requireNonNull<IntegerModelField?>(task.getDoubleCountLimit()).value
+            val task = Model.getModel(AntForest::class.java) ?: return false
+            return INSTANCE.doubleTimes < (task.doubleCountLimit?.value ?: 0)
         }
 
-        fun DoubleToday() {
-            Status.getINSTANCE().setDoubleTimes(Status.getINSTANCE().getDoubleTimes() + 1)
+        @JvmStatic
+        fun doubleToday() {
+            INSTANCE.doubleTimes += 1
             save()
         }
 
+        @JvmStatic
         fun canKbSignInToday(): Boolean {
-            return Status.getINSTANCE().kbSignIn < currentDayTimestamp
+            return INSTANCE.kbSignIn < currentDayTimestamp
         }
 
+        @JvmStatic
         fun KbSignInToday() {
-            val todayZero: Long = currentDayTimestamp // 获取当天零点时间戳
-            if (Status.getINSTANCE().kbSignIn != todayZero) {
-                Status.getINSTANCE().kbSignIn = todayZero
+            val todayZero = currentDayTimestamp
+            if (INSTANCE.kbSignIn != todayZero) {
+                INSTANCE.kbSignIn = todayZero
                 save()
             }
         }
 
-        fun setDadaDailySet(dailyAnswerList: MutableSet<String?>?) {
-            Status.getINSTANCE().dailyAnswerList = dailyAnswerList
+        @JvmStatic
+        fun setDadaDailySet(dailyAnswerList: MutableSet<String>) {
+            INSTANCE.dailyAnswerList = dailyAnswerList
             save()
         }
 
+        @JvmStatic
         fun canDonateCharityCoin(): Boolean {
-            return !Status.getINSTANCE().donateCharityCoin
+            return !INSTANCE.donateCharityCoin
         }
 
+        @JvmStatic
         fun donateCharityCoin() {
-            if (!Status.getINSTANCE().donateCharityCoin) {
-                Status.getINSTANCE().donateCharityCoin = true
+            if (!INSTANCE.donateCharityCoin) {
+                INSTANCE.donateCharityCoin = true
                 save()
             }
         }
 
-        fun canExchangeToday(uid: String?): Boolean {
-            return !Status.getINSTANCE().exchangeList.contains(uid)
+        @JvmStatic
+        fun canExchangeToday(uid: String): Boolean {
+            return !INSTANCE.exchangeList.contains(uid)
         }
 
-        fun exchangeToday(uid: String?) {
-            if (!Status.getINSTANCE().exchangeList.contains(uid)) {
-                Status.getINSTANCE().exchangeList.add(uid)
+        @JvmStatic
+        fun exchangeToday(uid: String) {
+            if (INSTANCE.exchangeList.add(uid)) {
                 save()
             }
         }
 
-        /**
-         * 绿色经营-是否可以收好友金币
-         *
-         * @return true是，false否
-         */
+        @JvmStatic
         fun canGreenFinancePointFriend(): Boolean {
-            return Status.getINSTANCE().greenFinancePointFriend.contains(UserMap.getCurrentUid())
+            return INSTANCE.greenFinancePointFriend.contains(UserMap.currentUid)
         }
 
-        /**
-         * 绿色经营-收好友金币完了
-         */
+        @JvmStatic
         fun greenFinancePointFriend() {
-            if (canGreenFinancePointFriend()) {
-                return
-            }
-            Status.getINSTANCE().greenFinancePointFriend.add(UserMap.getCurrentUid())
+            if (canGreenFinancePointFriend()) return
+            INSTANCE.greenFinancePointFriend.add(UserMap.currentUid)
             save()
         }
 
-        /**
-         * 绿色经营-是否可以做评级任务
-         *
-         * @return true是，false否
-         */
+        @JvmStatic
         fun canGreenFinancePrizesMap(): Boolean {
             val week = TimeUtil.getWeekNumber(Date())
-            val currentUid = UserMap.getCurrentUid()
-            if (Status.getINSTANCE().greenFinancePrizesMap.containsKey(currentUid)) {
-                val storedWeek = Status.getINSTANCE().greenFinancePrizesMap.get(currentUid)
+            val currentUid = UserMap.currentUid
+            if (INSTANCE.greenFinancePrizesMap.containsKey(currentUid)) {
+                val storedWeek = INSTANCE.greenFinancePrizesMap[currentUid]
                 return storedWeek == null || storedWeek != week
             }
             return true
         }
 
-        /**
-         * 绿色经营-评级任务完了
-         */
+        @JvmStatic
         fun greenFinancePrizesMap() {
-            if (!canGreenFinancePrizesMap()) {
-                return
-            }
-            Status.getINSTANCE().greenFinancePrizesMap.put(UserMap.getCurrentUid(), TimeUtil.getWeekNumber(Date()))
+            if (!canGreenFinancePrizesMap()) return
+            INSTANCE.greenFinancePrizesMap[UserMap.currentUid] = TimeUtil.getWeekNumber(Date())
             save()
         }
 
-        /**
-         * 加载状态文件
-         *
-         * @return 状态对象
-         */
         @Synchronized
+        @JvmStatic
         fun load(currentUid: String?): Status {
-//        String currentUid = UserMap.getCurrentUid();
             if (StringUtil.isEmpty(currentUid)) {
                 Log.runtime(TAG, "用户为空，状态加载失败")
                 throw RuntimeException("用户为空，状态加载失败")
@@ -488,9 +427,11 @@ class Status {
                 if (statusFile.exists()) {
                     Log.runtime(TAG, "加载 status.json")
                     val json = Files.readFromFile(statusFile)
-                    if (!json.trim { it <= ' ' }.isEmpty()) {
-                        JsonUtil.copyMapper().readerForUpdating(Status.getINSTANCE()).readValue<Any?>(json)
-                        val formatted = JsonUtil.formatJson(Status.getINSTANCE())
+                    if (!json.trim().isEmpty()) {
+                        // 使用 Jackson 更新现有对象
+                        JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue<Status>(json)
+                        // 格式化检查
+                        val formatted = JsonUtil.formatJson(INSTANCE)
                         if (formatted != null && formatted != json) {
                             Log.runtime(TAG, "重新格式化 status.json")
                             Files.write2File(formatted, statusFile)
@@ -508,35 +449,30 @@ class Status {
                 Log.runtime(TAG, "状态文件格式有误，已重置")
                 resetAndSaveConfig()
             }
-            if (Status.getINSTANCE().saveTime == null) {
-                Status.getINSTANCE().saveTime = System.currentTimeMillis()
+
+            // 这里逻辑有点奇怪，如果 saveTime 是 0，则设为当前时间。
+            // 原始 Java 代码中 Long 默认为 null，但这里属性初始化为 0L。
+            if (INSTANCE.saveTime == 0L) {
+                INSTANCE.saveTime = System.currentTimeMillis()
             }
-            return Status.getINSTANCE()
+            return INSTANCE
         }
 
-        /**
-         * 初始化默认配置
-         *
-         * @param statusFile 状态文件
-         */
-        private fun initializeDefaultConfig(statusFile: File?) {
+        private fun initializeDefaultConfig(statusFile: java.io.File) {
             try {
-                JsonUtil.copyMapper().updateValue<Status?>(Status.getINSTANCE(), Status())
+                JsonUtil.copyMapper().updateValue(INSTANCE, Status())
                 Log.runtime(TAG, "初始化 status.json")
-                Files.write2File(JsonUtil.formatJson(Status.getINSTANCE()), statusFile)
+                Files.write2File(JsonUtil.formatJson(INSTANCE), statusFile)
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
                 throw RuntimeException("初始化配置失败", e)
             }
         }
 
-        /**
-         * 重置配置并保存
-         */
         private fun resetAndSaveConfig() {
             try {
-                JsonUtil.copyMapper().updateValue<Status?>(Status.getINSTANCE(), Status())
-                Files.write2File(JsonUtil.formatJson(Status.getINSTANCE()), Files.getStatusFile(UserMap.getCurrentUid()))
+                JsonUtil.copyMapper().updateValue(INSTANCE, Status())
+                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(UserMap.currentUid))
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
                 throw RuntimeException("重置配置失败", e)
@@ -544,22 +480,19 @@ class Status {
         }
 
         @Synchronized
+        @JvmStatic
         fun unload() {
             try {
-                JsonUtil.copyMapper().updateValue<Status?>(Status.getINSTANCE(), Status())
+                JsonUtil.copyMapper().updateValue(INSTANCE, Status())
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
             }
         }
 
         @Synchronized
-        fun save() {
-            save(Calendar.getInstance())
-        }
-
-        @Synchronized
-        fun save(nowCalendar: Calendar) {
-            val currentUid = UserMap.getCurrentUid()
+        @JvmStatic
+        fun save(nowCalendar: Calendar = Calendar.getInstance()) {
+            val currentUid = UserMap.currentUid
             if (StringUtil.isEmpty(currentUid)) {
                 Log.record(TAG, "用户为空，状态保存失败")
                 throw RuntimeException("用户为空，状态保存失败")
@@ -569,77 +502,84 @@ class Status {
             } else {
                 Log.runtime(TAG, "保存 status.json")
             }
-            val lastSaveTime = Status.getINSTANCE().saveTime
+            val lastSaveTime = INSTANCE.saveTime
             try {
-                Status.getINSTANCE().saveTime = System.currentTimeMillis()
-                Files.write2File(JsonUtil.formatJson(Status.getINSTANCE()), Files.getStatusFile(currentUid))
+                INSTANCE.saveTime = System.currentTimeMillis()
+                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid))
             } catch (e: Exception) {
-                Status.getINSTANCE().saveTime = lastSaveTime
+                INSTANCE.saveTime = lastSaveTime
                 throw e
             }
         }
 
+        @JvmStatic
         fun updateDay(nowCalendar: Calendar): Boolean {
-            if (TimeUtil.isLessThanSecondOfDays(Status.getINSTANCE().saveTime, nowCalendar.getTimeInMillis())) {
+            if (TimeUtil.isLessThanSecondOfDays(INSTANCE.saveTime, nowCalendar.timeInMillis)) {
                 unload()
                 return true
-            } else {
-                return false
             }
+            return false
         }
 
+        @JvmStatic
         fun canOrnamentToday(): Boolean {
-            return Status.getINSTANCE().canOrnament
+            return INSTANCE.canOrnament
         }
 
+        @JvmStatic
         fun setOrnamentToday() {
-            if (Status.getINSTANCE().canOrnament) {
-                Status.getINSTANCE().canOrnament = false
+            if (INSTANCE.canOrnament) {
+                INSTANCE.canOrnament = false
                 save()
             }
         }
 
-        // 新村捐赠
+        @JvmStatic
         fun canStallDonateToday(): Boolean {
-            return Status.getINSTANCE().canStallDonate
+            return INSTANCE.canStallDonate
         }
 
+        @JvmStatic
         fun setStallDonateToday() {
-            if (Status.getINSTANCE().canStallDonate) {
-                Status.getINSTANCE().canStallDonate = false
+            if (INSTANCE.canStallDonate) {
+                INSTANCE.canStallDonate = false
                 save()
             }
         }
 
-        fun hasFlagToday(flag: String?): Boolean {
-            return Status.getINSTANCE().flagList.contains(flag)
+        @JvmStatic
+        fun hasFlagToday(flag: String): Boolean {
+            return INSTANCE.flagList.contains(flag)
         }
 
-        fun setFlagToday(flag: String?) {
-            if (!hasFlagToday(flag)) {
-                Status.getINSTANCE().flagList.add(flag)
+        @JvmStatic
+        fun setFlagToday(flag: String) {
+            if (INSTANCE.flagList.add(flag)) {
                 save()
             }
         }
 
-        //2025/12/4 用来获取 自定义flag的int
-        fun getIntFlagToday(key: String?): Int? {
-            return Status.getINSTANCE().intFlagMap.get(key)
+        // 2025/12/4 用来获取 自定义flag的int
+        @JvmStatic
+        fun getIntFlagToday(key: String): Int? {
+            return INSTANCE.intFlagMap[key]
         }
 
-        fun setIntFlagToday(key: String?, value: Int) {
-            Status.getINSTANCE().intFlagMap.put(key, value)
+        @JvmStatic
+        fun setIntFlagToday(key: String, value: Int) {
+            INSTANCE.intFlagMap[key] = value
             save()
         }
 
-
-        fun canMemberPointExchangeBenefitToday(benefitId: String?): Boolean {
-            return !Status.getINSTANCE().memberPointExchangeBenefitLogList.contains(benefitId)
+        @JvmStatic
+        fun canMemberPointExchangeBenefitToday(benefitId: String): Boolean {
+            return !INSTANCE.memberPointExchangeBenefitLogList.contains(benefitId)
         }
 
-        fun memberPointExchangeBenefitToday(benefitId: String?) {
+        @JvmStatic
+        fun memberPointExchangeBenefitToday(benefitId: String) {
             if (canMemberPointExchangeBenefitToday(benefitId)) {
-                Status.getINSTANCE().memberPointExchangeBenefitLogList.add(benefitId)
+                INSTANCE.memberPointExchangeBenefitLogList.add(benefitId)
                 save()
             }
         }
@@ -650,8 +590,9 @@ class Status {
          * @param spuId 商品spuId
          * @return true 可以兑换 false 兑换达到上限
          */
-        fun canParadiseCoinExchangeBenefitToday(spuId: String?): Boolean {
-            return !hasFlagToday("farm::paradiseCoinExchangeLimit::" + spuId)
+        @JvmStatic
+        fun canParadiseCoinExchangeBenefitToday(spuId: String): Boolean {
+            return !hasFlagToday("farm::paradiseCoinExchangeLimit::$spuId")
         }
     }
 }
