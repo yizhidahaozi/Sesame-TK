@@ -69,11 +69,6 @@ class AntFarm : ModelTask() {
     private var rewardList: Array<RewardFriend>? = null
 
 
-
-
-
-
-
     /**
      * 慈善评分
      */
@@ -116,7 +111,7 @@ class AntFarm : ModelTask() {
     }
 
     override fun getName(): String {
-        return "庄园"
+        return "蚂蚁庄园"
     }
 
     override fun getGroup(): ModelGroup {
@@ -206,7 +201,7 @@ class AntFarm : ModelTask() {
      */
     private var doFarmTask: BooleanModelField? = null // 做饲料任务
     private var doFarmTaskTime: StringModelField? = null // 饲料任务执行时间
-    
+
     /**
      * 收取饲料奖励（无时间限制）
      */
@@ -285,9 +280,11 @@ class AntFarm : ModelTask() {
         modelFields.addField(
             SelectAndCountModelField(
                 "feedFriendAnimalList",
-                "喂小鸡好友列表",
-                LinkedHashMap<String?, Int?>()
-            ) { AlipayUser.getList() }.also {
+                "帮喂小鸡 | 好友列表",
+                LinkedHashMap<String?, Int?>(),
+                AlipayUser.getList(),
+                "记得设置帮喂次数.."
+            ).also {
                 feedFriendAnimalList = it
             })
         modelFields.addField(BooleanModelField("getFeed", "一起拿饲料", false).also {
@@ -314,9 +311,11 @@ class AntFarm : ModelTask() {
         modelFields.addField(
             SelectAndCountModelField(
                 "visitFriendList",
-                "送麦子好友列表",
-                LinkedHashMap<String?, Int?>()
-            ) { AlipayUser.getList() }.also {
+                "送麦子 | 好友列表",
+                LinkedHashMap<String?, Int?>(),
+                AlipayUser.getList(),
+                "请设置赠送次数..孩子"
+            ).also {
                 visitFriendList = it
             })
         modelFields.addField(
@@ -450,7 +449,7 @@ class AntFarm : ModelTask() {
                 "饲料任务执行时间 | 默认8:30后执行",
                 "0830"
             ).also { doFarmTaskTime = it })
-        
+
         modelFields.addField(
             BooleanModelField(
                 "receiveFarmTaskAward",
@@ -601,7 +600,7 @@ class AntFarm : ModelTask() {
             if (enterFarm() == null) {
                 return
             }
-            
+
             recallAnimal()
             tc.countDebug("召回小鸡")
 
@@ -715,7 +714,6 @@ class AntFarm : ModelTask() {
             }
 
 
-
             // 雇佣小鸡
             if (hireAnimal!!.value) {
                 hireAnimal()
@@ -789,24 +787,24 @@ class AntFarm : ModelTask() {
                         SubAnimalType.NORMAL -> Log.record(TAG, "小鸡太饿，离家出走了")
                         SubAnimalType.PIRATE -> Log.record(TAG, "小鸡外出探险了")
                         SubAnimalType.WORK -> Log.record(TAG, "小鸡出去工作啦")
-                        else -> Log.record(TAG, "小鸡不在庄园" + " " + ownerAnimal.subAnimalType)
                     }
                     var hungry = false
                     val userName =
                         UserMap.getMaskName(AntFarmRpcCall.farmId2UserId(ownerAnimal.currentFarmId))
-                when (AnimalFeedStatus.valueOf(ownerAnimal.animalFeedStatus!!)) {
-                    AnimalFeedStatus.HUNGRY -> {
-                        hungry = true
-                        Log.record(TAG, "小鸡在[$userName]的庄园里挨饿")
-                    }
+                    when (AnimalFeedStatus.valueOf(ownerAnimal.animalFeedStatus!!)) {
+                        AnimalFeedStatus.HUNGRY -> {
+                            hungry = true
+                            Log.record(TAG, "小鸡在[$userName]的庄园里挨饿")
+                        }
 
-                    AnimalFeedStatus.EATING -> Log.record(
-                        TAG,
-                        "小鸡在[$userName]的庄园里吃得津津有味"
-                    )
-                    AnimalFeedStatus.SLEEPY -> Log.record(TAG, "小鸡在[$userName]的庄园里睡觉")
-                    AnimalFeedStatus.NONE -> Log.record(TAG, "小鸡在[$userName]的庄园里状态未知")
-                }
+                        AnimalFeedStatus.EATING -> Log.record(
+                            TAG,
+                            "小鸡在[$userName]的庄园里吃得津津有味"
+                        )
+
+                        AnimalFeedStatus.SLEEPY -> Log.record(TAG, "小鸡在[$userName]的庄园里睡觉")
+                        AnimalFeedStatus.NONE -> Log.record(TAG, "小鸡在[$userName]的庄园里状态未知")
+                    }
                     val recall = when (recallAnimalType!!.value) {
                         RecallAnimalType.ALWAYS -> true
                         RecallAnimalType.WHEN_THIEF -> !guest
@@ -846,8 +844,7 @@ class AntFarm : ModelTask() {
                 val controlTag = mallItemInfo.getString("controlTag")
                 val spuId = mallItemInfo.getString("spuId")
                 oderInfo = spuName + "\n价格" + minPrice + "乐园币\n" + controlTag
-                IdMapManager.getInstance(ParadiseCoinBenefitIdMap::class.java)
-                    .add(spuId, oderInfo)
+                IdMapManager.getInstance(ParadiseCoinBenefitIdMap::class.java).add(spuId, oderInfo)
                 val itemStatusList = mallItemInfo.getJSONArray("itemStatusList")
                 if (!Status.canParadiseCoinExchangeBenefitToday(spuId) || !paradiseCoinExchangeBenefitList!!.value
                         .contains(spuId) || isExchange(itemStatusList, spuId, spuName)
@@ -1020,7 +1017,7 @@ class AntFarm : ModelTask() {
      *
      * @return 庄园信息
      */
-    private  fun enterFarm(): JSONObject? {
+    private fun enterFarm(): JSONObject? {
         try {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
@@ -1119,26 +1116,26 @@ class AntFarm : ModelTask() {
                     DataStore.put(usedKey, 1)
                 }
             } else {
-            // 使用 DataStore 记录“当日已用次数”，每日上限为 2 次（按账号维度）
-            val today = LocalDate.now().toString()
-            val uid = UserMap.currentUid
-            val usedKey = "AF_BIG_EATER_USED_COUNT|$uid|$today"
-            val usedCount = DataStore.get(usedKey, Int::class.java) ?: 0
+                // 使用 DataStore 记录“当日已用次数”，每日上限为 2 次（按账号维度）
+                val today = LocalDate.now().toString()
+                val uid = UserMap.currentUid
+                val usedKey = "AF_BIG_EATER_USED_COUNT|$uid|$today"
+                val usedCount = DataStore.get(usedKey, Int::class.java) ?: 0
 
-            if (usedCount >= 2) {
-                Log.record("今日加饭卡已使用${usedCount}/2，跳过使用")
-            } else {
-                val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
-                if (result) {
-                    Log.farm("使用道具🎭[加饭卡]！")
-                    DataStore.put(usedKey, usedCount + 1)
-                    delay(1000)
-                    // 刷新状态
-                    syncAnimalStatus(ownerFarmId)
+                if (usedCount >= 2) {
+                    Log.record("今日加饭卡已使用${usedCount}/2，跳过使用")
                 } else {
-                    Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
+                    val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
+                    if (result) {
+                        Log.farm("使用道具🎭[加饭卡]！")
+                        DataStore.put(usedKey, usedCount + 1)
+                        delay(1000)
+                        // 刷新状态
+                        syncAnimalStatus(ownerFarmId)
+                    } else {
+                        Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
+                    }
                 }
-            }
             }
         }
 
@@ -1863,7 +1860,7 @@ class AntFarm : ModelTask() {
                 object : TypeReference<MutableSet<String?>>() {
                 }
             val badTaskSet: MutableSet<String?> =
-                DataStore.getOrCreate("badFarmTaskSet", typeRef)
+                getOrCreate("badFarmTaskSet", typeRef)
             badTaskSet.addAll(presetBad)
             DataStore.put("badFarmTaskSet", badTaskSet)
             val jo = JSONObject(AntFarmRpcCall.listFarmTask())
@@ -1879,7 +1876,7 @@ class AntFarm : ModelTask() {
                     if (badTaskSet.contains(bizKey)) continue
                     // 跳过今日已达上限的任务
                     if (Status.hasFlagToday("farm::task::limit::$bizKey")) continue
-                    
+
                     if (TaskStatus.TODO.name == taskStatus) {
                         if (!badTaskSet.contains(bizKey)) {
                             if ("VIDEO_TASK" == bizKey) {
@@ -1988,8 +1985,7 @@ class AntFarm : ModelTask() {
                                 Log.farm("庄园奖励[" + taskTitle + "]#" + awardCount + "g")
                                 doubleCheck = true
                                 if (unreceiveTaskAward > 0) unreceiveTaskAward--
-                            }
-                            else {
+                            } else {
                                 // 捕获饲料槽已满（331），设置满槽标记并停止后续领取
                                 val resultCode = receiveTaskAwardjo.optString("resultCode", "")
                                 val memo = receiveTaskAwardjo.optString("memo", "")
@@ -2229,16 +2225,16 @@ class AntFarm : ModelTask() {
             for (entry in feedFriendAnimalMap.entries) {
                 val userId: String = entry.key!!
                 val maxDailyCount: Int = entry.value!!
-                
+
                 // 智能冲突避免：如果是自己的账号
                 if (userId == UserMap.currentUid) {
                     if (feedAnimal!!.value) {
                         // 已开启"自动喂小鸡" → 优先使用蹲点机制（更精准），跳过好友列表喂食
                         Toast.show(
                             "⚠️ 配置冲突提醒\n" +
-                            "已开启「自动喂小鸡」，将使用蹲点机制（精准时间）\n" +
-                            "好友列表中的自己（配置${maxDailyCount}次）已被忽略\n" +
-                            "建议：无需在好友列表中添加自己"
+                                    "已开启「自动喂小鸡」，将使用蹲点机制（精准时间）\n" +
+                                    "好友列表中的自己（配置${maxDailyCount}次）已被忽略\n" +
+                                    "建议：无需在好友列表中添加自己"
                         )
                         continue
                     } else {
@@ -2246,7 +2242,7 @@ class AntFarm : ModelTask() {
                         // 继续执行后续逻辑
                     }
                 }
-                
+
                 if (!Status.canFeedFriendToday(userId, maxDailyCount)) continue
                 val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
                 delay(3 * 1000L) //延迟3秒
@@ -2954,7 +2950,7 @@ class AntFarm : ModelTask() {
                 val talkNodes = jo.getJSONArray("talkNodes")
                 val data = talkConfigs.getJSONObject(0)
                 val farmId = data.getString("farmId")
-                
+
                 val response2 = AntFarmRpcCall.feedFriendAnimalVisit(farmId)
                 if (response2.isNullOrEmpty()) {
                     Log.runtime(TAG, "feedFriendAnimalVisit: 收到空响应")
@@ -2966,7 +2962,7 @@ class AntFarm : ModelTask() {
                         jo = talkNodes.getJSONObject(i)
                         if ("FEED" != jo.getString("type")) continue
                         val consistencyKey = jo.getString("consistencyKey")
-                        
+
                         val response3 = AntFarmRpcCall.visitAnimalSendPrize(consistencyKey)
                         if (response3.isNullOrEmpty()) continue // 静默跳过，继续处理下一个
                         jo = JSONObject(response3)
@@ -2990,7 +2986,7 @@ class AntFarm : ModelTask() {
     }
 
     /* 雇佣好友小鸡 */
-    private  fun hireAnimal() {
+    private fun hireAnimal() {
         // 重置农场已满标志
         isFarmFull = false
         var animals: JSONArray? = null
@@ -3051,25 +3047,25 @@ class AntFarm : ModelTask() {
             }
             val needHireCount = 3 - animalCount
             Log.farm("雇佣小鸡👷[当前可雇佣小鸡数量:${needHireCount}只]")
-            
+
             // 前置检查：饲料是否足够
             if (foodStock < 50) {
                 Log.record(TAG, "❌ 雇佣失败：饲料不足（当前${foodStock}g，至少需要50g）")
                 return
             }
-            
+
             // 前置检查：是否配置了雇佣好友列表
             val hireAnimalSet = hireAnimalList!!.value
             if (hireAnimalSet.isEmpty()) {
                 Log.record(TAG, "❌ 雇佣失败：未配置雇佣好友列表")
                 Toast.show(
                     "⚠️ 雇佣小鸡配置错误\n" +
-                    "已开启「雇佣小鸡」但未配置好友列表\n" +
-                    "请在「雇佣小鸡 | 好友列表」中勾选好友"
+                            "已开启「雇佣小鸡」但未配置好友列表\n" +
+                            "请在「雇佣小鸡 | 好友列表」中勾选好友"
                 )
                 return
             }
-            
+
             var hasNext: Boolean
             var pageStartSum = 0
             var s: String?
@@ -3077,7 +3073,7 @@ class AntFarm : ModelTask() {
             var checkedCount = 0  // 检查过的好友数量
             var availableCount = 0  // 可雇佣状态的好友数量
             val initialAnimalCount = animalCount  // 记录初始数量
-            
+
             do {
                 s = AntFarmRpcCall.rankingList(pageStartSum)
                 jo = JSONObject(s)
@@ -3096,7 +3092,7 @@ class AntFarm : ModelTask() {
                         if (!isHireAnimal || userId == UserMap.currentUid) {
                             continue
                         }
-                        
+
                         checkedCount++
                         val actionTypeListStr = joo.getJSONArray("actionTypeList").toString()
                         if (actionTypeListStr.contains("can_hire_action")) {
@@ -3118,7 +3114,7 @@ class AntFarm : ModelTask() {
                     break
                 }
             } while (hasNext && animalCount < 3)
-            
+
             // 详细的结果报告
             val hiredCount = animalCount - initialAnimalCount
             if (animalCount < 3) {
@@ -3128,7 +3124,7 @@ class AntFarm : ModelTask() {
                 Log.record(TAG, "  • 还需雇佣：${stillNeed}只")
                 Log.record(TAG, "  • 已检查好友：${checkedCount}人")
                 Log.record(TAG, "  • 可雇佣状态：${availableCount}人")
-                
+
                 if (availableCount == 0) {
                     Log.record(TAG, "❌ 失败原因：好友列表中没有可雇佣的小鸡")
                     Log.record(TAG, "   建议：等待好友的小鸡回家或添加更多好友")
@@ -3723,7 +3719,7 @@ class AntFarm : ModelTask() {
      * 同步家庭亲密度状态
      * @param groupId 家庭组ID
      */
-    private suspend fun syncFamilyStatusIntimacy(groupId: String?) {
+    private fun syncFamilyStatusIntimacy(groupId: String?) {
         try {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.syncFamilyStatus(groupId, "INTIMACY_VALUE", userId))
@@ -3921,7 +3917,7 @@ class AntFarm : ModelTask() {
      * 家庭扭蛋抽奖
      * @return 是否还有剩余抽奖次数
      */
-    private suspend fun familyDraw(): Boolean {
+    private fun familyDraw(): Boolean {
         try {
             val jo = JSONObject(AntFarmRpcCall.familyDraw())
             if (ResChecker.checkRes(TAG, jo)) {
@@ -4010,7 +4006,7 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private suspend fun familyDrawSignReceiveFarmTaskAward(taskId: String?, title: String?) {
+    private fun familyDrawSignReceiveFarmTaskAward(taskId: String?, title: String?) {
         try {
             val jo = JSONObject(AntFarmRpcCall.familyDrawSignReceiveFarmTaskAward(taskId))
             if (ResChecker.checkRes(TAG, jo)) {
@@ -4026,7 +4022,7 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private suspend fun queryRecentFarmFood(queryNum: Int): JSONArray? {
+    private fun queryRecentFarmFood(queryNum: Int): JSONArray? {
         try {
             val jo = JSONObject(AntFarmRpcCall.queryRecentFarmFood(queryNum))
             if (!ResChecker.checkRes(TAG, jo)) {
@@ -4054,7 +4050,7 @@ class AntFarm : ModelTask() {
         return null
     }
 
-    private suspend fun familyFeedFriendAnimal(animals: JSONArray) {
+    private fun familyFeedFriendAnimal(animals: JSONArray) {
         try {
             for (i in 0..<animals.length()) {
                 val animal = animals.getJSONObject(i)
@@ -4098,7 +4094,7 @@ class AntFarm : ModelTask() {
      * 点击领取活动食物
      * @param gift 礼物信息对象
      */
-    private  fun clickForGiftV2(gift: JSONObject?) {
+    private fun clickForGiftV2(gift: JSONObject?) {
         if (gift == null) return
         try {
             val resultJson = JSONObject(
@@ -4110,7 +4106,7 @@ class AntFarm : ModelTask() {
             if (ResChecker.checkRes(TAG, resultJson)) {
                 Log.farm("领取活动食物成功," + "已领取" + resultJson.optInt("foodCount"))
             }
-        }  catch (e: Exception) {
+        } catch (e: Exception) {
             Log.runtime(TAG, "clickForGiftV2 err:")
             Log.printStackTrace(TAG, e)
         }
@@ -4167,7 +4163,6 @@ class AntFarm : ModelTask() {
         @JvmStatic
         fun loadAntFarmReferToken(): String? {
             if (!antFarmReferToken.isNullOrEmpty()) return antFarmReferToken
-
             val uid = UserMap.currentUid
             val vipData = IdMapManager.getInstance(VipDataIdMap::class.java)
             vipData.load(uid)
