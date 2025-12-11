@@ -31,7 +31,7 @@ public class Toast {
             Log.runtime(TAG, "Context is null, cannot show toast");
             return;
         }
-        boolean shouldShow = force || BaseModel.getShowToast().getValue();
+        boolean shouldShow = force || BaseModel.Companion.getShowToast().getValue();
         if (shouldShow) {
             displayToast(context.getApplicationContext(), message);
         }
@@ -70,7 +70,7 @@ public class Toast {
             toast.setGravity(
                     toast.getGravity(),
                     toast.getXOffset(),
-                    BaseModel.getToastOffsetY().getValue()
+                    BaseModel.Companion.getToastOffsetY().getValue()
             );
             toast.show();
         } catch (Throwable t) {
