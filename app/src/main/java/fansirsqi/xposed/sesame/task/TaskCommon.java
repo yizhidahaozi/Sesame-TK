@@ -20,10 +20,10 @@ public class TaskCommon {
         long currentTimeMillis = System.currentTimeMillis();
 
         // 只收能量时间检查
-        IS_ENERGY_TIME = checkTimeRangeConfig(BaseModel.getEnergyTime().getValue(), "只收能量时间", currentTimeMillis);
+        IS_ENERGY_TIME = checkTimeRangeConfig(BaseModel.Companion.getEnergyTime().getValue(), "只收能量时间", currentTimeMillis);
 
         // 模块休眠时间检查
-        IS_MODULE_SLEEP_TIME = checkTimeRangeConfig(BaseModel.getModelSleepTime().getValue(), "模块休眠时间", currentTimeMillis);
+        IS_MODULE_SLEEP_TIME = checkTimeRangeConfig(BaseModel.Companion.getModelSleepTime().getValue(), "模块休眠时间", currentTimeMillis);
 
         // 是否过了 8 点
         IS_AFTER_8AM = TimeUtil.isAfterOrCompareTimeStr(currentTimeMillis, "0800");
