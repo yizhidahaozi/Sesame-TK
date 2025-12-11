@@ -3,12 +3,12 @@ package fansirsqi.xposed.sesame.task.antOrchard
 import fansirsqi.xposed.sesame.hook.RequestManager
 
 object AntOrchardRpcCall {
-    private const val VERSION = "20250812.01"
+    private const val VERSION = "20251209.01"
 
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
             "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
-                    + VERSION + "\"}]");
+                    + VERSION + "\"}]")
     }
 
     fun extraInfoGet(): String {
