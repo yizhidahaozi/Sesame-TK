@@ -204,7 +204,7 @@ public class OldRpcBridge implements RpcBridge {
         if (!ApplicationHook.isOffline()) {
             ApplicationHook.setOffline(true);
             Notify.updateStatusText("登录超时");
-            if (BaseModel.getTimeoutRestart().getValue()) {
+            if (BaseModel.Companion.getTimeoutRestart().getValue()) {
                 Log.record(TAG,"尝试重新登录");
                 ApplicationHook.reLoginByBroadcast();
             }
@@ -214,8 +214,8 @@ public class OldRpcBridge implements RpcBridge {
      * 处理能量收集异常的情况。
      */
     private void handleEnergyCollectException() {
-        if (BaseModel.getWaitWhenException().getValue() > 0) {
-            long waitTime = System.currentTimeMillis() + BaseModel.getWaitWhenException().getValue();
+        if (BaseModel.Companion.getWaitWhenException().getValue() > 0) {
+            long waitTime = System.currentTimeMillis() + BaseModel.Companion.getWaitWhenException().getValue();
             RuntimeInfo.getInstance().put(RuntimeInfo.RuntimeInfoKey.ForestPauseTime, waitTime);
             Notify.updateStatusText("异常");
             Log.record(TAG,"触发异常, 等待至" + TimeUtil.getCommonDate(waitTime));
