@@ -41,7 +41,7 @@ public class TaskRunnerAdapter {
      * 执行任务 - 完整参数版本
      */
     public void run(boolean isFirst, ModelTask.TaskExecutionMode mode) {
-        run(isFirst, mode, BaseModel.getTaskExecutionRounds().getValue());
+        run(isFirst, mode, BaseModel.Companion.getTaskExecutionRounds().getValue());
     }
 
     /**
