@@ -633,13 +633,13 @@ class HtmlViewerActivity : BaseActivity() {
                     val matchedLines = lineNumbers.mapNotNull { index ->
                         allLogLines.getOrNull(index)
                     }
-                    val linesJson = Companion.toJsArray(matchedLines)
+                    val linesJson = toJsArray(matchedLines)
                     return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "index"}"""
                 }
                 
                 // 索引未找到，回退到全文搜索
                 val matchedLines = allLogLines.filter { it.contains(keyword, ignoreCase = false) }
-                val linesJson = Companion.toJsArray(matchedLines)
+                val linesJson = toJsArray(matchedLines)
                 return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "fulltext"}"""
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, e)

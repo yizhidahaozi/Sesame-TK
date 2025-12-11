@@ -46,16 +46,16 @@ public class Reserve extends ModelTask {
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
-        modelFields.addField(reserveList = new SelectAndCountModelField("reserveList", "保护地列表", new LinkedHashMap<>(), ReserveEntity::getList));
+        modelFields.addField(reserveList = new SelectAndCountModelField("reserveList", "保护地列表", new LinkedHashMap<>(), ReserveEntity::getList, "顾名思义"));
         return modelFields;
     }
 
     public Boolean check() {
         if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
+            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.Companion.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
             return false;
         } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
+            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.Companion.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
             return false;
         } else {
             return true;
@@ -130,7 +130,7 @@ public class Reserve extends ModelTask {
                 s = ReserveRpcCall.queryTreeItemsForExchange();
             }
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray ja = jo.getJSONArray("treeItems");
                 for (int i = 0; i < ja.length(); i++) {
                     jo = ja.getJSONObject(i);
@@ -171,7 +171,7 @@ public class Reserve extends ModelTask {
         try {
             String s = ReserveRpcCall.queryTreeForExchange(projectId);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 String applyAction = jo.getString("applyAction");
                 int currentEnergy = jo.getInt("currentEnergy");
                 jo = jo.getJSONObject("exchangeableTree");
@@ -208,7 +208,7 @@ public class Reserve extends ModelTask {
             for (int applyCount = 1; applyCount <= count; applyCount++) {
                 s = ReserveRpcCall.exchangeTree(projectId);
                 jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
+                if (ResChecker.checkRes(TAG, jo)) {
                     int vitalityAmount = jo.optInt("vitalityAmount", 0);
                     appliedTimes = Status.getReserveTimes(projectId) + 1;
                     String str = "领保护地🏕️[" + itemName + "]#第" + appliedTimes + "次"
