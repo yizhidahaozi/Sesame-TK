@@ -7,20 +7,19 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker.checkRes
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
-import java.util.Locale
 import java.util.Locale.getDefault
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 森林抽抽乐任务处理类（每天自动执行，完成后标记）
- * 
+ *
  * 核心流程：
  * 1. 检查活动有效期
  * 2. 循环处理任务（执行→领取）
  * 3. 执行抽奖
  * 4. 检查完成度并标记
- * 
+ *
  * 变量说明（Scene 对象）：
  * - s.id = activityId （活动ID，如 "2025101301"）
  * - s.code = sceneCode （场景代码，如 "ANTFOREST_NORMAL_DRAW"）
@@ -29,15 +28,15 @@ import java.util.concurrent.atomic.AtomicInteger
  * - s.taskCode = "${s.code}_TASK" （任务场景代码，如 "ANTFOREST_NORMAL_DRAW_TASK"）
  */
 class ForestChouChouLe {
-    
+
     companion object {
         private const val TAG = "ForestChouChouLe"
         private const val SOURCE = "task_entry"
-        
+
         // 屏蔽的任务类型（邀请好友类任务不执行）
         private val BLOCKED_TYPES = setOf("FOREST_NORMAL_DRAW_SHARE",
-                                    "FOREST_ACTIVITY_DRAW_SHARE",
-                                    "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
+            "FOREST_ACTIVITY_DRAW_SHARE",
+            "FOREST_ACTIVITY_DRAW_XS") //玩游戏得新机会
         private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱") // 屏蔽的任务名称关键词
 
         /**
@@ -50,7 +49,7 @@ class ForestChouChouLe {
         private data class Scene(val id: String, val code: String, val name: String, val flag: String) {
             val taskCode get() = "${code}_TASK"  // 任务场景代码
         }
-       
+
         // 动态获取抽奖场景配置
         private fun getScenes(): List<Scene> {
             return runCatching {
@@ -84,9 +83,9 @@ class ForestChouChouLe {
             }
         }
     }
-    
+
     private val taskTryCount = ConcurrentHashMap<String, AtomicInteger>()
-    
+
     fun chouChouLe() {
         runCatching {
             val scenes = getScenes()
@@ -98,7 +97,7 @@ class ForestChouChouLe {
             scenes.forEach { processScene(it); sleepCompat(3000L) }
         }.onFailure { Log.printStackTrace(TAG, "执行异常", it) }
     }
-    
+
     /**
      * 处理单个抽奖场景
      * @param s 场景对象 (s.id=活动ID, s.code=场景代码, s.name=场景名称, s.flag=完成标记)
@@ -109,9 +108,9 @@ class ForestChouChouLe {
             Log.record("⏭️ ${s.name} 今天已完成，跳过")
             return@runCatching
         }
-        
+
         Log.record("开始处理：${s.name} (ActivityId: ${s.id}, SceneCode: ${s.code})")
-        
+
         // 1. 检查活动有效期
         JSONObject(AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE)).let { resp ->
             if (!checkRes(TAG, resp)) return@runCatching
@@ -123,34 +122,34 @@ class ForestChouChouLe {
                 }
             }
         }
-        
+
         // 2. 处理任务（最多循环3次）
         repeat(3) { loop ->
             Log.record("${s.name} 第 ${loop + 1} 轮任务处理开始")
             // 获取任务列表（s.taskCode = 场景任务代码，如 "ANTFOREST_NORMAL_DRAW_TASK"）
             val tasks = JSONObject(AntForestRpcCall.listTaskopengreen(s.taskCode, SOURCE))
             if (!checkRes(TAG, tasks)) return@repeat
-            
+
             val taskList = tasks.getJSONArray("taskInfoList")
             Log.record("${s.name} 发现 ${taskList.length()} 个任务")
             var hasChange = false  // 是否有任务状态变化
-            
+
             // 处理每个任务
             for (i in 0 until taskList.length()) {
                 if (processTask(s, taskList.getJSONObject(i))) hasChange = true
             }
-            
+
             // 如果没有任务变化或已是最后一轮，退出
             if (!hasChange || loop >= 2) return@repeat
             Log.record("${s.name} 等待3秒后继续下一轮检查")
             sleepCompat(3000L)
         }
-        
+
         // 3. 抽奖（s.id=活动ID, s.code=场景代码）
         JSONObject(AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE)).takeIf { checkRes(TAG, it) }?.let { resp ->
             var balance = resp.getJSONObject("drawAsset").optInt("blance", 0)  // 剩余抽奖次数
             Log.record("${s.name} 剩余抽奖次数：$balance/${resp.getJSONObject("drawAsset").optInt("totalTimes", 0)}")
-            
+
             repeat(50) {
                 if (balance <= 0) return@repeat
                 Log.record("${s.name} 第 ${it + 1} 次抽奖")
@@ -163,7 +162,7 @@ class ForestChouChouLe {
                 }
             }
         }
-        
+
         // 4. 检查完成度并标记（s.taskCode=任务场景代码, s.flag=完成标记Key）
         Log.record("${s.name} 检查所有任务完成状态")
         JSONObject(AntForestRpcCall.listTaskopengreen(s.taskCode, SOURCE)).takeIf { checkRes(TAG, it) }?.let { resp ->
@@ -171,7 +170,7 @@ class ForestChouChouLe {
             var total = 0       // 总任务数（不含屏蔽任务）
             var completed = 0   // 已完成任务数
             var allDone = true  // 是否全部完成
-            
+
             for (i in 0 until taskList.length()) {
                 val task = taskList.getJSONObject(i)
                 val baseInfo = task.getJSONObject("taskBaseInfo")
@@ -179,12 +178,12 @@ class ForestChouChouLe {
                 val taskStatus = baseInfo.getString("taskStatus")
                 val bizInfo = JSONObject(baseInfo.getString("bizInfo"))
                 val taskName = bizInfo.optString("title", taskType)
-                
+
                 // 跳过屏蔽任务（类型和名称都检查）
                 if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }) continue
-                
+
                 total++
-                
+
                 // 判断任务是否完成：状态为 RECEIVED（已领取奖励）
                 if (taskStatus == TaskStatus.RECEIVED.name) {
                     completed++
@@ -194,7 +193,7 @@ class ForestChouChouLe {
                     Log.record("${s.name} 未完成任务: $taskName [状态: $taskStatus, 按钮: $btnText]")
                 }
             }
-            
+
             Log.record("${s.name} 任务完成度: $completed/$total")
             if (allDone) {
                 // 所有任务已完成，标记今天已处理（使用 s.flag）
@@ -205,7 +204,7 @@ class ForestChouChouLe {
             }
         }
     }.onFailure { Log.printStackTrace(TAG, "${s.name} 处理异常", it) }
-    
+
     /**
      * 处理单个任务
      * @param s 场景对象（包含活动ID、场景代码等信息）
@@ -219,19 +218,19 @@ class ForestChouChouLe {
         val taskCode = baseInfo.getString("sceneCode")      // 任务场景代码
         val taskStatus = baseInfo.getString("taskStatus")   // 任务状态：TODO/FINISHED/RECEIVED
         val taskType = baseInfo.getString("taskType")       // 任务类型
-        
+
         val rights = task.getJSONObject("taskRights")
         val current = rights.getInt("rightsTimes")      // 当前完成次数
         val limit = rights.getInt("rightsTimesLimit")   // 最大可完成次数
-        
+
         Log.record("${s.name} 任务: $taskName [$taskType] 状态: $taskStatus 进度: $current/$limit")
-        
+
         // 跳过屏蔽任务（邀请好友类）
         if (BLOCKED_TYPES.any { it in taskType } || BLOCKED_NAMES.any { it in taskName }){
             Log.record("${s.name} 已屏蔽任务，跳过：$taskName (类型: $taskType)")
             return false
         }
-        
+
         return when {
             // 活力值兑换任务（使用 s.id=活动ID, s.code=场景代码）
             taskType == "NORMAL_DRAW_EXCHANGE_VITALITY" && taskStatus == TaskStatus.TODO.name -> {
@@ -242,17 +241,17 @@ class ForestChouChouLe {
                     else Log.error(TAG, "${s.name} 活力值兑换失败: $taskName")
                 }
             }
-            
+
             // 待执行任务
-            (taskType.startsWith("FOREST_NORMAL_DRAW") || taskType.startsWith("FOREST_ACTIVITY_DRAW")) 
+            (taskType.startsWith("FOREST_NORMAL_DRAW") || taskType.startsWith("FOREST_ACTIVITY_DRAW"))
                     && taskStatus == TaskStatus.TODO.name -> {
                 Log.record("${s.name} 执行任务延时30S模拟：$taskName")
                 sleepCompat(30000L)
-                val result = if ("XLIGHT" in taskType) 
+                val result = if ("XLIGHT" in taskType)
                     AntForestRpcCall.finishTask4Chouchoule(taskType, taskCode)
-                else 
+                else
                     AntForestRpcCall.finishTaskopengreen(taskType, taskCode)
-                    
+
                 checkRes(TAG, result).also {
                     if (it) {
                         Log.forest("${s.name}🧾：$taskName 完成成功")
@@ -263,7 +262,7 @@ class ForestChouChouLe {
                     }
                 }
             }
-            
+
             // 领取奖励
             taskStatus == TaskStatus.FINISHED.name -> {
                 Log.record("${s.name} 领取奖励延时3S:$taskName")
@@ -277,7 +276,7 @@ class ForestChouChouLe {
                     }
                 } && limit - current > 0
             }
-            
+
             else -> false
         }
     }

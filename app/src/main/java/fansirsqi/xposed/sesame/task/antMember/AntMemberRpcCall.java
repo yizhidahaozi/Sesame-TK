@@ -566,9 +566,6 @@ public class AntMemberRpcCall {
         }
     }
 
-
-
-
     /**
      * [新] 福利中心首页
      */
@@ -791,7 +788,6 @@ public class AntMemberRpcCall {
             );
         }
 
-
         /**
          * 提交信用知识视频答题（shipingwenda）
          *
@@ -867,12 +863,10 @@ public class AntMemberRpcCall {
          * 领取进度球
          * 接口: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall
          */
-        public static String collectProgressBall(String... ballIds) {
+        public static String collectProgressBall(JSONArray ballIdList) {
             try {
                 JSONObject args = new JSONObject();
-                JSONArray arr = new JSONArray();
-                for (String id : ballIds) arr.put(id);
-                args.put("ballIdList", arr);
+                args.put("ballIdList", ballIdList); // 直接用 JSONArray
 
                 return RequestManager.requestString(
                         "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall",
@@ -883,6 +877,7 @@ public class AntMemberRpcCall {
                 return null;
             }
         }
+
         public static class Alchemy {
             /**
              * 芝麻炼金/积分首页

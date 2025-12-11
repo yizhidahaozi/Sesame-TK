@@ -86,7 +86,7 @@ public class AntDodo extends ModelTask {
                 collectToFriend();
             }
             if(autoGenerateBook.getValue()){
-                autoGenerateBook();
+                autoGenerateBook();//自动 兑换
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "start.run err:");
@@ -264,7 +264,7 @@ public class AntDodo extends ModelTask {
                 if (!doubleCheck) break;
             }
         } catch (JSONException e) {
-            Log.error(TAG, "JSON解析错误: " + e.getMessage());
+            Log.error(TAG, "神奇物种 JSON解析错误: " + e.getMessage());
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             Log.runtime(TAG, "AntDodo ReceiveTaskAward 错误:");
@@ -391,46 +391,63 @@ public class AntDodo extends ModelTask {
     private void collectToFriend() {
         try {
             JSONObject jo = new JSONObject(AntDodoRpcCall.queryFriend());
-            if (ResChecker.checkRes(TAG,jo)) {
-                int count = 0;
-                JSONArray limitList = jo.getJSONObject("data").getJSONObject("extend").getJSONArray("limit");
-                for (int i = 0; i < limitList.length(); i++) {
-                    JSONObject limit = limitList.getJSONObject(i);
-                    if (limit.getString("actionCode").equals("COLLECT_TO_FRIEND")) {
-                        if (limit.getLong("startTime") > System.currentTimeMillis()) {
-                            return;
-                        }
-                        count = limit.getInt("leftLimit");
-                        break;
+            if (!ResChecker.checkRes(TAG, jo)) {
+                Log.runtime(TAG, "神奇物种帮好友抽卡失败："+jo.getString("resultDesc"));
+                return;
+            }
+
+            // 获取可用次数
+            int count = 0;
+            JSONArray limitList = jo.getJSONObject("data").getJSONObject("extend").getJSONArray("limit");
+            for (int i = 0; i < limitList.length(); i++) {
+                JSONObject limit = limitList.getJSONObject(i);
+                if ("COLLECT_TO_FRIEND".equals(limit.getString("actionCode"))) {
+                    // 检查是否有开始时间限制
+                    if (limit.has("startTime") && limit.getLong("startTime") > System.currentTimeMillis()) {
+                        Log.forest("神奇物种🦕帮好友抽卡未到开放时间: " + limit.getString("startTimeStr"));
+                        return;
                     }
+                    count = limit.getInt("leftLimit");
+                    break;
                 }
-                JSONArray friendList = jo.getJSONObject("data").getJSONArray("friends");
-                for (int i = 0; i < friendList.length() && count > 0; i++) {
-                    JSONObject friend = friendList.getJSONObject(i);
-                    if (friend.getBoolean("dailyCollect")) {
-                        continue;
-                    }
-                    String useId = friend.getString("userId");
-                    boolean isCollectToFriend = collectToFriendList.getValue().contains(useId);
-                    if (collectToFriendType.getValue() == CollectToFriendType.DONT_COLLECT) {
-                        isCollectToFriend = !isCollectToFriend;
-                    }
-                    if (!isCollectToFriend) {
-                        continue;
-                    }
-                    jo = new JSONObject(AntDodoRpcCall.collect(useId));
-                    if (ResChecker.checkRes(TAG,jo)) {
-                        String ecosystem = jo.getJSONObject("data").getJSONObject("animal").getString("ecosystem");
-                        String name = jo.getJSONObject("data").getJSONObject("animal").getString("name");
-                        String userName = UserMap.getMaskName(useId);
-                        Log.forest("神奇物种🦕帮好友[" + userName + "]抽卡[" + ecosystem + "]#" + name);
-                        count--;
-                    } else {
-                        Log.runtime(TAG, jo.getString("resultDesc"));
-                    }
+            }
+
+            if (count <= 0) {
+                Log.forest("神奇物种🦕帮好友抽卡次数已用完");
+                return;
+            }
+
+            // 遍历好友列表
+            JSONArray friendList = jo.getJSONObject("data").getJSONArray("friends");
+            for (int i = 0; i < friendList.length() && count > 0; i++) {
+                JSONObject friend = friendList.getJSONObject(i);
+
+                // 跳过今日已帮助的好友
+                if (friend.getBoolean("dailyCollect")) {
+                    continue;
                 }
-            } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+
+                String userId = friend.getString("userId");
+
+                // 判断是否应该帮助该好友
+                boolean inList = collectToFriendList.getValue().contains(userId);
+                boolean shouldCollect = (collectToFriendType.getValue() == CollectToFriendType.COLLECT) ? inList : !inList;
+
+                if (!shouldCollect) {
+                    continue;
+                }
+
+                // 执行抽卡
+                jo = new JSONObject(AntDodoRpcCall.collecttarget(userId));
+                if (ResChecker.checkRes(TAG, jo)) {
+                    String ecosystem = jo.getJSONObject("data").getJSONObject("animal").getString("ecosystem");
+                    String name = jo.getJSONObject("data").getJSONObject("animal").getString("name");
+                    String userName = UserMap.getMaskName(userId);
+                    Log.forest("神奇物种🦕帮好友[" + userName + "]抽卡[" + ecosystem + "]#" + name);
+                    count--;
+                } else {
+                    Log.runtime(TAG, jo.getString("resultDesc"));
+                }
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "AntDodo CollectHelpFriend err:");
@@ -440,40 +457,49 @@ public class AntDodo extends ModelTask {
     /**
      * 自动合成图鉴
      */
+    /**
+     * 自动合成图鉴
+     */
     private void autoGenerateBook() {
         try {
             boolean hasMore;
-            int pageStart = 0;
+            int pageSize = 18; // 固定每页请求数量
+            int pageStart = 0; // 初始起始页
             do {
-                JSONObject jo = new JSONObject(AntDodoRpcCall.queryBookList(9, pageStart));
+                // 调用接口，传入 pageSize 和 pageStart
+                JSONObject jo = new JSONObject(AntDodoRpcCall.queryBookList(pageSize, String.valueOf(pageStart)));
                 if (!ResChecker.checkRes(TAG, jo)) {
                     break;
                 }
                 jo = jo.getJSONObject("data");
-                hasMore = jo.getBoolean("hasMore");
-                pageStart += 9;
+                hasMore = jo.getBoolean("hasMore"); // 是否有下一页
                 JSONArray bookForUserList = jo.getJSONArray("bookForUserList");
+
                 for (int i = 0; i < bookForUserList.length(); i++) {
-                    jo = bookForUserList.getJSONObject(i);
-                    if (!"已集齐".equals(
-                            jo.optString("medalGenerationStatus"))) {
+                    JSONObject bookItem = bookForUserList.getJSONObject(i);
+                    if (!"CAN_GENERATE".equals(bookItem.optString("medalGenerationStatus"))) {
                         continue;
                     }
-                    JSONObject animalBookResult = jo.getJSONObject("animalBookResult");
+                    JSONObject animalBookResult = bookItem.getJSONObject("animalBookResult");
                     String bookId = animalBookResult.getString("bookId");
                     String ecosystem = animalBookResult.getString("ecosystem");
-                    jo = new JSONObject(AntDodoRpcCall.generateBookMedal(bookId));
-                    if (!ResChecker.checkRes(TAG, jo)) {
-                        break;
+
+                    JSONObject genResp = new JSONObject(AntDodoRpcCall.generateBookMedal(bookId));
+                    if (!ResChecker.checkRes(TAG, genResp)) {
+                        Log.error(TAG, "合成勋章失败: " + bookId);
+                        continue; // 失败就跳过当前书籍
                     }
                     Log.forest("神奇物种🦕合成勋章[" + ecosystem + "]");
                 }
+
+                pageStart += pageSize; // 更新下一页起始
             } while (hasMore);
         } catch (Throwable t) {
             Log.runtime(TAG, "generateBookMedal err:");
             Log.printStackTrace(TAG, t);
         }
     }
+
     public interface CollectToFriendType {
         int COLLECT = 0;
         int DONT_COLLECT = 1;

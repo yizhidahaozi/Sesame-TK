@@ -12,7 +12,7 @@ import fansirsqi.xposed.sesame.util.ResChecker;
 
 /**
  * 6秒拼手速打地鼠
- * 
+ *
  * @author Byseven
  * @date 2025/3/7
  */
@@ -31,30 +31,30 @@ public class WhackMole {
         String source = "senlinguangchangdadishu";
         try {
             long startTime = System.currentTimeMillis();
-            
+
             // 1. 开始游戏
             JSONObject response = new JSONObject(AntForestRpcCall.startWhackMole(source));
             if (!response.optBoolean("success")) {
                 Log.runtime(TAG, response.optString("resultDesc", "开始游戏失败"));
                 return;
             }
-            
+
             JSONArray moleInfoArray = response.optJSONArray("moleInfo");
             if (moleInfoArray == null || moleInfoArray.length() == 0) {
                 Log.runtime(TAG, "没有地鼠信息");
                 return;
             }
-            
+
             String token = response.optString("token");
             if (token.isEmpty()) {
                 Log.runtime(TAG, "未获取到游戏token");
                 return;
             }
-            
+
             // 2. 收集地鼠信息
             List<Long> allMoleIds = new ArrayList<>();
             List<Long> bubbleMoleIds = new ArrayList<>();
-            
+
             for (int i = 0; i < moleInfoArray.length(); i++) {
                 JSONObject mole = moleInfoArray.getJSONObject(i);
                 long moleId = mole.getLong("id");
@@ -82,7 +82,7 @@ public class WhackMole {
                     Log.runtime(TAG, "打地鼠 " + moleId + " 失败");
                 }
             }
-            
+
             // 4. 计算剩余未打的地鼠ID
             List<String> remainingMoleIds = new ArrayList<>();
             for (Long moleId : allMoleIds) {
@@ -96,21 +96,19 @@ public class WhackMole {
             if (sleepTime > 0) {
                 GlobalThreadPools.sleepCompat(sleepTime);
             }
-            
+
             // 6. 结算游戏
             response = new JSONObject(AntForestRpcCall.settlementWhackMole(token, remainingMoleIds, source));
             if (ResChecker.checkRes(TAG, response)) {
                 int totalEnergy = response.optInt("totalEnergy", 0);
                 int provideEnergy = response.optInt("provideDefaultEnergy", 0);
-                Log.forest("森林能量⚡️[6秒拼手速完成 总能量+" + totalEnergy + "g (其中打地鼠+" + 
-                          (totalEnergy - provideEnergy) + "g, 默认奖励+" + provideEnergy + "g)]");
+                Log.forest("森林能量⚡️[6秒拼手速完成 总能量+" + totalEnergy + "g (其中打地鼠+" +
+                        (totalEnergy - provideEnergy) + "g, 默认奖励+" + provideEnergy + "g)]");
             }
-            
+
         } catch (Throwable t) {
             Log.runtime(TAG, "whackMole err");
             Log.printStackTrace(TAG, t);
         }
     }
-
-
 }

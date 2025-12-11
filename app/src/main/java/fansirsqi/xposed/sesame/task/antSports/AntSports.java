@@ -2474,10 +2474,31 @@ public class AntSports extends ModelTask {
                     }
 
                     JSONObject buildData = buildResp.optJSONObject("data");
-                    if (buildData == null) {
-                        Log.error(TAG, "build 响应数据为空: " + buildResp);
+                    if (buildData == null || buildData.length() == 0) {
+                        Log.record(TAG, "⚠️ build响应数据为空，当前地图已达限制，尝试切换地图");
+                        JSONObject mapResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapList());
+                        if (!ResChecker.checkRes(TAG + " 查询地图失败:", mapResp)
+                                || !mapResp.optBoolean("success", false)
+                                || mapResp.optJSONObject("data") == null) {
+                            Log.error(TAG, "queryMapList 失败, 响应数据: " + mapResp);
+                            return;
+                        }
+
+                        JSONArray mapList = mapResp.getJSONObject("data").optJSONArray("mapList");
+                        if (mapList == null || mapList.length() == 0) {
+                            Log.error(TAG, "地图列表为空, 无法继续");
+                            return;
+                        }
+
+                        // ========== 2. 查找或选择地图 ==========
+                        JSONObject currentMap = findOrChooseMap(mapList);
+                        if (currentMap == null) {
+                            Log.error(TAG, "无可用地图, 任务终止");
+                            return;
+                        }
                         break;
                     }
+
 
                     // 更新能量
                     int newLeftEnergy = buildData.optInt("leftCount", -1);

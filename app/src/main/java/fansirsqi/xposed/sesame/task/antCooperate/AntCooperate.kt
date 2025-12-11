@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antCooperate
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.CooperateEntity.Companion.getList
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -65,6 +66,9 @@ class AntCooperate : ModelTask() {
     private val loveCooperateWater = BooleanModelField("loveCooperateWater", "真爱合种 | 浇水", false)
     private val loveCooperateWaterNum = IntegerModelField("loveCooperateWaterNum", "真爱合种 | 浇水克数(最低20)", 20)
 
+    private val teamCooperateWaterNum = IntegerModelField("teamCooperateWaterNum", "组队合种 | 浇水克数(0为关闭，10-5000)", 0)
+
+
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
         modelFields.addField(cooperateWater)
@@ -74,6 +78,7 @@ class AntCooperate : ModelTask() {
         // 添加真爱合种配置
         modelFields.addField(loveCooperateWater)
         modelFields.addField(loveCooperateWaterNum)
+        modelFields.addField(teamCooperateWaterNum)
         return modelFields
     }
 
@@ -106,7 +111,12 @@ class AntCooperate : ModelTask() {
                 loveCooperateWater()
             }
 
-            // 2. 普通合种
+            // 2. 组队合种
+            if (teamCooperateWaterNum.value > 0) {
+                teamCooperateWater()
+
+            }
+            // 3. 普通合种
             if (cooperateWater.value) {
                 val queryUserCooperatePlantList = JSONObject(AntCooperateRpcCall.queryUserCooperatePlantList())
                 if (ResChecker.checkRes(TAG, queryUserCooperatePlantList)) {
@@ -219,11 +229,112 @@ class AntCooperate : ModelTask() {
             Log.printStackTrace(TAG, "loveCooperateWater err:", t)
         }
     }
+    // 组队合种浇水逻辑
+    /**
+     * 组队合种：自动浇水逻辑
+     */
+    private fun teamCooperateWater() {
+        try {
+            // 1. 用户自定义浇水数量限制（强制区间）
+            var configNum = teamCooperateWaterNum.value ?: 10  // null 时默认 10
+            configNum = configNum.coerceIn(10, 5000)
+
+            // 2. 今日执行总量是否达到用户设置上限
+            val todayUsed = Status.getIntFlagToday(StatusFlags.FLAG_TEAM_WATER_DAILY_COUNT) ?: 0
+            if (todayUsed >= configNum) {
+                Log.record(TAG, "组队合种今日已达用户设置上限，跳过")
+                return
+            }
+
+
+
+            // 4. 查询首页，用来获取 teamId + 当前能量
+            val homePageStr = AntCooperateRpcCall.queryHomePage()
+            val homeJo = JSONObject(homePageStr)
+            if (!ResChecker.checkRes(TAG, homeJo)) {
+                Log.record(TAG, "queryHomePage 返回异常")
+                return
+            }
+
+            val teamId = homeJo
+                .optJSONObject("teamHomeResult")
+                ?.optJSONObject("teamBaseInfo")
+                ?.optString("teamId")
+                ?.takeIf { it.isNotBlank() }
+
+            if (teamId == null) {
+                Log.record(TAG, "未获取到组队合种 TeamID")
+                return
+            }
+            // 3. 查询可浇水次数
+            val miscInfoStr = AntCooperateRpcCall.queryMiscInfo("teamCanWaterCount",teamId)
+            val miscJo = JSONObject(miscInfoStr)
+            if (!ResChecker.checkRes(TAG, miscJo)) {
+                Log.record(TAG, "queryMiscInfo 查询失败")
+                return
+            }
+            val teamCanWaterCount = miscJo
+                .optJSONObject("combineHandlerVOMap")
+                ?.optJSONObject("teamCanWaterCount")
+
+            val dailyWaterLimit = teamCanWaterCount?.optInt("dailyWaterLimit", 0) ?: 0
+            val waterCount = teamCanWaterCount?.optInt("waterCount", 0) ?: 0
+
+            Log.record(TAG, "浇水限制：每日上限=$dailyWaterLimit，可浇=$waterCount g")
+
+            if (waterCount <= 0) {
+                Log.record(TAG, "当前无可浇水次数，跳过")
+                return
+            }
+
+            // 当前能量（保证非空）
+            val currentEnergy = homeJo
+                .optJSONObject("userBaseInfo")
+                ?.optInt("currentEnergy")
+                ?: 0
+
+            // 5. 能量不足10 → 不浇水
+            if (currentEnergy < 10) {
+                Log.record(TAG, "能量不足（$currentEnergy g），低于 10g，本次不执行浇水")
+                return
+            }
+
+            // 6. 如果能量不足以满足配置上限 → 使用当前能量
+            if (currentEnergy < configNum) {
+                Log.record(TAG, "能量不足：需要 $configNum g，本次只浇 $currentEnergy g")
+                configNum = currentEnergy
+            }
+
+            //Log.record(TAG, "准备浇水：TeamID=$teamId  本次=$configNum g")
+
+            // 7. 调用浇水 RPC
+            val waterResStr = AntCooperateRpcCall.teamWater(teamId, configNum)
+            if (waterResStr == null) {
+                Log.record(TAG, "teamWater 调用失败(null)")
+                return
+            }
+
+            val waterJo = JSONObject(waterResStr)
+            if (ResChecker.checkRes(TAG, waterJo)) {
+                Log.forest("组队合种🌲[浇水成功] #${configNum} g")
+
+                // 更新今日累计值
+                val newTotal = todayUsed + configNum
+                Status.setIntFlagToday(StatusFlags.FLAG_TEAM_WATER_DAILY_COUNT, newTotal)
+
+                Log.record(TAG, "今日累计浇水: $newTotal g")
+            }
+
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "teamCooperateWater err:")
+            Log.printStackTrace(TAG, t)
+        }
+    }
 
     companion object {
         private val TAG: String = AntCooperate::class.java.getSimpleName()
 
-        private fun cooperateWater(coopId: String?, count: Int, name: String?) {
+        private fun cooperateWater(coopId: String, count: Int, name: String) {
             try {
                 val s = AntCooperateRpcCall.cooperateWater(UserMap.currentUid, coopId, count)
                 val jo = JSONObject(s)
@@ -269,7 +380,7 @@ class AntCooperate : ModelTask() {
         /**
          * 召唤队友浇水（仅队长）
          */
-        private fun cooperateSendCooperateBeckon(cooperationId: String?, name: String?) {
+        private fun cooperateSendCooperateBeckon(cooperationId: String, name: String) {
             try {
                 if (TimeUtil.isNowBeforeTimeStr("1800")) {
                     return

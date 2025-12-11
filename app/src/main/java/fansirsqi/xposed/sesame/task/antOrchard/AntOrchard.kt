@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.antOrchard
 
 import android.util.Base64
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.entity.AlipayUser
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
@@ -9,12 +10,15 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
+import fansirsqi.xposed.sesame.task.adexchange.UrlUtil
+import fansirsqi.xposed.sesame.task.adexchange.XLightRpcCall
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
 
@@ -60,11 +64,11 @@ class AntOrchard : ModelTask() {
         modelFields.addField(
             IntegerModelField("orchardSpreadManureCount", "农场每日施肥次数", 0).also { orchardSpreadManureCount = it }
         )
-        /*
-        * modelFields.addField(
+
+        modelFields.addField(
             SelectModelField("assistFriendList", "助力好友列表", LinkedHashSet(), AlipayUser::getList).also { assistFriendList = it }
         )
-        * */
+
         return modelFields
     }
 
@@ -122,6 +126,14 @@ class AntOrchard : ModelTask() {
             // 每日肥料
             extraInfoGet()
 
+
+            //如果有🥚 则进行砸🥚
+            val goldenEggInfo = indexJson.getJSONObject("goldenEggInfo")
+            val unsmashedGoldenEggs = goldenEggInfo.getInt("unsmashedGoldenEggs")
+            if(unsmashedGoldenEggs>0){
+                smashedGoldenEgg(unsmashedGoldenEggs)
+            }
+
             // 农场任务
             if (receiveOrchardTaskAward.value) {
                 doOrchardDailyTask(userId!!)
@@ -143,7 +155,7 @@ class AntOrchard : ModelTask() {
             }
 
             // 助力
-            //orchardAssistFriend()
+            orchardAssistFriend()
 
         } catch (t: Throwable) {
             Log.runtime(TAG, "start.run err:")
@@ -180,6 +192,13 @@ class AntOrchard : ModelTask() {
 
     private suspend fun orchardSpreadManure() {
         try {
+            // 可扩展的来源列表
+            val sourceList = listOf(
+                "DNHZ_NC_zhimajingnangSF",
+                "widget_shoufei",
+                "ch_appcenter__chsub_9patch",
+
+                )
             var count = 0
             do {
                 try {
@@ -243,7 +262,12 @@ class AntOrchard : ModelTask() {
                     if (200 - wateringLeftTimes < orchardSpreadManureCount.value) {
                         val wua = getWua()
                         Log.runtime(TAG,"set Wua $wua")
-                        val spreadManureData = JSONObject(AntOrchardRpcCall.orchardSpreadManure(wua,"ch_appcenter__chsub_9patch"))
+
+                        // 随机选一个来源，确保完成其他任务 例如芝麻信誉的跳转，小组件的跳转
+                        val randomSource = sourceList.random()
+
+
+                        val spreadManureData = JSONObject(AntOrchardRpcCall.orchardSpreadManure(wua,randomSource))
 
                         if (spreadManureData.getString("resultCode") != "100") {
                             Log.record(TAG,"农场 orchardSpreadManure 错误："+spreadManureData.getString("resultDesc"))
@@ -471,6 +495,45 @@ class AntOrchard : ModelTask() {
         }
     }
 
+    private suspend fun smashedGoldenEgg(count: Int) {
+        try {
+            val response = AntOrchardRpcCall.smashedGoldenEgg(count)
+            val jo = JSONObject(response)
+
+            if (ResChecker.checkRes(TAG, jo)) {
+                // 解析 batchSmashedList
+                val batchSmashedList = jo.getJSONArray("batchSmashedList")
+                for (i in 0 until batchSmashedList.length()) {
+                    val smashedItem = batchSmashedList.getJSONObject(i)
+                    val manureCount = smashedItem.optInt("manureCount", 0)
+                    val jackpot = smashedItem.optBoolean("jackpot", false)
+
+                    // 输出信息
+                    Log.forest(TAG, "砸出肥料 🎖️: $manureCount g" + if (jackpot) "（触发大奖）" else "")
+                }
+
+                /*
+                 // 可选：输出 goldenEggInfoVO 状态
+                 val goldenEggInfo = jo.optJSONObject("goldenEggInfoVO")
+                 if (goldenEggInfo != null) {
+                     val smashedGoldenEggs = goldenEggInfo.optInt("smashedGoldenEggs", 0)
+                     val unsmashedGoldenEggs = goldenEggInfo.optInt("unsmashedGoldenEggs", 0)
+                     Log.forest(TAG, "已砸蛋: $smashedGoldenEggs, 剩余可砸蛋: $unsmashedGoldenEggs")
+                 }
+                 */
+
+            } else {
+                Log.record(TAG, jo.optString("resultDesc", "未知错误"))
+                Log.runtime(TAG, response)
+            }
+
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "smashedGoldenEgg err:")
+            Log.printStackTrace(TAG, t)
+        }
+    }
+
+
     private suspend fun triggerTbTask() {
         try {
             val response = AntOrchardRpcCall.orchardListTask()
@@ -485,15 +548,60 @@ class AntOrchard : ModelTask() {
                     val title = jo2.getJSONObject("taskDisplayConfig").getString("title")
                     val awardCount = jo2.optInt("awardCount", 0)
                     val taskId = jo2.getString("taskId")
+                    val actionType = jo2.getString("actionType")//如果是 XLIGHT要走单独的浏览广告完成,注意，这里只看 actionType，taskPlantType可能是XLight但是不走这里
                     val taskPlantType = jo2.getString("taskPlantType")
+                    if(actionType=="actionType"){
+                        // 解析 targetUrl 获取 spaceCodeFeeds
+                        var targetUrl = jo2.getJSONObject("taskDisplayConfig").getString("targetUrl")
+                        val spaceCodeFeeds = UrlUtil.getParam(targetUrl, "spaceCodeFeeds") ?: continue
+                        val pageurl= UrlUtil.getParam(targetUrl, "urlu") ?: continue
 
-                    val jo3 = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
-                    if (jo3.getString("resultCode") == "100") {
-                        Log.forest(TAG,"领取奖励🎖️[$title]#${awardCount}g肥料")
-                    } else {
-                        Log.record(TAG,jo3.getString("resultDesc"))
-                        Log.runtime(TAG,jo3.toString())
+                        // 调用广告插件
+                        val xlightResponse = XLightRpcCall.xlightPlugin("",pageurl,"ch_url-https://render.alipay.com/p/yuyan/180020010001263018/game.html",spaceCodeFeeds)
+                        val xlightJo = JSONObject(xlightResponse)
+                        val playingResult = xlightJo
+                            .getJSONObject("resData")
+                            .getJSONObject("playingResult")
+                        val playingBizId = playingResult.getString("playingBizId")
+                        val eventRewardDetail = playingResult.getJSONObject("eventRewardDetail")
+                        val rewardList = eventRewardDetail.getJSONArray("eventRewardInfoList")
+
+                        // 遍历每个事件单独提交完成
+                        for (j in 0 until rewardList.length()) {
+                            val reward = rewardList.getJSONObject(j)
+                            val playEventInfo = reward // 直接传整个事件对象
+                            val finishResponse = XLightRpcCall.finishTask(
+                                playingBizId,
+                                playEventInfo
+                            )
+                            val playBizId = playingResult.getString("playingBizId")
+                            val rewardRenderInfo = reward.getJSONObject("rewardRenderInfo")
+                            val rewardNumber = rewardRenderInfo.getInt("rewardDisplayAmount")
+                            val rewardText = rewardRenderInfo.getString("rewardDisplayText")
+
+                            val finishJo = JSONObject(finishResponse)
+                            if (finishJo.getString("resultCode") == "100") {
+                                val rewardNum = reward.getInt("rewardNumber")
+
+                                Log.forest(TAG,"领取奖励🎖️[$title]#$rewardNumber$rewardText")
+                            } else {
+                                Log.record(TAG, finishJo.toString())
+                                Log.runtime(TAG, finishJo.toString())
+                            }
+                        }
+
+
+                    }else{
+                        val jo3 = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
+                        if (jo3.getString("resultCode") == "100") {
+                            Log.forest(TAG,"领取奖励🎖️[$title]#${awardCount}g肥料")
+                        } else {
+                            Log.record(TAG,jo3.toString())
+                            Log.runtime(TAG,jo3.toString())
+                        }
                     }
+
+
                 }
             } else {
                 Log.record(TAG,jo.getString("resultDesc"))

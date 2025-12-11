@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 object ForestUtil {
 
     private const val TAG = "ForestUtil"
-    
+
     /**
      * 用户频率限制信息
      * @param failCount 失败次数（1-3）
@@ -20,13 +20,13 @@ object ForestUtil {
         var failCount: Int = 0,
         var cooldownUntil: Long = 0L
     )
-    
+
     /**
      * 存储每个用户的频率限制信息
      * Key: userId, Value: FrequencyLimitInfo
      */
     private val userFrequencyMap = ConcurrentHashMap<String, FrequencyLimitInfo>()
-    
+
     /**
      * 检查用户是否在"手速太快"冷却期中
      * @param userId 用户ID
@@ -35,7 +35,7 @@ object ForestUtil {
     @JvmStatic
     fun isUserInFrequencyCooldown(userId: String?): Boolean {
         if (userId == null) return false
-        
+
         val info = userFrequencyMap[userId] ?: return false
         val currentTime = System.currentTimeMillis()
         if (currentTime < info.cooldownUntil) {
@@ -51,7 +51,7 @@ object ForestUtil {
         }
         return false
     }
-    
+
     /**
      * 检测是否为"手速太快"相关错误
      * @param resultCode 返回码
@@ -61,13 +61,13 @@ object ForestUtil {
     @JvmStatic
     fun isFrequencyError(resultCode: String?, resultDesc: String?): Boolean {
         if (resultCode == null && resultDesc == null) return false
-        
+
         return resultCode == "PLUGIN_FREQUENCY_INTERCEPT" ||
-               resultDesc?.contains("手速太快") == true ||
-               resultDesc?.contains("频繁") == true ||
-               resultDesc?.contains("操作过于频繁") == true
+                resultDesc?.contains("手速太快") == true ||
+                resultDesc?.contains("频繁") == true ||
+                resultDesc?.contains("操作过于频繁") == true
     }
-    
+
     /**
      * 检测 JSONObject 是否为"手速太快"相关错误
      * @param jo JSON对象
@@ -80,7 +80,7 @@ object ForestUtil {
         val resultDesc = jo.optString("resultDesc", "")
         return isFrequencyError(resultCode, resultDesc)
     }
-    
+
     /**
      * 记录用户"手速太快"错误，并设置相应的冷却时间
      * @param userId 用户ID
@@ -109,12 +109,12 @@ object ForestUtil {
                 30
             }
         }
-        
+
         Log.record(TAG, "⚠️ [$userName] 手速太快！第${info.failCount}次异常，休息${cooldownMinutes}分钟，下次暂不处理")
-        
+
         return true
     }
-    
+
     /**
      * 检测并记录"手速太快"错误（组合方法）
      * @param userId 用户ID
@@ -129,7 +129,7 @@ object ForestUtil {
         }
         return false
     }
-    
+
     /**
      * 清除所有用户的频率限制记录（用于任务结束时清理）
      */
@@ -141,7 +141,7 @@ object ForestUtil {
             Log.record(TAG, "已清除${count}个用户的频率限制记录")
         }
     }
-    
+
     /**
      * 手动清除指定用户的频率限制（用于测试或手动恢复）
      * @param userId 用户ID
@@ -227,7 +227,7 @@ object ForestUtil {
         val props = userHomeObj.optJSONArray("usingUserProps")
             ?: userHomeObj.optJSONArray("usingUserPropsNew")
             ?: return 0L
-        
+
         var latestEndTime = 0L
         for (i in 0 until props.length()) {
             val prop = props.optJSONObject(i) ?: continue

@@ -9,7 +9,6 @@ import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 蹲点任务持久化数据类
@@ -44,7 +43,7 @@ data class WaitingTaskPersistData(
             bombEndTime = bombEndTime
         )
     }
-    
+
     companion object {
         /**
          * 从运行时任务对象创建持久化数据
@@ -67,7 +66,7 @@ data class WaitingTaskPersistData(
 
 /**
  * 蹲点任务持久化管理器
- * 
+ *
  * 职责：
  * 1. 保存蹲点任务到 DataStore
  * 2. 从 DataStore 恢复蹲点任务
@@ -76,17 +75,17 @@ data class WaitingTaskPersistData(
  */
 object EnergyWaitingPersistence {
     private const val TAG = "EnergyWaitingPersistence"
-    
+
     // 任务最大保存时间（8小时，超过此时间的任务视为过期）
     private const val MAX_TASK_AGE_MS = 8 * 60 * 60 * 1000L
-    
+
     // 协程作用域
     private val persistenceScope = CoroutineScope(Dispatchers.IO)
-    
+
     /**
      * 获取当前账号的 DataStore 存储键
      * 每个账号使用独立的键，避免多账号切换时数据混淆
-     * 
+     *
      * @return 包含当前用户 uid 的存储键，如果 uid 为空则使用默认键
      */
     private fun getDataStoreKey(): String {
@@ -97,10 +96,10 @@ object EnergyWaitingPersistence {
             "energy_waiting_tasks_$currentUid"
         }
     }
-    
+
     /**
      * 保存蹲点任务到 DataStore（异步）
-     * 
+     *
      * @param tasks 当前活跃的蹲点任务
      */
     fun saveTasks(tasks: Map<String, EnergyWaitingManager.WaitingTask>) {
@@ -109,10 +108,10 @@ object EnergyWaitingPersistence {
                 val persistDataList = tasks.values.map { task ->
                     WaitingTaskPersistData.fromWaitingTask(task)
                 }
-                
+
                 val dataStoreKey = getDataStoreKey()
                 DataStore.put(dataStoreKey, persistDataList)
-                
+
                 Log.debug(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储 (key: $dataStoreKey)")
             } catch (e: Exception) {
                 Log.error(TAG, "保存蹲点任务失败: ${e.message}")
@@ -120,10 +119,10 @@ object EnergyWaitingPersistence {
             }
         }
     }
-    
+
     /**
      * 从 DataStore 加载蹲点任务
-     * 
+     *
      * @return 恢复的任务列表（已过滤过期任务）
      */
     fun loadTasks(): List<EnergyWaitingManager.WaitingTask> {
@@ -131,17 +130,17 @@ object EnergyWaitingPersistence {
             val dataStoreKey = getDataStoreKey()
             val typeRef = object : TypeReference<List<WaitingTaskPersistData>>() {}
             val persistDataList = DataStore.getOrCreate(dataStoreKey, typeRef)
-            
+
             if (persistDataList.isEmpty()) {
                 Log.debug(TAG, "持久化存储中无蹲点任务 (key: $dataStoreKey)")
                 return emptyList()
             }
-            
+
             val currentTime = System.currentTimeMillis()
             val validTasks = mutableListOf<EnergyWaitingManager.WaitingTask>()
             var expiredCount = 0
             var tooOldCount = 0
-            
+
             persistDataList.forEach { persistData ->
                 // 检查1：任务保存时间是否过久
                 val taskAge = currentTime - persistData.savedTime
@@ -150,20 +149,20 @@ object EnergyWaitingPersistence {
                     Log.debug(TAG, "  跳过[${persistData.userName}]：保存时间超过${taskAge/1000/60/60}小时")
                     return@forEach
                 }
-                
+
                 // 检查2：能量是否已经过期超过1小时
                 if (currentTime > persistData.produceTime + 60 * 60 * 1000L) {
                     expiredCount++
                     Log.debug(TAG, "  跳过[${persistData.userName}]：能量已过期超过1小时")
                     return@forEach
                 }
-                
+
                 // 任务有效，添加到列表
                 validTasks.add(persistData.toWaitingTask())
             }
-            
+
             Log.record(TAG, "📥 从持久化存储恢复${validTasks.size}个有效任务（跳过${expiredCount}个过期，${tooOldCount}个过旧）")
-            
+
             validTasks
         } catch (e: Exception) {
             Log.error(TAG, "加载蹲点任务失败: ${e.message}")
@@ -171,7 +170,7 @@ object EnergyWaitingPersistence {
             emptyList()
         }
     }
-    
+
     /**
      * 清空持久化存储中的所有任务
      */
@@ -184,10 +183,10 @@ object EnergyWaitingPersistence {
             Log.error(TAG, "清空持久化存储失败: ${e.message}")
         }
     }
-    
+
     /**
      * 验证并重新添加恢复的任务
-     * 
+     *
      * @param tasks 恢复的任务列表
      * @param addTaskCallback 添加任务的回调函数
      * @return 实际重新添加的任务数量
@@ -199,25 +198,25 @@ object EnergyWaitingPersistence {
         if (tasks.isEmpty()) {
             return 0
         }
-        
+
         Log.record(TAG, "🔄 开始验证${tasks.size}个恢复的蹲点任务...")
-        
+
         var restoredCount = 0
         var skippedCount = 0
-        
+
         tasks.forEach { task ->
             try {
                 // 重新查询用户主页以获取最新保护罩状态
                 val userHomeResponse = AntForestRpcCall.queryFriendHomePage(task.userId, task.fromTag)
-                
+
                 if (userHomeResponse.isNullOrEmpty()) {
                     Log.debug(TAG, "  验证[${task.userName}]：无法获取主页信息，跳过恢复")
                     skippedCount++
                     return@forEach
                 }
-                
+
                 val userHomeObj = org.json.JSONObject(userHomeResponse)
-                
+
                 // 自己的账号：无论是否有保护罩都要恢复（到时间后直接收取）
                 if (task.isSelf()) {
                     val success = addTaskCallback(task)
@@ -229,14 +228,14 @@ object EnergyWaitingPersistence {
                     }
                     return@forEach
                 }
-                
+
                 // 好友账号：如果保护罩覆盖能量成熟期则跳过
                 if (ForestUtil.shouldSkipWaitingDueToProtection(userHomeObj, task.produceTime)) {
                     val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
                     val timeDifference = protectionEndTime - task.produceTime
                     val hours = timeDifference / (1000 * 60 * 60)
                     val minutes = (timeDifference % (1000 * 60 * 60)) / (1000 * 60)
-                    
+
                     Log.record(
                         TAG,
                         "  ❌ 跳过[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖能量成熟期(${hours}小时${minutes}分钟)"
@@ -252,7 +251,7 @@ object EnergyWaitingPersistence {
                         skippedCount++
                     }
                 }
-                
+
                 // 添加短暂延迟，避免请求过快
                 kotlinx.coroutines.delay(200)
             } catch (e: Exception) {
@@ -260,10 +259,9 @@ object EnergyWaitingPersistence {
                 skippedCount++
             }
         }
-        
+
         Log.record(TAG, "✅ 恢复完成：成功${restoredCount}个，跳过${skippedCount}个")
-        
+
         return restoredCount
     }
 }
-

@@ -382,7 +382,7 @@ public class ChouChouLe {
                 if (prize != null) {
                     String title = prize.optString("title",
                             prize.optString("prizeName", "未知奖品"));
-                  //  int prizeNum = prize.optInt("awardCount", 1);
+                    //  int prizeNum = prize.optInt("awardCount", 1);
 
                     Log.farm(prefix + "🎁[领取: " + title  +"]");
                 } else {
@@ -391,5 +391,4 @@ public class ChouChouLe {
             }
         } catch (Exception ignored) {}
     }
-
 }

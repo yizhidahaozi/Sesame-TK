@@ -16,7 +16,6 @@ import java.util.Calendar
 import java.util.Objects
 import kotlin.math.abs
 
-
 data object AntFarmFamily {
     private const val TAG = "小鸡家庭"
 
@@ -64,11 +63,11 @@ data object AntFarmFamily {
      */
     fun enterFamily(familyOptions: SelectModelField, notInviteList: SelectModelField) {
         try {
-            val enterRes = JSONObject(AntFarmRpcCall.enterFamily())
+            val enterRes = JSONObject(AntFarmRpcCall.enterFamily());
             if (ResChecker.checkRes(TAG, enterRes)) {
                 if (!enterRes.has("groupId")) {
-                    Log.farm("请先开通小鸡家庭")
-                    return
+                    Log.farm("请先开通小鸡家庭");
+                    return;
                 }
                 groupId = enterRes.getString("groupId")
                 groupName = enterRes.getString("groupName")
@@ -123,7 +122,6 @@ data object AntFarmFamily {
             Log.printStackTrace(TAG, e.message, e)
         }
     }
-
 
     /**
      * 家庭签到
@@ -195,41 +193,69 @@ data object AntFarmFamily {
         }
     }
 
-
     /**
      * 帮好友喂小鸡
      * @param animals 家庭动物列表
      */
     fun familyFeedFriendAnimal(animals: JSONArray) {
         try {
-            for (i in 0..<animals.length()) {
+            for (i in 0 until animals.length()) {
                 val animal = animals.getJSONObject(i)
-                val animalStatusVo = animal.getJSONObject("animalStatusVO")
-                if (AnimalInteractStatus.HOME.name == animalStatusVo.getString("animalInteractStatus") && AnimalFeedStatus.HUNGRY.name == animalStatusVo.getString("animalFeedStatus")) {
-                    val groupId = animal.getString("groupId")
-                    val farmId = animal.getString("farmId")
-                    val userId = animal.getString("userId")
-                    if (UserMap.getUserIdSet().contains(userId)) {
-                        if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                            Log.runtime("今日喂鸡次数已达上限🥣 家庭喂")
-                            return
-                        }
-                        val jo = JSONObject(AntFarmRpcCall.feedFriendAnimal(farmId, groupId))
-                        if (ResChecker.checkRes(TAG, jo)) {
-                            Log.farm("家庭任务🏠帮喂好友🥣[" + UserMap.getMaskName(userId) + "]的小鸡180g #剩余" + jo.getInt("foodStock") + "g")
-                        }
-                    } else {
-                        Log.error(TAG, "$userId 不是你的好友！ 跳过家庭喂食")
-                        continue
-                    }
+                val status = animal.getJSONObject("animalStatusVO")
+
+                val interactStatus = status.getString("animalInteractStatus")
+                val feedStatus = status.getString("animalFeedStatus")
+
+                // 过滤非 HOME / HUNGRY 的
+                if (interactStatus != AnimalInteractStatus.HOME.name ||
+                    feedStatus != AnimalFeedStatus.HUNGRY.name) continue
+
+                val groupId = animal.getString("groupId")
+                val farmId = animal.getString("farmId")
+                val userId = animal.getString("userId")
+
+                // 非好友 → 跳过
+                if (!UserMap.getUserIdSet().contains(userId)) {
+                    Log.error(TAG, "$userId 不是你的好友！ 跳过家庭喂食")
+                    continue
                 }
+
+                val flagKey = "farm::feedFriendLimit::$userId"
+
+                // 如果该用户已经记录今日上限 → 跳过
+                if (Status.hasFlagToday(flagKey)) {
+                    Log.runtime("[$userId] 今日喂鸡次数已达上限（已记录）🥣，跳过")
+                    continue
+                }
+
+                // 调用 RPC
+                val jo = JSONObject(AntFarmRpcCall.feedFriendAnimal(farmId, groupId))
+
+                // 统一错误码检查
+                if (!jo.optBoolean("success", false)) {
+                    val code = jo.optString("resultCode")
+
+                    if (code == "391") {
+                        // 记录该用户今日不能再喂
+                        Status.setFlagToday(flagKey)
+                        Log.runtime("[$userId] 今日帮喂次数已达上限🥣，已记录为当日限制")
+                    } else {
+                        Log.error(TAG, "喂食失败 user=$userId code=$code msg=${jo.optString("memo")}")
+                    }
+                    continue
+                }
+
+                // 正常成功
+                val foodStock = jo.optInt("foodStock")
+                val maskName = UserMap.getMaskName(userId)
+                Log.farm("家庭任务🏠帮喂好友🥣[$maskName]的小鸡180g #剩余${foodStock}g")
             }
+
         } catch (t: Throwable) {
             Log.runtime(TAG, "familyFeedFriendAnimal err:")
             Log.printStackTrace(TAG, t)
         }
     }
-
 
     /**
      * 请客吃美食
@@ -323,7 +349,6 @@ data object AntFarmFamily {
         }
         return null
     }
-
 
     /**
      * 家庭「道早安」任务
@@ -511,7 +536,6 @@ data object AntFarmFamily {
         }
     }
 
-
     /**
      * 好友分享家庭
      * @param familyUserIds 好友列表
@@ -561,7 +585,6 @@ data object AntFarmFamily {
         }
     }
 
-
     /**
      * 通用时间差格式化（自动区分过去/未来）
      * @param diffMillis 任意时间戳（毫秒）
@@ -585,6 +608,4 @@ data object AntFarmFamily {
             else -> "$value$unit 前"
         }
     }
-
-
 }

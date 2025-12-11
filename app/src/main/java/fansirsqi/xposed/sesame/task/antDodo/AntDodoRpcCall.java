@@ -11,10 +11,7 @@ public class AntDodoRpcCall {
         return RequestManager.requestString("alipay.antdodo.rpc.h5.homePage",
                 "[{}]");
     }
-    public static String taskEntrance() {
-        return RequestManager.requestString("alipay.antdodo.rpc.h5.taskEntrance",
-                "[{\"statusList\":[\"TODO\",\"FINISHED\"]}]");
-    }
+
     public static String collect() {
         return RequestManager.requestString("alipay.antdodo.rpc.h5.collect",
                 "[{}]");
@@ -62,14 +59,26 @@ public class AntDodoRpcCall {
         return RequestManager.requestString("alipay.antdodo.rpc.h5.queryFriend",
                 "[{\"sceneCode\":\"EXCHANGE\"}]");
     }
-    public static String collect(String targetUserId) {
+    public static String collecttarget(String targetUserId) {
         return RequestManager.requestString("alipay.antdodo.rpc.h5.collect",
                 "[{\"targetUserId\":" + targetUserId + "}]");
     }
-    public static String queryBookList(int pageSize, int pageStart) {
-        String args = "[{\"pageSize\":" + pageSize + ",\"pageStart\":\"" + pageStart + "\",\"v2\":\"true\"}]";
+    public static String queryBookList(int pageSize, String pageStart) {
+        StringBuilder argsBuilder = new StringBuilder();
+        argsBuilder.append("{\"pageSize\":").append(pageSize).append(",\"v2\":\"true\"");
+
+        if (pageStart != null && !pageStart.isEmpty()) {
+            argsBuilder.append(",\"pageStart\":\"").append(pageStart).append("\"");
+        }
+
+        argsBuilder.append("}");
+
+        // 注意这里是单个 JSON 对象，不再是数组，如果接口需要数组可以包一下 []
+        String args = "[" + argsBuilder.toString() + "]";
         return RequestManager.requestString("alipay.antdodo.rpc.h5.queryBookList", args);
     }
+
+
     public static String generateBookMedal(String bookId) {
         String args = "[{\"bookId\":\"" + bookId + "\"}]";
         return RequestManager.requestString("alipay.antdodo.rpc.h5.generateBookMedal", args);

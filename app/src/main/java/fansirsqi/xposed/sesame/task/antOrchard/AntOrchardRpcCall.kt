@@ -8,7 +8,7 @@ object AntOrchardRpcCall {
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
             "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
-                    + VERSION + "\"}]")
+                    + VERSION + "\"}]");
     }
 
     fun extraInfoGet(): String {
@@ -54,6 +54,15 @@ object AntOrchardRpcCall {
         )
     }
 
+    /*/**
+     * 施肥
+     */
+    fun orchardSpreadManure(wua: String): String {
+        return RequestManager.requestString(
+            "com.alipay.antfarm.orchardSpreadManure",
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
+        )
+    }*/
     /**
      * 施肥
      * @param wua 用户标识
@@ -102,13 +111,30 @@ object AntOrchardRpcCall {
             "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
         )
     }
+    fun smashedGoldenEgg(count: Int): String {
+        val jsonArgs = """
+        [
+            {
+                "batchSmashCount": $count,
+                "requestType": "NORMAL",
+                "sceneCode": "ORCHARD",
+                "source": "ch_appcenter__chsub_9patch",
+                "version": "$VERSION"
+            }
+        ]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.smashedGoldenEgg",
+            jsonArgs
+        )
+    }
 
     /* 助力好友 */
     //  fun shareP2P(): String {
     //        return ApplicationHook.requestString("com.alipay.antiep.shareP2P",
     //                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]")
     //    }
-
     fun achieveBeShareP2P(shareId: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.achieveBeShareP2P",

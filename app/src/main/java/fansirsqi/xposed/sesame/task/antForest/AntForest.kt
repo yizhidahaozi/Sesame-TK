@@ -74,7 +74,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Consumer
 import java.util.function.Supplier
-import kotlin.concurrent.Volatile
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -153,7 +152,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var doubleCard: ChoiceModelField? = null // 双击卡类型选择
     private var doubleCardTime: ListJoinCommaToStringModelField? = null // 双击卡使用时间列表
     var doubleCountLimit: IntegerModelField? = null // 双击卡使用次数限制
-
 
     private var doubleCardConstant: BooleanModelField? = null // 双击卡永动机
     private var stealthCard: ChoiceModelField? = null // 隐身卡
@@ -2547,19 +2545,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun updateSelfHomePage(joHomePage: JSONObject) {
         try {
-            var usingUserPropsNew = joHomePage.getJSONArray("loginUserUsingPropNew")
-            if (usingUserPropsNew.length() == 0) {
 
-                if (isTeam(joHomePage)) {
-                    joHomePage.optJSONObject("teamHomeResult")
-                        ?.optJSONObject("mainMember")
-                        ?.optJSONArray("usingUserProps")
-                } else {
-                    joHomePage.optJSONArray("usingUserPropsNew")
-                } ?: JSONArray()  // 统一默认值
+            val usingUserProps: JSONArray = if (isTeam(joHomePage)) {
+                // 组队模式
+                joHomePage.optJSONObject("teamHomeResult")
+                    ?.optJSONObject("mainMember")
+                    ?.optJSONArray("usingUserProps")
+                    ?: JSONArray()
+            } else {
+                // 单人模式
+                joHomePage.optJSONArray("usingUserPropsNew")
+                    ?: JSONArray()
             }
-            for (i in 0..<usingUserPropsNew.length()) {
-                val userUsingProp = usingUserPropsNew.getJSONObject(i)
+            for (i in 0..<usingUserProps.length()) {
+                val userUsingProp = usingUserProps.getJSONObject(i)
                 val propGroup = userUsingProp.getString("propGroup")
                 when (propGroup) {
                     "doubleClick" -> {
@@ -4087,7 +4086,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.printStackTrace(th)
         }
     }
-
 
     /**
      * 使用加速卡道具

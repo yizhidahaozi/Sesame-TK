@@ -5,24 +5,23 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.delay
-import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
 
 /**
  * 能量雨功能 - Kotlin协程版本
- * 
+ *
  * 这是EnergyRain.java的协程版本重构，提供更好的性能和可维护性
  */
 object EnergyRainCoroutine {
     private const val TAG = "EnergyRain"
-    
+
     /**
      * 上次执行能量雨的时间戳
      */
     @Volatile
     private var lastExecuteTime: Long = 0
-    
+
     /**
      * 随机延迟，增加随机性避免风控检测
      * @param min 最小延迟（毫秒）
@@ -32,7 +31,7 @@ object EnergyRainCoroutine {
         val delayTime = Random.nextInt(min, max + 1).toLong()
         delay(delayTime)
     }
-    
+
     /**
      * 执行能量雨功能
      */
@@ -42,15 +41,15 @@ object EnergyRainCoroutine {
             val currentTime = System.currentTimeMillis()
             val timeSinceLastExec = currentTime - lastExecuteTime
             val cooldownSeconds = 3 // 冷却时间：3秒
-            
+
             if (timeSinceLastExec < cooldownSeconds * 1000) {
                 val remainingSeconds = (cooldownSeconds * 1000 - timeSinceLastExec) / 1000
                 Log.record(TAG, "⏱️ 能量雨冷却中，还需等待 $remainingSeconds 秒")
                 return
             }
-            
+
             energyRain()
-            
+
             // 更新最后执行时间
             lastExecuteTime = System.currentTimeMillis()
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -81,7 +80,7 @@ object EnergyRainCoroutine {
                 hasExecuted = true
                 randomDelay(1000, 1200) // 随机延迟 1-1.2秒
             }
-            
+
             // 2️⃣ 检查是否可以赠送能量雨
             if (joEnergyRainHome.getBoolean("canGrantStatus")) {
                 Log.record(TAG, "有送能量雨的机会")
@@ -116,12 +115,12 @@ object EnergyRainCoroutine {
                         }
                     }
                 }
-                
+
                 if (!granted) {
                     Log.record(TAG, "今日已无可送能量雨好友")
                 }
             }
-            
+
             // 3️⃣ 最后检查：如果前面都没执行过，再次尝试
             if (!hasExecuted) {
                 joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
@@ -146,19 +145,19 @@ object EnergyRainCoroutine {
         try {
             Log.forest("开始执行能量雨🌧️")
             val joStart = JSONObject(AntForestRpcCall.startEnergyRain())
-            
+
             if (ResChecker.checkRes(TAG, joStart)) {
                 val token = joStart.getString("token")
                 val bubbleEnergyList = joStart.getJSONObject("difficultyInfo").getJSONArray("bubbleEnergyList")
                 var sum = 0
-                
+
                 for (i in 0 until bubbleEnergyList.length()) {
                     sum += bubbleEnergyList.getInt(i)
                 }
-                
+
                 randomDelay(5000, 5200) // 随机延迟 5-5.2秒，模拟真人玩游戏
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
-                
+
                 if (ResChecker.checkRes(TAG, resultJson)) {
                     val s = "收获能量雨🌧️[${sum}g]"
                     Toast.show(s)
@@ -177,7 +176,7 @@ object EnergyRainCoroutine {
             Log.printStackTrace(TAG, th)
         }
     }
-    
+
     /**
      * 兼容Java调用的包装方法
      */
