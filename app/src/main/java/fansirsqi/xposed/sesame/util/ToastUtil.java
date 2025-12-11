@@ -55,11 +55,11 @@ public class ToastUtil {
      * @param message 显示的消息
      */
     public static void showToast(Context context, String message) {
-        boolean shouldShow = BaseModel.getShowToast().getValue();
+        boolean shouldShow = BaseModel.Companion.getShowToast().getValue();
         Log.runtime(TAG, "showToast::" + shouldShow + message);
         if (shouldShow) {
             Toast toast = Toast.makeText(context, message, Toast.LENGTH_SHORT);
-            toast.setGravity(toast.getGravity(), toast.getXOffset(), BaseModel.getToastOffsetY().getValue());
+            toast.setGravity(toast.getGravity(), toast.getXOffset(), BaseModel.Companion.getToastOffsetY().getValue());
             toast.show();
         }
     }
@@ -85,7 +85,7 @@ public class ToastUtil {
      */
     public static Toast makeText(Context context, String message, int duration) {
         Toast toast = Toast.makeText(context, message, duration);
-        toast.setGravity(toast.getGravity(), toast.getXOffset(), BaseModel.getToastOffsetY().getValue());
+        toast.setGravity(toast.getGravity(), toast.getXOffset(), BaseModel.Companion.getToastOffsetY().getValue());
         return toast;
     }
 

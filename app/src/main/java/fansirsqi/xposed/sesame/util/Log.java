@@ -59,7 +59,7 @@ public class Log {
 
     public static void runtime(String msg) {
         system(msg);
-        if (BaseModel.getRuntimeLog().getValue() || BuildConfig.DEBUG) {
+        if (BaseModel.Companion.getRuntimeLog().getValue() || BuildConfig.DEBUG) {
             RUNTIME_LOGGER.info(TAG + "{}", msg);
         }
     }
@@ -70,7 +70,7 @@ public class Log {
 
     public static void record(String msg) {
         runtime(msg);
-        if (BaseModel.getRecordLog().getValue()) {
+        if (BaseModel.Companion.getRecordLog().getValue()) {
             RECORD_LOGGER.info(TAG + "{}", msg);
         }
     }

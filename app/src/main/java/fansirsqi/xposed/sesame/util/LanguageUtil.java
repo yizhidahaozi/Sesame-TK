@@ -16,7 +16,7 @@ public class LanguageUtil {
      */
     public static void setLocale(Context context) {
         // 检查是否设置了简体中文
-        if (BaseModel.getLanguageSimplifiedChinese().getValue()) {
+        if (BaseModel.Companion.getLanguageSimplifiedChinese().getValue()) {
             // 创建简体中文的Locale对象
             Locale locale = new Locale.Builder().setLanguage("zh").setRegion("CN").build();
             // 设置默认的Locale
@@ -26,7 +26,7 @@ public class LanguageUtil {
             // 更新配置信息中的Locale
             config.setLocale(locale);
             // 更新资源的配置信息，以应用新的Locale设置
-            context = context.createConfigurationContext(config);
+            context.createConfigurationContext(config);
         }
     }
 }

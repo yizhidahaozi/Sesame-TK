@@ -259,7 +259,7 @@ object Notify {
                 Log.error(TAG, "Context is null in sendErrorNotification, cannot proceed.")
                 return
             }
-            if (!Notify.checkPermission(context!!) || !isNotificationStarted) return
+            if (!checkPermission(context!!) || !isNotificationStarted) return
             mNotifyManager = context!!.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager?
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val notificationChannel = NotificationChannel(CHANNEL_ID, "‼️ 芝麻粒异常通知", NotificationManager.IMPORTANCE_LOW)
