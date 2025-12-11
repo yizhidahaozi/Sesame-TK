@@ -1,7 +1,7 @@
-package fansirsqi.xposed.sesame.entity;
+package fansirsqi.xposed.sesame.entity
 
-import fansirsqi.xposed.sesame.util.maps.CooperateMap;
-import fansirsqi.xposed.sesame.util.maps.IdMapManager;
+import fansirsqi.xposed.sesame.util.maps.CooperateMap
+import fansirsqi.xposed.sesame.util.maps.IdMapManager
 
 /**
  * 表示合作用户的实体类，包含 ID 和名称。
