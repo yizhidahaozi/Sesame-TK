@@ -29,7 +29,7 @@ class SesameApplication : Application() {
         return try {
             // Android 9.0+ 可直接获取
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                android.app.Application.getProcessName()
+                getProcessName()
             } else {
                 // 通过读取 /proc/self/cmdline 获取
                 val pid = Process.myPid()
