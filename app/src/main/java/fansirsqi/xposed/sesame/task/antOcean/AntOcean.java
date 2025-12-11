@@ -154,7 +154,7 @@ public class AntOcean extends ModelTask {
         modelFields.addField(exchangeProp = new BooleanModelField("exchangeProp", "神奇海洋 | 制作万能拼图", false));
         modelFields.addField(usePropByType = new BooleanModelField("usePropByType", "神奇海洋 | 使用万能拼图", false));
         modelFields.addField(userprotectType = new ChoiceModelField("userprotectType", "保护 | 类型", protectType.DONT_PROTECT, protectType.nickNames));
-        modelFields.addField(protectOceanList = new SelectAndCountModelField("protectOceanList", "保护 | 海洋列表", new LinkedHashMap<>(), AlipayBeach::getList));
+        modelFields.addField(protectOceanList = new SelectAndCountModelField("protectOceanList", "保护 | 海洋列表", new LinkedHashMap<>(), AlipayBeach::getList, "顾名思义.."));
         modelFields.addField(PDL_task = new BooleanModelField("PDL_task", "潘多拉任务", false));
         return modelFields;
     }
@@ -162,10 +162,10 @@ public class AntOcean extends ModelTask {
     @Override
     public Boolean check() {
         if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
+            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.Companion.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
             return false;
         } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
+            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.Companion.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
             return false;
         } else {
             return true;
@@ -322,7 +322,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryMiscInfo();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONObject miscHandlerVOMap = jo.getJSONObject("miscHandlerVOMap");
                 JSONObject homeTipsRefresh = miscHandlerVOMap.getJSONObject("HOME_TIPS_REFRESH");
                 if (homeTipsRefresh.optBoolean("fishCanBeCombined") || homeTipsRefresh.optBoolean("canBeRepaired")) {
@@ -351,7 +351,7 @@ public class AntOcean extends ModelTask {
                     String userId = bubble.getString("userId");
                     String s = AntForestRpcCall.collectEnergy("", userId, bubbleId);
                     JSONObject jo = new JSONObject(s);
-                    if (ResChecker.checkRes(TAG,jo)) {
+                    if (ResChecker.checkRes(TAG, jo)) {
                         JSONArray retBubbles = jo.optJSONArray("bubbles");
                         if (retBubbles != null) {
                             for (int j = 0; j < retBubbles.length(); j++) {
@@ -379,7 +379,7 @@ public class AntOcean extends ModelTask {
             for (int i = 0; i < rubbishNumber; i++) {
                 String s = AntOceanRpcCall.cleanOcean(userId);
                 JSONObject jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
+                if (ResChecker.checkRes(TAG, jo)) {
                     JSONArray cleanRewardVOS = jo.getJSONArray("cleanRewardVOS");
                     checkReward(cleanRewardVOS);
                     Log.forest("神奇海洋🌊[清理:" + UserMap.getMaskName(userId) + "海域]");
@@ -397,7 +397,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.ipOpenSurprise();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray rewardVOS = jo.getJSONArray("surpriseRewardVOS");
                 checkReward(rewardVOS);
             } else {
@@ -413,7 +413,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.combineFish(fishId);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONObject fishDetailVO = jo.getJSONObject("fishDetailVO");
                 String name = fishDetailVO.getString("name");
                 Log.forest("神奇海洋🌊[" + name + "]合成成功");
@@ -459,7 +459,7 @@ public class AntOcean extends ModelTask {
             for (int i = 0; i < canCollectAssetNum; i++) {
                 String s = AntOceanRpcCall.collectReplicaAsset();
                 JSONObject jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
+                if (ResChecker.checkRes(TAG, jo)) {
                     Log.forest("神奇海洋🌊[学习海洋科普知识]#潘多拉能量+1");
                 } else {
                     Log.runtime(TAG, jo.getString("resultDesc"));
@@ -475,7 +475,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.unLockReplicaPhase(replicaCode, replicaPhaseCode);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 String name = jo.getJSONObject("currentPhaseInfo").getJSONObject("extInfo").getString("name");
                 Log.forest("神奇海洋🌊迎回[" + name + "]");
             } else {
@@ -491,7 +491,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryReplicaHome();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 if (jo.has("userReplicaAssetVO")) {
                     JSONObject userReplicaAssetVO = jo.getJSONObject("userReplicaAssetVO");
                     int canCollectAssetNum = userReplicaAssetVO.getInt("canCollectAssetNum");
@@ -518,7 +518,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryOceanPropList();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 AntOceanRpcCall.repairSeaArea();
             } else {
                 Log.runtime(TAG, jo.getString("resultDesc"));
@@ -533,7 +533,7 @@ public class AntOcean extends ModelTask {
         String s = AntOceanRpcCall.queryOceanChapterList();
         try {
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 String currentChapterCode = jo.getString("currentChapterCode");
                 JSONArray chapterVOs = jo.getJSONArray("userChapterDetailVOList");
                 boolean isFinish = false;
@@ -556,7 +556,7 @@ public class AntOcean extends ModelTask {
                 if (isFinish && !StringUtil.isEmpty(dstChapterCode)) {
                     s = AntOceanRpcCall.switchOceanChapter(dstChapterCode);
                     jo = new JSONObject(s);
-                    if (ResChecker.checkRes(TAG,jo)) {
+                    if (ResChecker.checkRes(TAG, jo)) {
                         Log.forest("神奇海洋🌊切换到[" + dstChapterName + "]系列");
                     } else {
                         Log.runtime(TAG, jo.getString("resultDesc"));
@@ -575,7 +575,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.querySeaAreaDetailList();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 int seaAreaNum = jo.getInt("seaAreaNum");
                 int fixSeaAreaNum = jo.getInt("fixSeaAreaNum");
                 int currentSeaAreaIndex = jo.getInt("currentSeaAreaIndex");
@@ -619,11 +619,11 @@ public class AntOcean extends ModelTask {
             }
             String s = AntOceanRpcCall.queryFriendPage(userId);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 s = AntOceanRpcCall.cleanFriendOcean(userId);
                 jo = new JSONObject(s);
                 Log.forest("神奇海洋🌊[帮助:" + UserMap.getMaskName(userId) + "清理海域]");
-                if (ResChecker.checkRes(TAG,jo)) {
+                if (ResChecker.checkRes(TAG, jo)) {
                     JSONArray cleanRewardVOS = jo.getJSONArray("cleanRewardVOS");
                     checkReward(cleanRewardVOS);
                 } else {
@@ -642,7 +642,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryUserRanking();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray fillFlagVOList = jo.getJSONArray("fillFlagVOList");
                 for (int i = 0; i < fillFlagVOList.length(); i++) {
                     JSONObject fillFlag = fillFlagVOList.getJSONObject(i);
@@ -710,17 +710,17 @@ public class AntOcean extends ModelTask {
                                     .incrementAndGet();
 
                             JSONObject joFinishTask = new JSONObject(AntOceanRpcCall.finishTask(sceneCode, taskType));
-                            
+
                             // 检查特定错误码：不支持RPC完成的任务，直接加入黑名单
                             String errorCode = joFinishTask.optString("code", "");
                             String desc = joFinishTask.optString("desc", "");
-                            if ("400000040".equals(errorCode) || desc.contains("不支持RPC完成") ) {
+                            if ("400000040".equals(errorCode) || desc.contains("不支持RPC完成")) {
                                 Log.error(TAG, "海洋任务🌊[" + taskTitle + "]不支持RPC完成，已加入黑名单");
                                 badTaskSet.add(taskTitle);
                                 DataStore.INSTANCE.put("badOceanTaskSet", badTaskSet);
                                 continue;
                             }
-                            
+
                             if (count > 1) {
                                 badTaskSet.add(taskType);
                                 DataStore.INSTANCE.put("badOceanTaskSet", badTaskSet);
@@ -733,7 +733,7 @@ public class AntOcean extends ModelTask {
                                 }
                             }
                         }
-                        
+
                         GlobalThreadPools.sleepCompat(500);
                     }
                 }
@@ -828,7 +828,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryCultivationList();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray ja = jo.getJSONArray("cultivationItemVOList");
                 for (int i = 0; i < ja.length(); i++) {
                     jo = ja.getJSONObject(i);
@@ -868,7 +868,7 @@ public class AntOcean extends ModelTask {
             for (int applyCount = 1; applyCount <= count; applyCount++) {
                 s = AntOceanRpcCall.oceanExchangeTree(cultivationCode, projectCode);
                 jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
+                if (ResChecker.checkRes(TAG, jo)) {
                     JSONArray awardInfos = jo.getJSONArray("rewardItemVOs");
                     StringBuilder award = new StringBuilder();
                     for (int i = 0; i < awardInfos.length(); i++) {
@@ -899,7 +899,7 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.queryCultivationDetail(cultivationCode, projectCode);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONObject userInfo = jo.getJSONObject("userInfoVO");
                 int currentEnergy = userInfo.getInt("currentEnergy");
                 jo = jo.getJSONObject("cultivationDetailVO");
