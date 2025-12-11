@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.task.ancientTree
+package fansirsqi.xposed.sesame.task.EcoProtection
 
 import fansirsqi.xposed.sesame.data.Status.Companion.ancientTreeToday
 import fansirsqi.xposed.sesame.data.Status.Companion.canAncientTreeToday
@@ -17,9 +17,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AncientTree : ModelTask() {
+class EcoProtection : ModelTask() {
     override fun getName(): String? {
-        return "古树"
+        return "生态保护"
     }
 
     override fun getGroup(): ModelGroup {
@@ -27,7 +27,7 @@ class AncientTree : ModelTask() {
     }
 
     override fun getIcon(): String {
-        return "AncientTree.png"
+        return "EcoProtection.png"
     }
 
     private var ancientTreeOnlyWeek: BooleanModelField? = null
@@ -46,7 +46,7 @@ class AncientTree : ModelTask() {
 
     public override fun check(): Boolean? {
         if (!TaskCommon.IS_ENERGY_TIME && TaskCommon.IS_AFTER_8AM) {
-            if (!ancientTreeOnlyWeek!!.getValue()) {
+            if (!ancientTreeOnlyWeek!!.value) {
                 return true
             }
             val sdfWeek = SimpleDateFormat("EEEE", Locale.getDefault())
@@ -56,10 +56,10 @@ class AncientTree : ModelTask() {
         return false
     }
 
-    override fun runJava() {
+    override suspend fun runSuspend() {
         try {
             Log.record(TAG, "开始执行$name")
-            ancientTree(ancientTreeCityCodeList!!.getValue())
+            ancientTree(ancientTreeCityCodeList!!.value)
         } catch (t: Throwable) {
             Log.runtime(TAG, "start.run err:")
             Log.printStackTrace(TAG, t)
@@ -69,7 +69,7 @@ class AncientTree : ModelTask() {
     }
 
     companion object {
-        private val TAG: String = AncientTree::class.java.getSimpleName()
+        private val TAG: String = EcoProtection::class.java.getSimpleName()
         private fun ancientTree(ancientTreeCityCodeList: MutableCollection<String>) {
             try {
                 for (cityCode in ancientTreeCityCodeList) {
@@ -85,7 +85,7 @@ class AncientTree : ModelTask() {
 
         private fun ancientTreeProtect(cityCode: String) {
             try {
-                val jo = JSONObject(AncientTreeRpcCall.homePage(cityCode))
+                val jo = JSONObject(EcoProtectionRpcCall.homePage(cityCode))
                 if (ResChecker.checkRes(TAG, jo)) {
                     val data = jo.getJSONObject("data")
                     if (!data.has("districtBriefInfoList")) {
@@ -111,7 +111,7 @@ class AncientTree : ModelTask() {
 
         private fun districtDetail(districtCode: String?) {
             try {
-                var jo = JSONObject(AncientTreeRpcCall.districtDetail(districtCode))
+                var jo = JSONObject(EcoProtectionRpcCall.districtDetail(districtCode))
                 if (ResChecker.checkRes(TAG, jo)) {
                     var data = jo.getJSONObject("data")
                     if (!data.has("ancientTreeList")) {
@@ -130,7 +130,7 @@ class AncientTree : ModelTask() {
                         val useQuota = ancientTreeControlInfo.optInt("useQuota", 0)
                         if (quota <= useQuota) continue
                         val itemId = ancientTreeItem.getString("projectId")
-                        val ancientTreeDetail = JSONObject(AncientTreeRpcCall.projectDetail(itemId, cityCode))
+                        val ancientTreeDetail = JSONObject(EcoProtectionRpcCall.projectDetail(itemId, cityCode))
                         if (ResChecker.checkRes(TAG, ancientTreeDetail)) {
                             data = ancientTreeDetail.getJSONObject("data")
                             if (data.getBoolean("canProtect")) {
@@ -145,7 +145,7 @@ class AncientTree : ModelTask() {
                                 cityCode = ancientTreeInfo.getString("cityCode")
                                 if (currentEnergy < protectExpense) break
                                 sleepCompat(200)
-                                jo = JSONObject(AncientTreeRpcCall.protect(activityId, projectId, cityCode))
+                                jo = JSONObject(EcoProtectionRpcCall.protect(activityId, projectId, cityCode))
                                 if (ResChecker.checkRes(TAG, jo)) {
                                     Log.forest(
                                         ("保护古树🎐[" + cityName + "-" + districtName
