@@ -39,7 +39,7 @@ class BaseModel : Model() {
         // 配置已加载，更新验证码Hook状态
         try {
             updateHooks(
-                enableCaptchaUIHook.getValue()
+                enableCaptchaUIHook.value
             )
             Log.runtime(TAG, "✅ 验证码Hook配置已同步")
         } catch (t: Throwable) {
@@ -248,10 +248,11 @@ class BaseModel : Model() {
         /**
          * 清理数据，在模块销毁时调用，清空 Reserve 和 Beach 数据。
          */
+        @JvmStatic
         fun destroyData() {
             try {
                 Log.runtime(TAG, "🧹清理所有数据")
-                IdMapManager.getInstance<BeachMap?>(BeachMap::class.java).clear()
+                IdMapManager.getInstance(BeachMap::class.java).clear()
                 //            IdMapManager.getInstance(ReserveaMap.class).clear();
 //            IdMapManager.getInstance(CooperateMap.class).clear();
 //            IdMapManager.getInstance(MemberBenefitsMap.class).clear();
