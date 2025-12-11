@@ -526,7 +526,7 @@ class MainActivity : BaseActivity() {
             textSize = 16f
             setTextColor(android.graphics.Color.DKGRAY)
             setPadding(0, 0, 0, 20)
-            textAlignment = android.view.View.TEXT_ALIGNMENT_CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
         }
 
         // 输入框
@@ -537,7 +537,7 @@ class MainActivity : BaseActivity() {
             setTextColor(android.graphics.Color.BLACK)
             setHintTextColor(android.graphics.Color.GRAY)
             setPadding(40, 30, 40, 30)
-            textAlignment = android.view.View.TEXT_ALIGNMENT_CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
 
             // 输入框椭圆圆角背景
             background = android.graphics.drawable.GradientDrawable().apply {
