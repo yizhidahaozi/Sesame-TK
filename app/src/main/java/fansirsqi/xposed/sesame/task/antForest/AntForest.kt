@@ -152,15 +152,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var doubleCollectInterval: StringModelField? = null // 双击间隔时间
     private var doubleCard: ChoiceModelField? = null // 双击卡类型选择
     private var doubleCardTime: ListJoinCommaToStringModelField? = null // 双击卡使用时间列表
-    private var doubleCountLimit: IntegerModelField? = null // 双击卡使用次数限制
+    var doubleCountLimit: IntegerModelField? = null // 双击卡使用次数限制
 
-    /**
-     * 获取双击卡使用次数限制
-     * @return 双击卡使用次数限制字段
-     */
-    fun getDoubleCountLimit(): IntegerModelField? {
-        return doubleCountLimit
-    }
 
     private var doubleCardConstant: BooleanModelField? = null // 双击卡永动机
     private var stealthCard: ChoiceModelField? = null // 隐身卡
@@ -264,7 +257,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var lastQueryPropListTime: Long = 0
 
     override fun getName(): String {
-        return "森林"
+        return "蚂蚁森林"
     }
 
     override fun getGroup(): ModelGroup {
@@ -487,7 +480,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "浇水 | 好友列表",
                 LinkedHashMap<String?, Int?>(),
                 { AlipayUser.getList() },
-                "设置浇水次数"
+                "记得设置浇水次数"
             ).also { waterFriendList = it })
         modelFields.addField(
             IntegerModelField(
@@ -549,7 +542,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             SelectAndCountModelField(
                 "vitalityExchangeList", "活力值 | 兑换列表", LinkedHashMap<String?, Int?>(),
                 VitalityStore::list,
-                "兑换次数"
+                "记得填兑换次数..亲爱的"
             ).also { vitalityExchangeList = it })
         modelFields.addField(BooleanModelField("userPatrol", "保护地巡护", false).also { userPatrol = it })
         modelFields.addField(BooleanModelField("combineAnimalPiece", "合成动物碎片", false).also { combineAnimalPiece = it })
@@ -2557,7 +2550,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             var usingUserPropsNew = joHomePage.getJSONArray("loginUserUsingPropNew")
             if (usingUserPropsNew.length() == 0) {
 
-                val usingUserPropsNew = if (isTeam(joHomePage)) {
+                if (isTeam(joHomePage)) {
                     joHomePage.optJSONObject("teamHomeResult")
                         ?.optJSONObject("mainMember")
                         ?.optJSONArray("usingUserProps")
@@ -4014,7 +4007,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (usePropBag(propObj)) {
                     // 使用成功，更新状态并结束循环
                     doubleEndTime = System.currentTimeMillis() + 5 * TimeFormatter.ONE_MINUTE_MS
-                    Status.DoubleToday()
+                    Status.doubleToday()
                     success = true
                     break
                 }
