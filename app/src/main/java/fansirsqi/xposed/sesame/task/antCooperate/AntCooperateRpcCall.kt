@@ -21,7 +21,7 @@ object AntCooperateRpcCall {
     fun queryCooperatePlant(coopId: String?): String {
         return requestString(
             "alipay.antmember.forest.h5.queryCooperatePlant",
-            "[{\"cooperationId\":\"" + coopId + "\"}]"
+            "[{\"cooperationId\":\"$coopId\"}]"
         )
     }
 
@@ -44,7 +44,7 @@ object AntCooperateRpcCall {
     fun queryCooperateRank(bizType: String?, coopId: String?): String {
         return requestString(
             "alipay.antmember.forest.h5.queryCooperateRank",
-            "[{\"bizType\":\"" + bizType + "\",\"cooperationId\":\"" + coopId + "\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
+            "[{\"bizType\":\"$bizType\",\"cooperationId\":\"$coopId\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
         )
     }
 
@@ -59,7 +59,7 @@ object AntCooperateRpcCall {
     fun sendCooperateBeckon(userId: String?, cooperationId: String?): String {
         val jo = JSONObject()
         jo.put("bizImage", "https://gw.alipayobjects.com/zos/rmsportal/gzYPfxdAxLrkzFUeVkiY.jpg")
-        jo.put("link", "lipays://platformapi/startapp?appId=66666886&url=%2Fwww%2Fcooperation%2Findex.htm%3FcooperationId%3D" + cooperationId + "%26sourceName%3Dcard")
+        jo.put("link", "lipays://platformapi/startapp?appId=66666886&url=%2Fwww%2Fcooperation%2Findex.htm%3FcooperationId%3D$cooperationId%26sourceName%3Dcard")
         jo.put("midTitle", "快来给我们的树苗浇水，让它快快长大。")
         jo.put(
             "noticeLink",
@@ -79,11 +79,10 @@ object AntCooperateRpcCall {
      * 查询真爱合种首页
      */
     fun queryLoveHome(): String {
-        val start = "20251022"
-        val end = "20251217"
+
         return requestString(
             "alipay.greenmatrix.rpc.h5.love.loveHome",
-            "[{\"calenderEnd\":\"" + end + "\",\"calenderStart\":\"" + start + "\",\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]"
+            "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]"
         )
     }
 
@@ -96,7 +95,7 @@ object AntCooperateRpcCall {
     fun loveTeamWater(teamId: String?, donateNum: Int): String {
         return requestString(
             "alipay.greenmatrix.rpc.h5.love.teamWater",
-            "[{\"donateNum\":" + donateNum + ",\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"teamId\":\"" + teamId + "\"}]"
+            "[{\"donateNum\":$donateNum,\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"teamId\":\"$teamId\"}]"
         )
     }
 }
