@@ -19,7 +19,7 @@ object CoroutineUtils {
     @JvmStatic
     suspend fun delayCompat(millis: Long) {
         try {
-            kotlinx.coroutines.delay(millis)
+            delay(millis)
         } catch (e: Exception) {
             Log.printStackTrace("协程延迟异常", e)
             // 如果协程延迟失败，降级到线程休眠
