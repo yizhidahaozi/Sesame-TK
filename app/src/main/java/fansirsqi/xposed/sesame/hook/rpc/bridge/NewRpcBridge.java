@@ -33,7 +33,7 @@ public class NewRpcBridge implements RpcBridge {
     private Class<?>[] bridgeCallbackClazzArray;
     private Method newRpcCallMethod;
     private final AtomicInteger maxErrorCount = new AtomicInteger(0);
-    private final Integer setMaxErrorCount = BaseModel.getSetMaxErrorCount().getValue();
+    private final Integer setMaxErrorCount = BaseModel.Companion.getSetMaxErrorCount().getValue();
 
     ArrayList<String> errorMark = new ArrayList<>(Arrays.asList(
             "1004", "1009", "2000", "46", "48"
@@ -298,14 +298,14 @@ public class NewRpcBridge implements RpcBridge {
                                 if (currentErrorCount > setMaxErrorCount) {
                                     ApplicationHook.setOffline(true);
                                     Notify.updateStatusText("网络连接异常，已进入离线模式");
-                                    if (BaseModel.getErrNotify().getValue()) {
+                                    if (BaseModel.Companion.getErrNotify().getValue()) {
                                         Notify.sendNewNotification(TimeUtil.getTimeStr() + " | 网络异常次数超过阈值[" + setMaxErrorCount + "]", response);
                                     }
                                 }
-                                if (BaseModel.getErrNotify().getValue()) {
+                                if (BaseModel.Companion.getErrNotify().getValue()) {
                                     Notify.sendNewNotification(TimeUtil.getTimeStr() + " | 网络异常: " + methodName, response);
                                 }
-                                if (BaseModel.getTimeoutRestart().getValue()) {
+                                if (BaseModel.Companion.getTimeoutRestart().getValue()) {
                                     Log.record(TAG, "尝试重新登录");
                                     ApplicationHook.reLoginByBroadcast();
                                 }
