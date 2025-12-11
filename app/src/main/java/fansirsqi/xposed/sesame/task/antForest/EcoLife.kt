@@ -190,9 +190,7 @@ object EcoLife {
                     // 避免重复添加相同的照片信息
                     var exists = false
                     for (p in allPhotos) {
-                        if (p.get("before") == photo!!.get("before") && p.get("after") == photo.get(
-                                "after"
-                            )
+                        if (p["before"] == photo!!["before"] && p["after"] == photo["after"]
                         ) {
                             exists = true
                             break
@@ -214,7 +212,7 @@ object EcoLife {
                 }
                 photo = null
             } else {
-                photo = allPhotos.get(RandomUtil.nextInt(0, allPhotos.size))
+                photo = allPhotos[RandomUtil.nextInt(0, allPhotos.size)]
             }
             if (photo == null) {
                 if (!Status.hasFlagToday("EcoLife::plateNotify1")) {
@@ -225,7 +223,7 @@ object EcoLife {
             }
             str = AntForestRpcCall.ecolifeUploadDishImage(
                 "BEFORE_MEALS",
-                photo.get("before"),
+                photo["before"],
                 0.16571736,
                 0.07448776,
                 0.7597949,
@@ -238,7 +236,7 @@ object EcoLife {
             GlobalThreadPools.sleepCompat(3000)
             str = AntForestRpcCall.ecolifeUploadDishImage(
                 "AFTER_MEALS",
-                photo.get("after"),
+                photo["after"],
                 0.00040030346,
                 0.99891376,
                 0.0006858421,
