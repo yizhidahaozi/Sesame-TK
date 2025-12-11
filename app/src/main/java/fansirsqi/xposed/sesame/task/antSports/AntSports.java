@@ -155,10 +155,10 @@ public class AntSports extends ModelTask {
     @Override
     public Boolean check() {
         if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
+            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.Companion.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
             return false;
         } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
+            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.Companion.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
             return false;
         } else {
             return true;
@@ -907,7 +907,7 @@ public class AntSports extends ModelTask {
                     openTreasureBox(loader, boxNo, userId);
                     return;
                 }
-                if (delay < BaseModel.getCheckInterval().getValue()) {
+                if (delay < BaseModel.Companion.getCheckInterval().getValue()) {
                     String taskId = "BX|" + boxNo;
                     if (hasChildTask(taskId)) {
                         return;
@@ -1599,8 +1599,8 @@ public class AntSports extends ModelTask {
 
         private static final String TAG = "Neverland";
         // 失败次数限制（优先从 BaseModel 获取，无则默认5次）
-        private static final int MAX_ERROR_COUNT = BaseModel.getSetMaxErrorCount().getValue() > 0
-                ? BaseModel.getSetMaxErrorCount().getValue()
+        private static final int MAX_ERROR_COUNT = BaseModel.Companion.getSetMaxErrorCount().getValue() > 0
+                ? BaseModel.Companion.getSetMaxErrorCount().getValue()
                 : 5;
         // 循环间隔延时（ms）- 避免接口调用过频繁
         private static final long TASK_LOOP_DELAY = 1000;
