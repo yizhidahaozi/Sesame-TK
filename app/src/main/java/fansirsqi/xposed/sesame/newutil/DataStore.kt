@@ -1,10 +1,9 @@
 package fansirsqi.xposed.sesame.newutil
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.core.util.DefaultIndenter
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import java.io.File
@@ -14,7 +13,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.thread
 import kotlin.concurrent.write
-import com.fasterxml.jackson.databind.exc.MismatchedInputException
 
 object DataStore {
     private val mapper = jacksonObjectMapper()
@@ -32,8 +30,8 @@ object DataStore {
         if (data.isNotEmpty()) {
             saveToDisk()
         }
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startWatcherNio() else startWatcher()
+
+        startWatcherNio()
     }
 
     inline fun <reified T : Any> DataStore.getOrCreate(key: String) = getOrCreate(key, object : TypeReference<T>() {})
@@ -47,34 +45,6 @@ object DataStore {
         data[key]?.let { mapper.convertValue(it, clazz) }
     }
 
-
-    /* -------------------------------------------------- */
-    /*  类型安全读取：Class 版（基本 / 自定义对象）         */
-    /* -------------------------------------------------- */
-    @Suppress("UNCHECKED_CAST")
-    fun <T : Any> getOrCreate(key: String, clazz: Class<T>): T = lock.write {
-        data[key]?.let { return mapper.convertValue(it, clazz) }
-        val default: T = when (clazz) {
-            /* 基本容器 */
-            java.util.List::class.java -> mutableListOf<Any>() as T
-            java.util.Set::class.java -> mutableSetOf<Any>() as T
-            java.util.Map::class.java -> mutableMapOf<String, Any>() as T
-
-            /* 基本包装类型 */
-            String::class.java -> "" as T
-            Boolean::class.java -> false as T
-            Int::class.java -> 0 as T
-            Long::class.java -> 0L as T
-            Double::class.java -> 0.0 as T
-            Float::class.java -> 0f as T
-
-            /* 其它：尝试无参构造 */
-            else -> clazz.getDeclaredConstructor().newInstance()
-        }
-        data[key] = default
-        saveToDisk()
-        default
-    }
 
     /* -------------------------------------------------- */
     /*  类型安全读取：TypeReference 版（支持嵌套泛型）       */
@@ -111,9 +81,9 @@ object DataStore {
                 val loaded: Map<String, Any> = mapper.readValue(storageFile)
                 data.clear()
                 data.putAll(loaded)
-            } catch (e: MismatchedInputException) {
+            } catch (_: MismatchedInputException) {
                 // 忽略，可能是文件正在写入导致的格式错误
-            } catch (e: java.io.FileNotFoundException) {
+            } catch (_: java.io.FileNotFoundException) {
                 // 忽略，可能是文件在检查后、读取前被删除（竞态条件）
             }
         }
@@ -136,28 +106,13 @@ object DataStore {
                 storageFile.delete()
             }
             tempFile.renameTo(storageFile)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             if (tempFile.exists()) {
                 tempFile.delete()
             }
         }
     }
 
-    private fun startWatcher() {
-        Thread {
-            var last = storageFile.lastModified()
-            while (true) {
-                Thread.sleep(1000)
-                val current = storageFile.lastModified()
-                if (current > last) {
-                    last = current
-                    loadFromDisk()
-                }
-            }
-        }.apply { isDaemon = true }.start()
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
     fun startWatcherNio() = thread(isDaemon = true) {
         val path = storageFile.toPath().parent
         val watch = path.fileSystem.newWatchService()
