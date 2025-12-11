@@ -11,6 +11,7 @@ import fansirsqi.xposed.sesame.util.StringUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Runnable
@@ -18,7 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import lombok.Setter
@@ -291,6 +291,7 @@ abstract class ModelTask : Model() {
      * 停止任务（协程版本）
      * 注意：此方法是非阻塞的，会异步取消任务
      */
+    @OptIn(DelicateCoroutinesApi::class)
     open fun stopTask() {
         // 立即标记为非运行状态
         isRunning = false
