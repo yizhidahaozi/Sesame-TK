@@ -378,8 +378,8 @@ public class ApplicationHook {
         try {
             // 检查长时间未执行的情况
             checkInactiveTime();
-            int checkInterval = BaseModel.getCheckInterval().getValue();
-            List<String> execAtTimeList = BaseModel.getExecAtTimeList().getValue();
+            int checkInterval = BaseModel.Companion.getCheckInterval().getValue();
+            List<String> execAtTimeList = BaseModel.Companion.getExecAtTimeList().getValue();
             if (execAtTimeList != null && execAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时执行未开启");
                 return;
@@ -659,7 +659,7 @@ public class ApplicationHook {
                                         if (lastExecTime == 0) {
                                             Log.record(TAG, "▶️ 首次手动触发，开始运行");
                                         } else {
-                                            if (BaseModel.getManualTriggerAutoSchedule().getValue()) {
+                                            if (BaseModel.Companion.getManualTriggerAutoSchedule().getValue()) {
                                                 Log.record(TAG, "手动APP触发，已开启");
                                                 TaskRunnerAdapter adapter = new TaskRunnerAdapter();
                                                 adapter.run();
@@ -679,7 +679,7 @@ public class ApplicationHook {
                                     if (isAlarmTriggered && timeSinceLastExec < MIN_EXEC_INTERVAL) {
                                         Log.record(TAG, "⚠️ 定时任务触发间隔较短(" + timeSinceLastExec + "ms)，跳过执行，安排下次执行");
                                         ensureScheduler();
-                                        SchedulerAdapter.scheduleDelayedExecution(BaseModel.getCheckInterval().getValue());
+                                        SchedulerAdapter.scheduleDelayedExecution(BaseModel.Companion.getCheckInterval().getValue());
                                         return;
                                     }
                                     String currentUid = UserMap.getCurrentUid();
@@ -771,7 +771,7 @@ public class ApplicationHook {
             // 确保调度器已初始化
             ensureScheduler();
 
-            List<String> wakenAtTimeList = BaseModel.getWakenAtTimeList().getValue();
+            List<String> wakenAtTimeList = BaseModel.Companion.getWakenAtTimeList().getValue();
             if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) {
                 Log.record(TAG, "定时唤醒未开启");
                 return;
@@ -876,7 +876,7 @@ public class ApplicationHook {
                 setWakenAtTimeAlarm();
 
                 synchronized (rpcBridgeLock) {
-                    if (BaseModel.getNewRpc().getValue()) {
+                    if (BaseModel.Companion.getNewRpc().getValue()) {
                         rpcBridge = new NewRpcBridge();
                     } else {
                         rpcBridge = new OldRpcBridge();
@@ -886,8 +886,8 @@ public class ApplicationHook {
                 }
 
                 //!!注意⚠️所有BaseModel相关配置需要在 Config.load(userId)//initHandler;之后获取才有意义！！否则都取的默认值
-                if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
-                    HookUtil.INSTANCE.hookRpcBridgeExtension(classLoader, BaseModel.getSendHookData().getValue(), BaseModel.getSendHookDataUrl().getValue());
+                if (BaseModel.Companion.getNewRpc().getValue() && BaseModel.Companion.getDebugMode().getValue()) {
+                    HookUtil.INSTANCE.hookRpcBridgeExtension(classLoader, BaseModel.Companion.getSendHookData().getValue(), BaseModel.Companion.getSendHookDataUrl().getValue());
                     HookUtil.INSTANCE.hookDefaultBridgeCallback(classLoader);
                 }
 
@@ -948,7 +948,7 @@ public class ApplicationHook {
 
                 // 后台运行权限检查!!
                 if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
-                    if (BaseModel.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
+                    if (BaseModel.Companion.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
                         Log.record(TAG, "支付宝无始终在后台运行权限,准备申请");
                         mainHandler.postDelayed(
                                 () -> {
@@ -990,7 +990,7 @@ public class ApplicationHook {
             GlobalThreadPools.INSTANCE.shutdownAndRestart();
             if (service != null) {
                 stopHandler();
-                BaseModel.destroyData();
+                BaseModel.Companion.destroyData();
                 Status.unload();
                 Notify.stop();
                 RpcIntervalLimit.INSTANCE.clearIntervalLimit();
@@ -1209,7 +1209,7 @@ public class ApplicationHook {
                     if (reLoginCount.get() < 5) {
                         delayMillis = reLoginCount.getAndIncrement() * 5000L;
                     } else {
-                        delayMillis = Math.max(BaseModel.getCheckInterval().getValue(), 180_000);
+                        delayMillis = Math.max(BaseModel.Companion.getCheckInterval().getValue(), 180_000);
                     }
                     Log.record("TAG", "🔄 准备重新登录，延迟 " + (delayMillis / 1000) + " 秒后执行");
                     // 使用调度器（协程或 WorkManager）
