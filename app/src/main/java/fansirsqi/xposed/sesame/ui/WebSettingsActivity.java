@@ -8,6 +8,7 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -242,6 +243,15 @@ public class WebSettingsActivity extends BaseActivity {
                 Log.runtime(TAG, "WebSettingsActivity.getTabs: " + result);
             }
             return result;
+        }
+
+        /**
+         * 新增：检查当前系统是否为深色模式
+         */
+        @JavascriptInterface
+        public boolean isNightMode() {
+            int nightModeFlags = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            return nightModeFlags == Configuration.UI_MODE_NIGHT_YES;
         }
 
         @JavascriptInterface

@@ -106,19 +106,13 @@
     </style>
 
     <!-- React & ReactDOM -->
-    <!-- <script crossorigin src="https://unpkg.com/react@17.0.2/umd/react.development.js"></script> -->
     <script src="./js/react.development.js"></script>
-    <!-- <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script> -->
     <script src="./js/react-dom.development.js"></script>
     <!-- Semi UI JS -->
-    <!-- <script src="https://unpkg.com/@douyinfe/semi-ui@2.27.0/dist/umd/semi-ui.min.js"></script> -->
     <script src="./js/semi-ui.min.js"></script>
     <!-- Semi Icons -->
-    <!-- <script src="https://unpkg.com/@douyinfe/semi-icons@latest/dist/umd/semi-icons.min.js"></script> -->
-    <!--              https://unpkg.com/@douyinfe/semi-icons@2.89.0/dist/umd/semi-icons.min.js.map -->
     <script src="./js/semi-icons.min.js"></script>
     <!-- Babel -->
-    <!-- <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> -->
     <script src="./js/babel.min.js"></script>
 </head>
 
@@ -130,7 +124,6 @@
             const body = document.body;
             if (body.hasAttribute('theme-mode')) {
                 body.removeAttribute('theme-mode');
-                // 以下这行代码，window.setMode仅用于当通过本Demo切换时，通知Semi官网Header记录更新当前模式（只用于演示）。在您的代码里无需存在。
                 window.setMode('light');
             } else {
                 body.setAttribute('theme-mode', 'dark');
@@ -162,6 +155,26 @@
 
         // --- Main Component ---
         const App = () => {
+
+            // 1. 处理主题自动切换逻辑
+            const applyTheme = () => {
+                let isDark = false;
+                if (window.HOOK && window.HOOK.isNightMode) {
+                    try { isDark = window.HOOK.isNightMode(); } catch (e) {}
+                } else {
+                    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) isDark = true;
+                }
+                const body = document.body;
+                if (isDark) {
+                    body.setAttribute('theme-mode', 'dark');
+                    if (window.setMode) window.setMode('dark');
+                } else {
+                    if (body.hasAttribute('theme-mode')) body.removeAttribute('theme-mode');
+                    if (window.setMode) window.setMode('light');
+                }
+            };
+            applyTheme();
+
             const [tabs, setTabs] = useState([]);
             const [modelsMap, setModelsMap] = useState({});
 
@@ -171,7 +184,7 @@
             const [sheetList, setSheetList] = useState([]); // 完整列表数据
             const [sheetSearch, setSheetSearch] = useState(''); // 搜索关键词
             const [selectedIds, setSelectedIds] = useState(new Set()); // 选中的ID集合
-            const [selectedCounts, setSelectedCounts] = useState({}); // ID对应的数值 (用于 SELECT_AND_COUNT)
+            const [selectedCounts, setSelectedCounts] = useState({}); // ID对应的数值
 
             // 初始化
             useEffect(() => {
@@ -184,7 +197,6 @@
                 setModelsMap(initialMap);
             }, []);
 
-            // 通用字段更新
             const handleFieldChange = (modelCode, fieldCode, newValue) => {
                 setModelsMap(prev => {
                     const currentFields = [...prev[modelCode]];
@@ -192,13 +204,8 @@
                     if (fieldIndex > -1) {
                         currentFields[fieldIndex] = { ...currentFields[fieldIndex], configValue: String(newValue) };
                     }
-
-                    // 构造保存数据
                     const savePayload = {};
-                    currentFields.forEach(f => {
-                        savePayload[f.code] = { configValue: f.configValue };
-                    });
-
+                    currentFields.forEach(f => { savePayload[f.code] = { configValue: f.configValue }; });
                     if (window.HOOK && window.HOOK.setModel) {
                         window.HOOK.setModel(modelCode, JSON.stringify(savePayload));
                     }
@@ -206,31 +213,22 @@
                 });
             };
 
-            // --- 列表弹窗逻辑 ---
+            // --- 列表弹窗逻辑 (关键修改部分) ---
 
-            // 打开弹窗
             const openListSheet = (modelCode, fieldItem) => {
                 const { code, name, type, desc, configValue } = fieldItem;
 
-                // 1. 获取最新列表数据
-                const listData = getFieldData(modelCode, code);
-                setSheetList(listData);
-                setSheetConfig({ modelCode, fieldCode: code, type, title: name, desc: desc });
-                setSheetSearch('');
-
-                // 2. 解析当前已保存的值
+                // 1. 先获取原始数据
+                let listData = getFieldData(modelCode, code);
+                
+                // 2. 解析当前已选中的 ID，用于排序
                 const newSelectedIds = new Set();
                 const newSelectedCounts = {};
-
                 try {
                     const parsed = JSON.parse(configValue);
                     if (type === 'SELECT') {
-                        // 格式: ["id1", "id2"]
-                        if (Array.isArray(parsed)) {
-                            parsed.forEach(id => newSelectedIds.add(id));
-                        }
+                        if (Array.isArray(parsed)) parsed.forEach(id => newSelectedIds.add(id));
                     } else if (type === 'SELECT_AND_COUNT') {
-                        // 格式: {"id1": 10, "id2": 20}
                         if (parsed && typeof parsed === 'object') {
                             Object.entries(parsed).forEach(([id, count]) => {
                                 newSelectedIds.add(id);
@@ -238,46 +236,51 @@
                             });
                         }
                     }
-                } catch (e) {
-                    console.error("Parse config value failed", e);
-                }
+                } catch (e) { console.error("Parse config value failed", e); }
+
+                // 3. 执行排序：已选中的排在最前面 (只执行一次)
+                // sort 会改变原数组，这里直接操作 listData 即可
+                listData.sort((a, b) => {
+                    const isA = newSelectedIds.has(a.id);
+                    const isB = newSelectedIds.has(b.id);
+                    if (isA && !isB) return -1; // a 在前
+                    if (!isA && isB) return 1;  // b 在前
+                    return 0; // 保持原顺序
+                });
+
+                // 4. 将排好序的数据设置到 State
+                setSheetList(listData);
+                setSheetConfig({ modelCode, fieldCode: code, type, title: name, desc: desc });
+                setSheetSearch('');
                 setSelectedIds(newSelectedIds);
                 setSelectedCounts(newSelectedCounts);
                 setSheetVisible(true);
             };
 
-            // 保存弹窗数据
             const saveSheet = () => {
                 const { modelCode, fieldCode, type } = sheetConfig;
                 let newValueStr = "";
-
                 if (type === 'SELECT') {
-                    // 转回数组字符串
                     const arr = Array.from(selectedIds);
                     newValueStr = JSON.stringify(arr);
                 } else {
-                    // 转回对象字符串
                     const obj = {};
                     selectedIds.forEach(id => {
-                        // 如果有自定义数值用自定义的，否则默认 0 或 1
                         obj[id] = selectedCounts[id] !== undefined ? selectedCounts[id] : 0;
                     });
                     newValueStr = JSON.stringify(obj);
                 }
-
                 handleFieldChange(modelCode, fieldCode, newValueStr);
                 setSheetVisible(false);
                 Toast.success("已保存列表设置");
             };
 
-            // 列表项勾选处理
             const toggleItem = (id, checked) => {
                 const newIds = new Set(selectedIds);
                 if (checked) {
                     newIds.add(id);
-                    // 如果是计数模式，给个默认值
                     if (sheetConfig.type === 'SELECT_AND_COUNT' && selectedCounts[id] === undefined) {
-                        setSelectedCounts(prev => ({ ...prev, [id]: 1 })); // 默认为 1
+                        setSelectedCounts(prev => ({ ...prev, [id]: 1 }));
                     }
                 } else {
                     newIds.delete(id);
@@ -285,16 +288,13 @@
                 setSelectedIds(newIds);
             };
 
-            // 列表项数值变更
             const handleCountChange = (id, val) => {
                 setSelectedCounts(prev => ({ ...prev, [id]: val }));
             };
 
-            // 全选/反选
             const toggleAll = () => {
                 const filteredList = sheetList.filter(item => item.name.includes(sheetSearch));
                 const allSelected = filteredList.every(item => selectedIds.has(item.id));
-
                 const newIds = new Set(selectedIds);
                 filteredList.forEach(item => {
                     if (allSelected) {
@@ -309,7 +309,7 @@
                 setSelectedIds(newIds);
             };
 
-            // 渲染过滤后的列表
+            // 渲染过滤后的列表 (注意：这里不再包含排序逻辑)
             const renderSheetList = () => {
                 const filtered = sheetList.filter(item => item.name.toLowerCase().includes(sheetSearch.toLowerCase()));
 
@@ -323,8 +323,6 @@
                                 <Checkbox checked={isChecked} style={{ pointerEvents: 'none' }} />
                                 <span className="list-item-name">{item.name}</span>
                             </div>
-
-                            {/* 只有选中且是计数模式时，显示输入框 */}
                             {sheetConfig.type === 'SELECT_AND_COUNT' && isChecked && (
                                 <InputNumber
                                     className="list-count-input"
@@ -343,7 +341,6 @@
             // --- 渲染主界面配置项 ---
             const renderFieldItem = (modelCode, item) => {
                 const { type, name, code, configValue, desc, expandKey } = item;
-
                 if (type === 'BOOLEAN') {
                     return (
                         <div className="field-row" key={code}>
@@ -354,7 +351,6 @@
                         </div>
                     );
                 }
-
                 if (['MULTIPLY_INTEGER', 'LIST', 'INTEGER', 'STRING', 'TEXT'].includes(type)) {
                     return (
                         <div className="field-row" key={code}>
@@ -363,10 +359,8 @@
                                 <Input value={configValue} onChange={(v) => handleFieldChange(modelCode, code, v)} placeholder="请输入..." />
                             </div>
                         </div>
-
                     );
                 }
-
                 if (type === 'URL_TEXT') {
                     return (
                         <div className="field-row" key={code}>
@@ -374,7 +368,6 @@
                         </div>
                     );
                 }
-
                 if (type === 'CHOICE') {
                     return (
                         <div style={{ padding: '12px 0', borderBottom: '1px solid var(--semi-color-border)' }} key={code}>
@@ -385,15 +378,12 @@
                         </div>
                     );
                 }
-
                 if (['SELECT', 'SELECT_AND_COUNT'].includes(type)) {
-                    // 计算已选项数量
                     let count = 0;
                     try {
                         const parsed = JSON.parse(configValue);
                         count = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
                     } catch (e) { }
-
                     return (
                         <div className="field-row" key={code}>
                             <div className="field-label">{name}</div>
@@ -412,13 +402,11 @@
                 <div className="container">
                     <div className="header">
                         <Title heading={2} style={{ margin: 0 }}>Sesame-TK 设置</Title>
-
                         <Button disabled theme="borderless">欢迎加入我们的组织</Button>
                         <Text style={{ marginRight: 15 }} link={{ href: 'https://t.me/fansirsqi_xposed_sesame' }}> ➤TG </Text> |
-                        <Text style={{ marginLeft: 15 ,marginRight: 15 }} link={{ href: 'https://qm.qq.com/q/740DFRGOXe' }}> ➤QQ </Text>
+                        <Text style={{ marginLeft: 15, marginRight: 15 }} link={{ href: 'https://qm.qq.com/q/740DFRGOXe' }}> ➤QQ </Text>
                         <Button style={{}} onClick={switchMode} > 切换主题 </Button>
                     </div>
-
 
                     <div className="section-padding">
                         <Collapse accordion defaultActiveKey={tabs[0]?.modelCode}>
@@ -447,13 +435,10 @@
                             block
                             onClick={() => {
                                 if (window.HOOK && window.HOOK.saveOnExit) {
-                                    // 1. 如果是在安卓环境，调用 Java 的保存并退出
                                     window.HOOK.saveOnExit();
                                 } else if (window.Android && window.Android.onExit) {
-                                    // 2. 兼容旧版逻辑
                                     window.Android.onExit();
                                 } else {
-                                    // 3. 本地调试时的回退逻辑
                                     console.log("模拟: 保存并退出");
                                 }
                             }}
@@ -471,8 +456,8 @@
                         visible={sheetVisible}
                         onCancel={() => setSheetVisible(false)}
                         width="100%"
-                        placement="right" // 手机上 Right 效果比较像新页面
-                        bodyStyle={{ padding: 10 }} // 去掉默认内边距
+                        placement="right" 
+                        bodyStyle={{ padding: 10 }} 
                     >
                         <Text>{sheetConfig.desc}</Text>
                         <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--semi-color-border)' }}>
@@ -483,7 +468,7 @@
                                 onChange={setSheetSearch}
                             />
                             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Checkbox onChange={toggleAll} checked={false /* 这里简化处理，不强求全选状态回显 */}>
+                                <Checkbox onChange={toggleAll} checked={false}>
                                     全选/反选 (当前可见)
                                 </Checkbox>
                                 <Text size="small" type="secondary">已选: {selectedIds.size}</Text>
