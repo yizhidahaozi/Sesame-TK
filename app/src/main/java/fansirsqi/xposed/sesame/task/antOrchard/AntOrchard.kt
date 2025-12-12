@@ -550,7 +550,7 @@ class AntOrchard : ModelTask() {
                     val taskId = jo2.getString("taskId")
                     val actionType = jo2.getString("actionType")//如果是 XLIGHT要走单独的浏览广告完成,注意，这里只看 actionType，taskPlantType可能是XLight但是不走这里
                     val taskPlantType = jo2.getString("taskPlantType")
-                    if(actionType=="actionType"){
+                    if(actionType=="XLIGHT"){
                         // 解析 targetUrl 获取 spaceCodeFeeds
                         var targetUrl = jo2.getJSONObject("taskDisplayConfig").getString("targetUrl")
                         val spaceCodeFeeds = UrlUtil.getParam(targetUrl, "spaceCodeFeeds") ?: continue
@@ -583,7 +583,7 @@ class AntOrchard : ModelTask() {
                             if (finishJo.getString("resultCode") == "100") {
                                 val rewardNum = reward.getInt("rewardNumber")
 
-                                Log.forest(TAG,"领取奖励🎖️[$title]#$rewardNumber$rewardText")
+                                Log.forest(TAG,"领取X奖励🎖️[$title]#$rewardNumber$rewardText")
                             } else {
                                 Log.record(TAG, finishJo.toString())
                                 Log.runtime(TAG, finishJo.toString())

@@ -77,7 +77,6 @@ public class AntSports extends ModelTask {
 
     private IntegerModelField neverlandGridStepCount;   //健康岛
 
-
     @Override
     public String getName() {
         return "运动";
@@ -92,7 +91,6 @@ public class AntSports extends ModelTask {
     public String getIcon() {
         return "AntSports.png";
     }
-
 
     @Override
     public ModelFields getFields() {
@@ -1801,8 +1799,6 @@ public class AntSports extends ModelTask {
             Log.record(TAG, "任务大厅循环处理结束");
         }
 
-
-
         /**
          * 处理健康岛浏览任务
          */
@@ -2080,8 +2076,6 @@ public class AntSports extends ModelTask {
             }
         }
 
-
-
         // -------------------------------------------------------------------------
         // 4. 自动走路任务处理
         // -------------------------------------------------------------------------
@@ -2274,7 +2268,7 @@ public class AntSports extends ModelTask {
                 }
 
                 // ========== 2. 查找或选择地图 ==========
-                JSONObject currentMap = findOrChooseMap(mapList);
+                JSONObject currentMap = chooseAvailableMap();
                 if (currentMap == null) {
                     Log.error(TAG, "无可用地图, 任务终止");
                     return;
@@ -2303,12 +2297,7 @@ public class AntSports extends ModelTask {
                         String errorCode = walkResp.optString("errorCode", "");
 
                         if ("MAP_NOT_CURRENT".equals(errorCode) && !retriedMapNotCurrent) {
-                            if (tryChooseMap(branchId, mapId)) {
-                                retriedMapNotCurrent = true;
-                                i--;
-                                Thread.sleep(300);
-                                continue;
-                            }
+                            chooseAvailableMap();
                         }
 
                         Log.error(TAG, String.format("walkGrid 失败, 错误码: %s, 响应数据: %s",
@@ -2320,7 +2309,9 @@ public class AntSports extends ModelTask {
                     JSONObject walkData = walkResp.getJSONObject("data");
                     leftEnergy = walkData.optInt("leftCount", leftEnergy);
 
-                    int stepIncrease = extractStepIncrease(walkData);
+                    // 与 executeAutoBuild 对齐：配置项是“今日最大次数”，walkGrid 每次调用固定消耗 1 次。
+                    // walkData.mapAwards[0].step 可能为 1~6（奖励/前进格子数），不能用来当作“已走次数”。
+                    int stepIncrease = 1;//extractStepIncrease(walkData);
                     int totalSteps = recordStepIncrease(stepIncrease);
 
                     JSONObject starData = walkData.optJSONObject("starData");
@@ -2341,75 +2332,116 @@ public class AntSports extends ModelTask {
         }
 
         /**
-         * 查找 DOING 地图或随机选择 LOCKED 地图
+         * 查询地图列表，优先返回状态为 DOING 的地图；
+         * 若不存在 DOING，则从状态为 LOCKED 的地图中随机选择一个并尝试切换；
+         * 若切换成功，则返回切换后的地图对象。
          *
-         * @param mapList 地图列表
-         * @return 选中的地图对象,失败返回 null
+         * 优化点：使用单次 for 循环完成 DOING 查找和 LOCKED 收集，避免 Stream API 转换开销。
+         * * @return 最终选中的地图对象；失败时返回 null
+         *
+         * {
+         *         "branchId": "MASTER",
+         *         "currentPercent": 0,
+         *         "islandImageUrl": "https://mdn.alipayobjects.com/huamei_nbiabh/afts/img/A*TuESSqNLW9YAAAAAQ6AAAAgAegH_AQ/fmt.avif",
+         *         "mapId": "MM125",
+         *         "mapName": "悦动药材岛",
+         *         "mapType": "COMMON",
+         *         "newIsLandFlg": true,
+         *         "order": 268009,
+         *         "recommendRewardToast": "",
+         *         "status": "LOCKED"
+         *       }
          */
-        private JSONObject findOrChooseMap(JSONArray mapList) {
+        private JSONObject chooseAvailableMap() {
             try {
-                JSONObject currentMap = null;
+                // 1. 查询地图列表并进行基础检查
+                JSONObject mapResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapList());
+
+                // 统一且精简的错误检查
+                if (!ResChecker.checkRes(TAG + " 查询地图失败:", mapResp) || !mapResp.optBoolean("success", false)) {
+                    Log.error(TAG, "queryMapList 失败: " + mapResp);
+                    return null;
+                }
+
+                JSONObject data = mapResp.optJSONObject("data");
+                JSONArray mapList = data != null ? data.optJSONArray("mapList") : null;
+
+                if (mapList == null || mapList.length() == 0) {
+                    Log.error(TAG, "地图列表为空");
+                    return null;
+                }
+
+                JSONObject doingMap = null;
                 List<JSONObject> lockedMaps = new ArrayList<>();
 
+                // 2. 单次循环扫描 DOING (优先) / LOCKED
                 for (int i = 0; i < mapList.length(); i++) {
                     JSONObject map = mapList.getJSONObject(i);
-                    String status = map.optString("status", "");
+                    String status = map.optString("status");
+
                     if ("DOING".equals(status)) {
-                        currentMap = map;
-                        break;
+                        doingMap = map;
+                        break; // 找到 DOING，立即跳出循环，实现优先级
                     } else if ("LOCKED".equals(status)) {
                         lockedMaps.add(map);
                     }
                 }
 
-                if (currentMap == null && !lockedMaps.isEmpty()) {
-                    int idx = new Random().nextInt(lockedMaps.size());
-                    currentMap = lockedMaps.get(idx);
-                    String branchId = currentMap.optString("branchId", "");
-                    String mapId = currentMap.optString("mapId", "");
-
-                    Log.other(TAG, String.format("未找到 DOING 地图, 随机选择 LOCKED 地图: %s", mapId));
-
-                    if (!tryChooseMap(branchId, mapId)) {
-                        return null;
-                    }
+                // 3. 处理 DOING 地图：如果存在，执行一次切换以确保状态同步
+                if (doingMap != null) {
+                    Log.other(TAG, "当前 DOING 地图: "+doingMap.optString("mapName") + doingMap.optString("mapId") + " → 执行一次强制切换确保状态一致");
+                    return chooseMap(doingMap); // 调用统一的切换方法
                 }
 
-                return currentMap;
+                // 4. 处理 LOCKED 地图：随机选择并尝试切换
+                if (lockedMaps.isEmpty()) {
+                    Log.error(TAG, "没有 DOING 且没有可选的 LOCKED 地图");
+                    return null;
+                }
+
+                JSONObject chosenLocked = lockedMaps.get(new Random().nextInt(lockedMaps.size()));
+                Log.other(TAG, "随机选择 LOCKED 地图: " + chosenLocked.optString("mapId"));
+                return chooseMap(chosenLocked); // 调用统一的切换方法
 
             } catch (Throwable t) {
-                Log.error(TAG, "findOrChooseMap 发生异常");
+                Log.error(TAG, "chooseAvailableMap 发生异常");
                 Log.printStackTrace(TAG, t);
                 return null;
             }
         }
 
         /**
-         * 尝试切换到指定地图
+         * 统一的地图切换方法，简化并统一日志逻辑。
+         * 替代了原来的 chooseMapAndLog，移除了 isDoing 逻辑。
          *
-         * @param branchId 分支 ID
-         * @param mapId 地图 ID
-         * @return 切换成功返回 true
+         * @param map 要切换的地图对象
+         * @return 切换成功的地图对象；失败时返回 null
          */
-        private boolean tryChooseMap(String branchId, String mapId) {
+        private JSONObject chooseMap(JSONObject map) {
             try {
-                Log.other(TAG, "尝试切换地图: " + mapId);
-                JSONObject chooseResp = new JSONObject(
-                        AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId));
+                String mapId = map.optString("mapId");
+                String branchId = map.optString("branchId");
 
-                if (chooseResp.optBoolean("success", false)) {
-                    Log.record(TAG, "成功切换到地图: " + mapId);
-                    return true;
+                JSONObject resp = new JSONObject(
+                        AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId)
+                );
+
+                if (resp.optBoolean("success", false)) {
+                    Log.record(TAG, "切换地图成功: " + mapId);
+                    return map;
                 } else {
-                    Log.error(TAG, "切换地图失败: " + chooseResp);
-                    return false;
+                    Log.error(TAG, "切换地图失败: " + resp);
+                    return null;
                 }
             } catch (Throwable t) {
-                Log.error(TAG, "tryChooseMap 发生异常");
+                // 统一异常日志，避免原来的 Log.error(TAG, "")
+                Log.error(TAG, "chooseMap 发生异常");
                 Log.printStackTrace(TAG, t);
-                return false;
+                return null;
             }
         }
+
+
 
         /**
          * 从 walkData 中提取步数增量
@@ -2452,8 +2484,62 @@ public class AntSports extends ModelTask {
             try {
                 Log.other(TAG, String.format("开始执行建造任务, 地图: %s", mapId));
 
+                // 1. 首次查询地图信息
+                String resp = AntSportsRpcCall.NeverlandRpcCall.queryMapInfoNew(mapId);
+                JSONObject mapInfo = new JSONObject(resp);
+
+                if (!ResChecker.checkRes(TAG + " 查询建造地图失败", mapInfo)) {
+                    Log.error(TAG, "查询建造地图失败 " + mapInfo);
+                    return;
+                }
+                JSONObject data = mapInfo.optJSONObject("data");
+                if (data == null) {
+                    Log.error(TAG, "地图Data 为空，无法解析");
+                    return;
+                }
+
+                int mapEnergyFinal = data.optInt("mapEnergyFinal");     // 最终进度
+                int mapEnergyProcess = data.optInt("mapEnergyProcess"); // 当前进度
+                JSONArray buildings = data.optJSONArray("buildingConfigInfos");
+                int lastBuildingIndex = -1;
+
+                if (buildings != null && buildings.length() > 0) {
+                    lastBuildingIndex = buildings.getJSONObject(buildings.length() - 1)
+                            .optInt("buildingIndex", -1);
+                    Log.record(TAG, "最后一个建筑 Index: " + lastBuildingIndex);
+                }
+
+                // 2. 地图完成后的处理逻辑
+                if (mapEnergyProcess == mapEnergyFinal) {
+                    Log.record(TAG, "当前地图已建造完成，准备切换地图...");
+                    JSONObject choiceMapInfo = chooseAvailableMap(); // 尝试切换到 DOING/LOCKED
+
+                    if (choiceMapInfo == null) {
+                        Log.error(TAG, "切换地图失败，可能无可用地图，任务终止。");
+                        return;
+                    }
+
+                    // 检查新选择的地图是否是需要继续建造的地图 (newIsLandFlg=true)
+                    if (choiceMapInfo.optBoolean("newIsLandFlg", true)) { // 默认值设为 true，确保安全
+                        // **关键修复：更新参数变量，以便继续执行 while 循环**
+                        branchId = choiceMapInfo.optString("branchId");
+                        mapId = choiceMapInfo.optString("mapId");
+                        Log.record(TAG, String.format("成功切换到可建造的新地图: %s，继续执行建造。", mapId));
+
+                        // 注意：这里没有 return，代码会跳过 if 块，直接进入下面的 while 循环，
+                        // 此时 while 循环将使用新的 branchId 和 mapId 继续执行。
+
+                    } else {
+                        // newIsLandFlg 为 false，通常意味着这是用户需要走路才能解锁的特殊地图
+                        Log.record(TAG, String.format("已切换至走路地图: %s，将在下次运行时执行，任务终止。", mapId));
+                        return;
+                    }
+                }
+
+                // 3. 进入循环建造阶段
                 while (remainSteps > 0 && leftEnergy >= 5) {
-                    // 计算本次建造倍数 (1-10 倍)
+
+                    // 计算本次建造倍数
                     int maxMulti = Math.min(10, remainSteps);
                     int energyBasedMulti = leftEnergy / 5;
                     int multiNum = Math.min(maxMulti, energyBasedMulti);
@@ -2463,6 +2549,7 @@ public class AntSports extends ModelTask {
                         break;
                     }
 
+                    // 执行 build RPC
                     JSONObject buildResp = new JSONObject(
                             AntSportsRpcCall.NeverlandRpcCall.build(branchId, mapId, multiNum));
 
@@ -2474,44 +2561,28 @@ public class AntSports extends ModelTask {
                     }
 
                     JSONObject buildData = buildResp.optJSONObject("data");
+
+                    // 优化：build data 为空，表示本次建造任务已完成当前地图
                     if (buildData == null || buildData.length() == 0) {
-                        Log.record(TAG, "⚠️ build响应数据为空，当前地图已达限制，尝试切换地图");
-                        JSONObject mapResp = new JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryMapList());
-                        if (!ResChecker.checkRes(TAG + " 查询地图失败:", mapResp)
-                                || !mapResp.optBoolean("success", false)
-                                || mapResp.optJSONObject("data") == null) {
-                            Log.error(TAG, "queryMapList 失败, 响应数据: " + mapResp);
-                            return;
-                        }
-
-                        JSONArray mapList = mapResp.getJSONObject("data").optJSONArray("mapList");
-                        if (mapList == null || mapList.length() == 0) {
-                            Log.error(TAG, "地图列表为空, 无法继续");
-                            return;
-                        }
-
-                        // ========== 2. 查找或选择地图 ==========
-                        JSONObject currentMap = findOrChooseMap(mapList);
-                        if (currentMap == null) {
-                            Log.error(TAG, "无可用地图, 任务终止");
-                            return;
-                        }
-                        break;
+                        Log.record(TAG, "⚠️ build响应数据为空，当前地图已达限制，任务重新进入地图完成处理流程。");
+                        JSONObject choiceMapInfo = chooseAvailableMap(); // 尝试切换到 DOING/LOCKED
+                        return;
+                        // 重新执行地图完成逻辑，尝试切换到下一张地图
+                        // 此处需要递归调用或重构，但最简单的处理是 break，让程序在下一次 run 的时候处理。
+                        // 因为一旦 break，任务就结束了。如果想立刻处理，需要重构方法。
+                        //break;
                     }
 
-
-                    // 更新能量
+                    // 更新状态和日志记录
                     int newLeftEnergy = buildData.optInt("leftCount", -1);
                     if (newLeftEnergy >= 0) {
                         leftEnergy = newLeftEnergy;
                     }
 
-                    // 计算实际步数
                     int stepIncrease = calculateBuildSteps(buildData, multiNum);
                     int totalSteps = recordStepIncrease(stepIncrease);
                     remainSteps -= stepIncrease;
 
-                    // 获取奖励信息
                     String awardInfo = extractAwardInfo(buildData);
 
                     Log.other(TAG, String.format("建造进度 🏗️ 倍数: x%d | 能量: %d | 本次: +%d | 今日: %d/%d%s",
