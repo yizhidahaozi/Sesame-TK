@@ -275,43 +275,23 @@ class AntCooperate : ModelTask() {
     // 组队合种浇水逻辑
     private fun teamCooperateWater() {
         try {
-            // 1. 用户自定义浇水数量限制（强制区间）
-            var configNum = teamCooperateWaterNum.value ?: 10  // null 时默认 10
-            configNum = configNum.coerceIn(10, 5000)
+            // --- 1. 基础配置与本地校验 ---
+            // 用户设置的“每日目标浇水量”
+            val userDailyTarget = (teamCooperateWaterNum.value ?: 10).coerceIn(10, 5000)
 
-            // 2. 检查单次浇水是否超过5000g
-            if (configNum > 5000) {
-                Log.record(TAG, "组队合种单次浇水不能超过5000g，已调整为5000g")
-                configNum = 5000
-            }
-
-            // 3. 今日执行总量是否达到用户设置上限
+            // 获取今日已浇水量
             val todayUsed = Status.getIntFlagToday(StatusFlags.FLAG_TEAM_WATER_DAILY_COUNT) ?: 0
-            if (todayUsed >= configNum) {
-                Log.record(TAG, "组队合种今日已达用户设置上限，跳过")
+
+            // 计算用户视角的今日剩余额度
+            val userRemainingQuota = userDailyTarget - todayUsed
+
+            // 如果剩余额度小于最小浇水单位(10g)，直接结束
+            if (userRemainingQuota < 10) {
+                Log.record(TAG, "组队合种今日已达标 (已浇${todayUsed}g / 目标${userDailyTarget}g)，跳过")
                 return
             }
 
-            // 4. 检查今日累计浇水是否已接近或超过5000g
-            if (todayUsed >= 5000) {
-                Log.record(TAG, "组队合种今日累计浇水已达5000g上限，跳过")
-                return
-            }
-
-            // 5. 调整本次浇水量，确保不超过5000g总量限制
-            val remainingLimit = 5000 - todayUsed
-            if (remainingLimit <= 0) {
-                Log.record(TAG, "组队合种今日已达5000g上限，跳过")
-                return
-            }
-
-            // 确保单次浇水不超过剩余限额
-            if (configNum > remainingLimit) {
-                configNum = remainingLimit
-                Log.record(TAG, "调整浇水克数到剩余限额: ${configNum}g")
-            }
-
-            // 6. 查询首页，用来获取 teamId + 当前能量
+            // --- 2. 获取服务端数据 (TeamID & 能量) ---
             val homePageStr = AntCooperateRpcCall.queryHomePage()
             val homeJo = JSONObject(homePageStr)
             if (!ResChecker.checkRes(TAG, homeJo)) {
@@ -319,8 +299,7 @@ class AntCooperate : ModelTask() {
                 return
             }
 
-            val teamId = homeJo
-                .optJSONObject("teamHomeResult")
+            val teamId = homeJo.optJSONObject("teamHomeResult")
                 ?.optJSONObject("teamBaseInfo")
                 ?.optString("teamId")
                 ?.takeIf { it.isNotBlank() }
@@ -330,7 +309,13 @@ class AntCooperate : ModelTask() {
                 return
             }
 
-            // 7. 查询可浇水次数
+            val currentEnergy = homeJo.optJSONObject("userBaseInfo")?.optInt("currentEnergy") ?: 0
+            if (currentEnergy < 10) {
+                Log.record(TAG, "当前能量不足10g (${currentEnergy}g)，无法浇水")
+                return
+            }
+
+            // --- 3. 获取服务端限制 (剩余可浇水量) ---
             val miscInfoStr = AntCooperateRpcCall.queryMiscInfo("teamCanWaterCount", teamId)
             val miscJo = JSONObject(miscInfoStr)
             if (!ResChecker.checkRes(TAG, miscJo)) {
@@ -338,79 +323,44 @@ class AntCooperate : ModelTask() {
                 return
             }
 
-            val teamCanWaterCount = miscJo
-                .optJSONObject("combineHandlerVOMap")
+            // serverRemaining: 服务端返回的今日剩余可浇水额度
+            val serverRemaining = miscJo.optJSONObject("combineHandlerVOMap")
                 ?.optJSONObject("teamCanWaterCount")
+                ?.optInt("waterCount", 0) ?: 0
 
-            val dailyWaterLimit = teamCanWaterCount?.optInt("dailyWaterLimit", 0) ?: 0
-            val waterCount = teamCanWaterCount?.optInt("waterCount", 0) ?: 0
+            Log.record(TAG, "状态检查: 目标剩余${userRemainingQuota}g | 官方剩余${serverRemaining}g | 背包能量${currentEnergy}g")
 
-            Log.record(TAG, "浇水限制：每日上限=${dailyWaterLimit}，可浇=${waterCount}g")
-
-            if (waterCount <= 0) {
-                Log.record(TAG, "当前无可浇水次数，跳过")
+            if (serverRemaining < 10) {
+                Log.record(TAG, "官方限制今日无可浇水额度，跳过")
                 return
             }
 
-            // 8. 检查API返回的浇水限制（如果需要）
-            val apiRemainingWater = waterCount.coerceAtMost(5000 - todayUsed)
-            if (apiRemainingWater <= 0) {
-                Log.record(TAG, "浇水剩余额度不足，跳过")
+            // --- 4. 核心计算 (取交集/最小值) ---
+            // 最终浇水量 = Min(用户剩余配额, 官方剩余配额, 当前背包能量)
+            val finalWaterAmount = userRemainingQuota
+                .coerceAtMost(serverRemaining)
+                .coerceAtMost(currentEnergy)
+
+            // --- 5. 最终校验与执行 ---
+            if (finalWaterAmount < 10) {
+                Log.record(TAG, "计算后浇水量(${finalWaterAmount}g)低于最小限制10g，不执行")
                 return
             }
 
-            // 确保不超过API限制
-            if (configNum > apiRemainingWater) {
-                configNum = apiRemainingWater
-                Log.record(TAG, "根据API限制调整浇水克数: ${configNum}g")
-            }
-
-            // 当前能量（保证非空）
-            val currentEnergy = homeJo
-                .optJSONObject("userBaseInfo")
-                ?.optInt("currentEnergy")
-                ?: 0
-
-            // 9. 能量不足10 → 不浇水
-            if (currentEnergy < 10) {
-                Log.record(TAG, "能量不足（${currentEnergy}g），低于10g，本次不执行浇水")
-                return
-            }
-
-            // 10. 如果能量不足以满足配置上限 → 使用当前能量
-            if (currentEnergy < configNum) {
-                Log.record(TAG, "能量不足：需要${configNum}g，本次只浇${currentEnergy}g")
-                configNum = currentEnergy
-            }
-
-            // 最终检查：确保浇水克数不小于10g
-            if (configNum < 10) {
-                Log.record(TAG, "浇水克数${configNum}g小于最小值10g，跳过")
-                return
-            }
-
-            // 11. 调用浇水 RPC
-            val waterResStr = AntCooperateRpcCall.teamWater(teamId, configNum)
-            if (waterResStr == null) {
-                Log.record(TAG, "teamWater 调用失败(null)")
-                return
-            }
-
+            Log.record(TAG, "执行浇水: ${finalWaterAmount}g")
+            val waterResStr = AntCooperateRpcCall.teamWater(teamId, finalWaterAmount)
             val waterJo = JSONObject(waterResStr)
-            if (ResChecker.checkRes(TAG, waterJo)) {
-                Log.forest("组队合种🌲[浇水成功] #${configNum}g")
 
-                // 更新今日累计值
-                val newTotal = todayUsed + configNum
+            if (ResChecker.checkRes(TAG, waterJo)) {
+                Log.forest("组队合种🌲[浇水成功] #${finalWaterAmount}g")
+                // 更新本地统计
+                val newTotal = todayUsed + finalWaterAmount
                 Status.setIntFlagToday(StatusFlags.FLAG_TEAM_WATER_DAILY_COUNT, newTotal)
-                Log.record(TAG, "今日累计浇水: ${newTotal}g（上限: 5000g）")
-            } else {
-                Log.record(TAG, "组队合种浇水失败: ${waterJo.optString("resultDesc")}")
+                Log.record(TAG, "今日累计: ${newTotal}g / ${userDailyTarget}g")
             }
 
         } catch (t: Throwable) {
-            Log.runtime(TAG, "teamCooperateWater err:")
-            Log.printStackTrace(TAG, t)
+            Log.printStackTrace(TAG, "teamCooperateWater 异常:", t)
         }
     }
 
