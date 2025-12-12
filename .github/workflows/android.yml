@@ -2,10 +2,10 @@ name: 📦Auto Build for N
 run-name: 📦 ${{ github.actor }} @ Github Action
 
 on:
-#  push:
-#    branches: [ "main" ]
-#  pull_request:
-#    branches: [ "main" ]
+  #  push:
+  #    branches: [ "main" ]
+  #  pull_request:
+  #    branches: [ "main" ]
   release:
     types: [ published ]
 #  workflow_dispatch:
@@ -201,43 +201,73 @@ jobs:
           # 清理临时文件
           rm "$MESSAGE_FILE"
 
+
+
       - name: 📮 Post to Telegram channel
         if: github.ref == 'refs/heads/n'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          ARM64_FILE: ${{ steps.extract_apks.outputs.signed_arm64 }}
-          ARMV7_FILE: ${{ steps.extract_apks.outputs.signed_armv7 }}
-          X86_FILE: ${{ steps.extract_apks.outputs.signed_x86 }}
-          X86_64_FILE: ${{ steps.extract_apks.outputs.signed_x86_64 }}
-          UNIVERSAL_FILE: ${{ steps.extract_apks.outputs.signed_universal }}
-          COMMIT_MESSAGE: |
-            <b>🎉 New Test Version Build Success! ${{ steps.extract_info.outputs.version }}</b>
-            Target by <a href="${{ github.event.pull_request.user.html_url || format('https://github.com/{0}', github.actor) }}">${{ github.event.pull_request.user.login || github.actor }}</a>
-            <i>✨ What's Changed:</i>
-            <pre>
-            ${{ steps.commit_info.outputs.message_string  }}
-            </pre>
-            <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
-            <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
-            <b>- x86 / x86_64:</b> 主要用于PC上的安卓模拟器
-            <b>- universal:</b> 通用版 (不确定时使用，体积较大)
-            参考配置文件：<a href="https://t.me/Sesame_TK_Channel/306">魔改版-config_v2.json</a>
-            See commit detail <a href="${{ github.event.head_commit.url }}">here</a>
+          VERSION: ${{ steps.extract_info.outputs.version }}
+          REPO_SLUG: ${{ github.repository }}
+          COMMIT_MSG: ${{ steps.commit_info.outputs.message_string }}
+          ACTOR: ${{ github.actor }}
+          # 构造 Release 页面的链接
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.extract_info.outputs.version }}
         run: |
-          ESCAPED=$(python3 -c '
-          import os, json
-          msg = os.environ["COMMIT_MESSAGE"]
-          print(json.dumps(msg))
-          ')
-          curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup" \
-          -F "chat_id=${CHANNEL_ID}" \
-          -F "media=[{\"type\":\"document\",\"media\":\"attach://arm64.apk\",\"parse_mode\":\"HTML\",\"caption\":${ESCAPED}},{\"type\":\"document\",\"media\":\"attach://armv7.apk\"},{\"type\":\"document\",\"media\":\"attach://x86.apk\"},{\"type\":\"document\",\"media\":\"attach://x86_64.apk\"},{\"type\":\"document\",\"media\":\"attach://universal.apk\"}]" \
-          -F "arm64.apk=@${ARM64_FILE}" \
-          -F "armv7.apk=@${ARMV7_FILE}" \
-          -F "x86.apk=@${X86_FILE}" \
-          -F "x86_64.apk=@${X86_64_FILE}" \
-          -F "universal.apk=@${UNIVERSAL_FILE}"
+          python3 -c '
+          import os, json, requests
+
+          bot_token = os.environ["BOT_TOKEN"]
+          channel_id = os.environ["CHANNEL_ID"]
+          group_id = os.environ["GROUP_ID"]
+          version = os.environ["VERSION"]
+          release_url = os.environ["RELEASE_URL"]
+          commit_msg = os.environ["COMMIT_MSG"]
+          actor = os.environ["ACTOR"]
+          text = f"<b>🎉 New Version {version} Published! </b>\n"
+          text += f"Target by <b>{actor}</b>\n"
+          text += f"<i>✨ What\'s Changed:</i>\n<pre>{commit_msg}</pre>\n"
+          text += f"⚠️ <b>请点击下方按钮前往 Release 页面下载对应的版本。</b>"
+          channel_payload = {
+              "chat_id": channel_id,
+              "parse_mode": "HTML",
+              "text": text,
+              "disable_web_page_preview": True,
+              "reply_markup": {
+                  "inline_keyboard": [[
+                      {
+                          "text": "📥 Download / 下载",
+                          "url": release_url
+                      }
+                  ]]
+              }
+          }
+          
+          group_payload = {
+              "chat_id": group_id,
+              "message_thread_id":"74042",
+              "parse_mode": "HTML",
+              "text": text,
+              "disable_web_page_preview": True,
+              "reply_markup": {
+                  "inline_keyboard": [[
+                      {
+                          "text": "📥 Download / 下载",
+                          "url": release_url
+                      }
+                  ]]
+              }
+          }
+          
+          push_list=[channel_payload, group_payload]
+          
+          for payload in push_list:
+              resp = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json=payload)
+              print(resp.text)
+              if resp.status_code != 200:
+                continue
+          '
 
       - name: 🚀 Upload Assets to Source Release
         if: github.event_name == 'release' && github.event.action == 'published'
@@ -258,12 +288,48 @@ jobs:
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           append_body: true
+          make_latest: true
           generate_release_notes: true
           body: |
             ## ✨What's Changed
 
             ${{ steps.commit_info.outputs.message_string }}
 
+            > ## 下载说明
+            <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
+            <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
+            <b>- x86 / x86_64:</b> 主要用于PC上的安卓模拟器
+            <b>- universal:</b> 通用版 (不确定时使用，体积较大)
+            >
+            > **如果不确定，请下载 `universal` 版本。**
+
+      - name: 🔁 Sync Release to Target Repository
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: Xposed-Modules-Repo/fansirsqi.xposed.sesame # 目标仓库的拥有者和仓库名称
+          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
+          files: |
+            ${{ steps.extract_apks.outputs.signed_arm64 }}
+            ${{ steps.extract_apks.outputs.signed_armv7 }}
+            ${{ steps.extract_apks.outputs.signed_x86 }}
+            ${{ steps.extract_apks.outputs.signed_x86_64 }}
+            ${{ steps.extract_apks.outputs.signed_universal }}
+            CHECKSUMS-Sesame-arm64-v8a-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-armeabi-v7a-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-x86-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-x86_64-${{ steps.extract_info.outputs.version }}.apk.sha256
+            CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
+          token: ${{ secrets.TARGET_REPO_PAT }}
+          tag_name: ${{ steps.extract_info.outputs.version}}
+          draft: false
+          append_body: true
+          make_latest: true
+          body: |
+            📦 内容同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})     
+            ## ✨What's Changed
+            
+            ${{ steps.commit_info.outputs.message_string }}
+            
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
             <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
