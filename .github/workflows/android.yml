@@ -2,13 +2,13 @@ name: 📦Auto Build for N
 run-name: 📦 ${{ github.actor }} @ Github Action
 
 on:
-  push:
-    branches: [ "n" ]
-  pull_request:
-    branches: [ "n" ]
+#  push:
+#    branches: [ "main" ]
+#  pull_request:
+#    branches: [ "main" ]
   release:
     types: [ published ]
-  workflow_dispatch:
+#  workflow_dispatch:
 
 jobs:
   build:
@@ -240,7 +240,7 @@ jobs:
           -F "universal.apk=@${UNIVERSAL_FILE}"
 
       - name: 🚀 Upload Assets to Source Release
-#        if: github.event_name == 'release' && github.event.action == 'published'
+        if: github.event_name == 'release' && github.event.action == 'published'
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
