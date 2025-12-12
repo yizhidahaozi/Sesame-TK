@@ -282,7 +282,7 @@ class AntFarm : ModelTask() {
                 "feedFriendAnimalList",
                 "帮喂小鸡 | 好友列表",
                 LinkedHashMap<String?, Int?>(),
-                AlipayUser.getList(),
+                { AlipayUser.getList() },
                 "记得设置帮喂次数.."
             ).also {
                 feedFriendAnimalList = it
@@ -312,8 +312,10 @@ class AntFarm : ModelTask() {
             SelectAndCountModelField(
                 "visitFriendList",
                 "送麦子好友列表",
-                LinkedHashMap<String?, Int?>()
-            ) { AlipayUser.getList() }.also {
+                LinkedHashMap<String?, Int?>(),
+                { AlipayUser.getList() },
+                "设置赠送次数？？"
+            ).also {
                 visitFriendList = it
             })
         modelFields.addField(
