@@ -25,7 +25,7 @@ class AntCooperate : ModelTask() {
      * @return 合种任务名称
      */
     override fun getName(): String? {
-        return "蚂蚁森林合种"
+        return "蚂蚁森林合种" //保留这个全称
     }
 
     /**
