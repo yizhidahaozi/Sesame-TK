@@ -218,8 +218,8 @@ jobs:
           python3 -c '
           import os, json, requests
 
-          bot_token = os.environ["BOT_TOKEN"]
-          channel_id = os.environ["CHANNEL_ID"]
+          bot_token = os.environ["TG_BOT_TOKEN"]
+          channel_id = os.environ["TG_CHAT_ID"]
           group_id = os.environ["GROUP_ID"]
           version = os.environ["VERSION"]
           release_url = os.environ["RELEASE_URL"]
