@@ -31,7 +31,6 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -49,10 +48,10 @@ class HtmlViewerActivity : BaseActivity() {
     private var uri: Uri? = null
     private var canClear: Boolean? = null
     var settings: WebSettings? = null
-    
+
     // 倒排索引：关键词 -> 行号列表（用于快速搜索）
     private val searchIndex = mutableMapOf<String, MutableList<Int>>()
-    
+
     // 保存所有日志行（用于懒加载）
     private var allLogLines: List<String> = emptyList()
     private var currentLoadedCount = 0  // 当前已加载行数
@@ -166,10 +165,10 @@ class HtmlViewerActivity : BaseActivity() {
                     /** 日志实时显示 begin */
                     settings!!.javaScriptEnabled = true
                     settings!!.domStorageEnabled = true // 可选
-                    
+
                     // 注册 JavaScript 接口，提供索引搜索能力
                     mWebView!!.addJavascriptInterface(SearchBridge(), "SearchBridge")
-                    
+
                     mWebView!!.loadUrl("file:///android_asset/log_viewer.html")
                     mWebView!!.setWebChromeClient(object : WebChromeClient() {
                         @RequiresApi(api = Build.VERSION_CODES.O)
@@ -384,7 +383,7 @@ class HtmlViewerActivity : BaseActivity() {
                 // 清空旧索引和数据
                 searchIndex.clear()
                 currentLoadedCount = 0
-                
+
                 // 统计总行数和获取所有可用行
                 val (totalLines, lastLines) = withContext(Dispatchers.IO) {
                     try {
@@ -398,7 +397,7 @@ class HtmlViewerActivity : BaseActivity() {
                         Pair(0, emptyList())
                     }
                 }
-                
+
                 // 保存所有行供懒加载使用
                 allLogLines = lastLines
                 // Log.record(TAG, "📂 日志文件加载成功: 总行数=$totalLines, 可用行数=${allLogLines.size}")
@@ -420,7 +419,7 @@ class HtmlViewerActivity : BaseActivity() {
                         
                     """.trimIndent()
                 }
-                
+
                 withContext(Dispatchers.Main) {
                     mWebView?.evaluateJavascript(
                         "setFullText(${toJsString(header)})",
@@ -430,10 +429,10 @@ class HtmlViewerActivity : BaseActivity() {
 
                 // 🚀 快速初始加载：只加载最后200行（约2-3屏）
                 val initialLoadCount = 200.coerceAtMost(allLogLines.size)
-                
+
                 val initialLines = allLogLines.takeLast(initialLoadCount)
                 currentLoadedCount = initialLines.size
-                
+
                 // 流式加载初始日志行（分批次）
                 loadLinesFlow(initialLines)
                     .collect { batch ->
@@ -552,24 +551,24 @@ class HtmlViewerActivity : BaseActivity() {
      */
     private fun extractKeywords(line: String): Set<String> {
         val keywords = mutableSetOf<String>()
-        
+
         try {
             // 1. 提取英文单词（2字符以上）
             Regex("[a-zA-Z]{2,}").findAll(line).forEach {
                 keywords.add(it.value.lowercase())
             }
-            
+
             // 2. 提取中文词（改进：提取所有2-4字的子串，避免贪婪匹配导致索引缺失）
             Regex("[\\u4e00-\\u9fa5]+").findAll(line).forEach { match ->
                 val text = match.value
                 if (text.isEmpty()) return@forEach
-                
+
                 // 只提取2-4字的词（提高搜索精度，减少噪音）
                 val maxLen = minOf(4, text.length)
                 for (len in 2..maxLen) {
                     val maxStartIndex = text.length - len
                     if (maxStartIndex < 0) continue
-                    
+
                     for (i in 0..maxStartIndex) {
                         try {
                             val endIndex = i + len
@@ -582,7 +581,7 @@ class HtmlViewerActivity : BaseActivity() {
                     }
                 }
             }
-            
+
             // 3. 提取数字（3位以上）
             Regex("\\d{3,}").findAll(line).forEach {
                 keywords.add(it.value)
@@ -590,7 +589,7 @@ class HtmlViewerActivity : BaseActivity() {
         } catch (e: Exception) {
             Log.error(TAG, "提取关键词失败: line.length=${line.length}, ${e.message}")
         }
-        
+
         return keywords
     }
 
@@ -605,11 +604,11 @@ class HtmlViewerActivity : BaseActivity() {
         @android.webkit.JavascriptInterface
         fun search(keyword: String): String {
             if (keyword.isBlank()) return "[]"
-            
-            val lineNumbers = searchIndex[keyword.lowercase()] 
-                ?: searchIndex[keyword] 
+
+            val lineNumbers = searchIndex[keyword.lowercase()]
+                ?: searchIndex[keyword]
                 ?: emptyList()
-            
+
             return lineNumbers.joinToString(prefix = "[", postfix = "]")
         }
 
@@ -619,33 +618,34 @@ class HtmlViewerActivity : BaseActivity() {
          * @return JSON 对象：包含匹配的行内容和统计信息
          */
         @android.webkit.JavascriptInterface
-        fun searchLines(keyword: String): String {
-            if (keyword.isBlank()) return """{"lines": [], "total": 0}"""
-            
-            try {
+        fun searchLines(keyword: String?): String {
+            if (keyword.isNullOrBlank()) return """{"lines": [], "total": 0}"""
+
+            return try {
                 // 尝试使用索引快速查找
-                val lineNumbers = searchIndex[keyword.lowercase()] 
-                    ?: searchIndex[keyword] 
+                val lineNumbers = searchIndex[keyword.lowercase()]
+                    ?: searchIndex[keyword]
                     ?: emptyList()
-                
+
                 if (lineNumbers.isNotEmpty()) {
                     // 使用索引获取匹配的行
                     val matchedLines = lineNumbers.mapNotNull { index ->
                         allLogLines.getOrNull(index)
                     }
                     val linesJson = toJsArray(matchedLines)
-                    return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "index"}"""
+                    """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "index"}"""
+                } else {
+                    // 索引未找到，回退到全文搜索
+                    val matchedLines = allLogLines.filter { it.contains(keyword, ignoreCase = false) }
+                    val linesJson = toJsArray(matchedLines)
+                    """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "fulltext"}"""
                 }
-                
-                // 索引未找到，回退到全文搜索
-                val matchedLines = allLogLines.filter { it.contains(keyword, ignoreCase = false) }
-                val linesJson = toJsArray(matchedLines)
-                return """{"lines": $linesJson, "total": ${matchedLines.size}, "source": "fulltext"}"""
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, e)
-                return """{"lines": [], "total": 0, "error": "${e.message}"}"""
+                """{"lines": [], "total": 0, "error": "${e.message}"}"""
             }
         }
+
 
         /**
          * 获取索引统计信息
@@ -676,21 +676,21 @@ class HtmlViewerActivity : BaseActivity() {
             try {
                 // 计算还有多少行未加载
                 val remainingLines = allLogLines.size - currentLoadedCount
-                
+
                 if (remainingLines <= 0) {
                     // 已经全部加载完
                     // Log.record(TAG, "已加载全部日志，无更多数据")
                     return "[]"
                 }
-                
+
                 // 计算实际加载的行数（不超过剩余行数）
                 val actualCount = minOf(count, remainingLines)
                 val startIndex = allLogLines.size - currentLoadedCount - actualCount
                 val endIndex = allLogLines.size - currentLoadedCount
-                
+
                 val moreLines = allLogLines.subList(startIndex, endIndex)
                 currentLoadedCount += moreLines.size
-                
+
                 // Log.record(TAG, "加载更多: ${moreLines.size} 行，已加载: $currentLoadedCount/${allLogLines.size}")
                 // 转换为 JSON 数组
                 return toJsArray(moreLines)
@@ -744,12 +744,12 @@ class HtmlViewerActivity : BaseActivity() {
 
         /**
          * 🚀 从文件末尾往前读取，获取最后 N 行（高性能版 - 完美支持中文和Emoji）
-         * 
+         *
          * 原理：
          * 1. 使用逐行读取，避免UTF-8多字节字符被截断
          * 2. 优化：使用环形缓冲区只保留最后N行
          * 3. 内存占用低，速度快
-         * 
+         *
          * @return Pair(总行数, 最后N行的列表)
          */
         private fun getLastLines(path: String): Pair<Int, List<String>> {
@@ -761,24 +761,24 @@ class HtmlViewerActivity : BaseActivity() {
             // 使用环形缓冲区保存最后 MAX_DISPLAY_LINES 行
             val buffer = ArrayDeque<String>(MAX_DISPLAY_LINES)
             var totalLines = 0
-            
+
             BufferedReader(
                 InputStreamReader(FileInputStream(file), StandardCharsets.UTF_8)
             ).use { reader ->
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
                     totalLines++
-                    
+
                     // 添加到缓冲区
                     buffer.addLast(line!!)
-                    
+
                     // 如果超过限制，移除最早的行
                     if (buffer.size > MAX_DISPLAY_LINES) {
                         buffer.removeFirst()
                     }
                 }
             }
-            
+
             return Pair(totalLines, buffer.toList())
         }
 
