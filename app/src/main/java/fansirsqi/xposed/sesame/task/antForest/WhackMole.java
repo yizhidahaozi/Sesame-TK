@@ -16,9 +16,7 @@ import fansirsqi.xposed.sesame.util.ResChecker;
  * 6秒拼手速打地鼠（多线程+间隔控制版）
  * 同时开启6局游戏，结算能量最高的一局
  * 
- * 重要提示：打地鼠游戏有严格的6秒时间限制，从开始到结算必须在6秒内完成，
- * 否则游戏会失效。本代码通过精确计时和间隔控制确保每局都在6秒内完成。
- *  @author Ghostxx
+ * @author Ghostxx
  * @date 2025/12/14
  */
 public class WhackMole {
@@ -154,9 +152,6 @@ public class WhackMole {
                 Log.runtime(TAG, "第" + round + "局未获取到游戏token");
                 return null;
             }
-            
-            // 等待一段时间让地鼠完全生成
-            GlobalThreadPools.sleepCompat(100 + (long)(Math.random() * 200));
             
             // 收集地鼠信息
             List<Long> allMoleIds = new ArrayList<>();
