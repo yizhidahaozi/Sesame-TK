@@ -84,6 +84,18 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.sleep", args1);
     }
 
+    /**
+     * 家庭睡觉
+     *
+     * @param groupId 家庭ID
+     * @return 返回结果
+     */
+    public static String sleep(String groupId) {
+
+        String args1 = "[{\"groupId\":\"" + groupId + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"spaceType\":\"ChickFamily\", \"version\":\"unknown\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.sleep", args1);
+    }
+
     public static String wakeUp() {
         String args1 = "[{\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"LOVECABIN\",\"version\":\"unknown\"}]";
         return RequestManager.requestString("com.alipay.antfarm.wakeUp", args1);

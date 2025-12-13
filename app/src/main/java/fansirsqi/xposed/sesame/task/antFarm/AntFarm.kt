@@ -1251,10 +1251,19 @@ class AntFarm : ModelTask() {
             if (ResChecker.checkRes(TAG, jo)) {
                 val sleepNotifyInfo = jo.getJSONObject("sleepNotifyInfo")
                 if (sleepNotifyInfo.optBoolean("canSleep", false)) {
-                    s = AntFarmRpcCall.sleep()
+                    val groupId = jo.optString("groupId")
+                    s = if (groupId.isNotEmpty()) {
+                        AntFarmRpcCall.sleep(groupId)
+                    } else {
+                        AntFarmRpcCall.sleep()
+                    }
                     jo = JSONObject(s)
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.farm("小鸡睡觉🛌")
+                        if (groupId.isNotEmpty()) {
+                            Log.farm("家庭🏡小鸡睡觉🛌")
+                        } else {
+                            Log.farm("小鸡睡觉🛌")
+                        }
                         Status.animalSleep()
                     }
                 } else {
