@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.antOrchard
 
 import android.util.Base64
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.AlipayUser
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
@@ -20,6 +21,7 @@ import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import org.json.JSONArray
 import org.json.JSONObject
 
 class AntOrchard : ModelTask() {
@@ -28,12 +30,22 @@ class AntOrchard : ModelTask() {
 
         // 任务黑名单：某些广告/外跳类任务后端不支持 finishTask 或需要前端行为配合
         private val ORCHARD_TASK_BLACKLIST = setOf(
-            "70000",                        // 逛好物最高得1500肥料（XLIGHT）
+
             "ORCHARD_NORMAL_KUAISHOU_MAX",  // 逛一逛快手
             "ORCHARD_NORMAL_DIAOYU1",       // 钓鱼1次
             "ZHUFANG3IN1",                  // 添加农场小组件并访问
             "12172",                        // 逛助农好货得肥料
-            "TOUTIAO"                       // 逛一逛今日头条
+            "12173",                        // 买好货
+            "70000",                        // 逛好物最高得1500肥料（XLIGHT）"
+            "TOUTIAO",                       // 逛一逛今日头条
+            "ORCHARD_NORMAL_ZADAN10_3000",                       // 农场对对碰
+            "TAOBAO2",                       // 逛一逛闲鱼
+            "ORCHARD_NORMAL_JIUYIHUISHOU_VISIT",                      // 旧衣服回收
+            "ORCHARD_NORMAL_SHOUJISHUMAHUISHOU",                      // 数码回收
+
+            "ORCHARD_NORMAL_AQ_XIAZAI",                      // 下载AQ
+
+
         )
     }
 
@@ -139,6 +151,18 @@ class AntOrchard : ModelTask() {
                 doOrchardDailyTask(userId!!)
                 triggerTbTask()
             }
+
+
+            //回访奖励
+            if(!Status.hasFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD))
+            {
+                receiveOrchardVisitAward()
+            }
+
+
+            limitedTimeChallenge()
+
+
 
             // 施肥
             val orchardSpreadManureCountValue = orchardSpreadManureCount.value
@@ -419,7 +443,7 @@ class AntOrchard : ModelTask() {
                 }
 
                 // 广告类任务：VISIT / XLIGHT
-                if (actionType == "VISIT" || actionType == "XLIGHT") {
+                if (actionType == "VISIT"||actionType == "XLIGHT" ) {
                     var rightsTimes = task.optInt("rightsTimes", 0)
                     var rightsTimesLimit = task.optInt("rightsTimesLimit", 0)
 
@@ -456,6 +480,7 @@ class AntOrchard : ModelTask() {
                     continue
                 }
 
+
                 // 非广告类的普通任务
                 if (actionType == "TRIGGER" || actionType == "ADD_HOME" || actionType == "PUSH_SUBSCRIBE") {
                     val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
@@ -490,8 +515,8 @@ class AntOrchard : ModelTask() {
                 Log.record(TAG, "农场今日已签到")
             }
         } catch (t: Throwable) {
-            Log.runtime(TAG, "orchardSign err:")
-            Log.printStackTrace(TAG, t)
+
+            Log.printStackTrace(TAG, "orchardSign err:",t)
         }
     }
 
@@ -550,56 +575,15 @@ class AntOrchard : ModelTask() {
                     val taskId = jo2.getString("taskId")
                     val actionType = jo2.getString("actionType")//如果是 XLIGHT要走单独的浏览广告完成,注意，这里只看 actionType，taskPlantType可能是XLight但是不走这里
                     val taskPlantType = jo2.getString("taskPlantType")
-                    if(actionType=="XLIGHT"){
-                        // 解析 targetUrl 获取 spaceCodeFeeds
-                        var targetUrl = jo2.getJSONObject("taskDisplayConfig").getString("targetUrl")
-                        val spaceCodeFeeds = UrlUtil.getParam(targetUrl, "spaceCodeFeeds") ?: continue
-                        val pageurl= UrlUtil.getParam(targetUrl, "urlu") ?: continue
 
-                        // 调用广告插件
-                        val xlightResponse = XLightRpcCall.xlightPlugin("",pageurl,"ch_url-https://render.alipay.com/p/yuyan/180020010001263018/game.html",spaceCodeFeeds)
-                        val xlightJo = JSONObject(xlightResponse)
-                        val playingResult = xlightJo
-                            .getJSONObject("resData")
-                            .getJSONObject("playingResult")
-                        val playingBizId = playingResult.getString("playingBizId")
-                        val eventRewardDetail = playingResult.getJSONObject("eventRewardDetail")
-                        val rewardList = eventRewardDetail.getJSONArray("eventRewardInfoList")
-
-                        // 遍历每个事件单独提交完成
-                        for (j in 0 until rewardList.length()) {
-                            val reward = rewardList.getJSONObject(j)
-                            val playEventInfo = reward // 直接传整个事件对象
-                            val finishResponse = XLightRpcCall.finishTask(
-                                playingBizId,
-                                playEventInfo
-                            )
-                            val playBizId = playingResult.getString("playingBizId")
-                            val rewardRenderInfo = reward.getJSONObject("rewardRenderInfo")
-                            val rewardNumber = rewardRenderInfo.getInt("rewardDisplayAmount")
-                            val rewardText = rewardRenderInfo.getString("rewardDisplayText")
-
-                            val finishJo = JSONObject(finishResponse)
-                            if (finishJo.getString("resultCode") == "100") {
-                                val rewardNum = reward.getInt("rewardNumber")
-
-                                Log.forest(TAG,"领取X奖励🎖️[$title]#$rewardNumber$rewardText")
-                            } else {
-                                Log.record(TAG, finishJo.toString())
-                                Log.runtime(TAG, finishJo.toString())
-                            }
-                        }
-
-
-                    }else{
-                        val jo3 = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
-                        if (jo3.getString("resultCode") == "100") {
-                            Log.forest(TAG,"领取奖励🎖️[$title]#${awardCount}g肥料")
-                        } else {
-                            Log.record(TAG,jo3.toString())
-                            Log.runtime(TAG,jo3.toString())
-                        }
+                    val jo3 = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
+                    if (jo3.getString("resultCode") == "100") {
+                        Log.forest(TAG,"领取奖励🎖️[$title]#${awardCount}g肥料")
+                    } else {
+                        Log.record(TAG,jo3.toString())
+                        Log.runtime(TAG,jo3.toString())
                     }
+
 
 
                 }
@@ -608,10 +592,330 @@ class AntOrchard : ModelTask() {
                 Log.runtime(TAG,response)
             }
         } catch (t: Throwable) {
-            Log.runtime(TAG, "triggerTbTask err:")
-            Log.printStackTrace(TAG, t)
+            Log.printStackTrace(TAG,"triggerTbTask err:", t)
         }
     }
+
+
+    //小组件回访奖励
+    private fun receiveOrchardVisitAward() {
+        try {
+            val response = AntOrchardRpcCall.receiveOrchardVisitAward()
+            val jo = JSONObject(response)
+
+            val success = jo.optBoolean("success", false)
+            if (!success) {
+                Log.error(TAG, "领取回访奖励失败: $response")
+                return
+            }
+
+            val awardList = jo.optJSONArray("orchardVisitAwardList")
+            if (awardList == null || awardList.length() == 0) {
+                Log.record(TAG, "领取回访奖励失败: 无奖励，可能已领取过")
+                Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD)
+                return
+            }
+
+            // 遍历所有奖励内容
+            for (i in 0 until awardList.length()) {
+                val awardObj = awardList.optJSONObject(i) ?: continue
+
+                val awardCount = awardObj.optInt("awardCount", 0)
+                val awardDesc = awardObj.optString("awardDesc", "")
+
+                Log.forest(
+                    TAG,
+                    "回访奖励[$awardDesc] $awardCount g肥料"
+                )
+
+            }
+            Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "receiveOrchardVisitAward err:", t)
+        }
+    }
+
+
+    //限时奖励
+    private fun limitedTimeChallenge() {
+        try {
+            // 1. 请求同步数据
+            val response = AntOrchardRpcCall.orchardSyncIndex("")
+            val root = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, root)) {
+                Log.record(TAG, "orchardSyncIndex 查询失败: $response")
+                return
+            }
+
+            // 2. 获取 limitedTimeChallenge
+            val challenge = root.optJSONObject("limitedTimeChallenge") ?: run {
+                Log.record(TAG, "错误：limitedTimeChallenge 字段不存在或为 null")
+                return
+            }
+
+
+
+            val currentRound = challenge.optInt("currentRound", 0)
+            if (currentRound <= 0) {
+                Log.record(TAG, "错误：currentRound 无效：$currentRound")
+                return
+            }
+
+            // 3. 获取任务数组
+            val taskArray = challenge.optJSONArray("limitedTimeChallengeTasks") ?: run {
+                Log.record(TAG, "错误：limitedTimeChallengeTasks 字段不存在或不是数组")
+                return
+            }
+
+            val targetIdx = currentRound - 1
+            if (targetIdx !in 0 until taskArray.length()) {
+                Log.record(TAG, "错误：当前轮数 $currentRound 对应下标 $targetIdx 超出数组长度: ${taskArray.length()}")
+                return
+            }
+
+            // 4. 当前轮任务
+            val roundTask = taskArray.optJSONObject(targetIdx) ?: run {
+                Log.record(TAG, "错误：第 $currentRound 轮任务不存在")
+                return
+            }
+
+            val ongoing = roundTask.optBoolean("ongoing", false)      // 该轮是否正在进行（若任务完成但 ongoing=true，说明待领取）
+            val MtaskStatus = roundTask.optString("taskStatus")        // FINISHED / TODO
+            val MtaskId = roundTask.optString("taskId")
+            val MawardCount = roundTask.optInt("awardCount", 0)
+
+            // 🔥 条件：大任务已经完成，但仍未领取奖励（ongoing=true）
+            if (MtaskStatus == "FINISHED" && ongoing) {
+
+                Log.record(TAG, "第 $currentRound 轮 奖励未领取，尝试领取")
+
+                val awardResp = AntOrchardRpcCall.receiveTaskAward(
+                    "ORCHARD_LIMITED_TIME_CHALLENGE",
+                    MtaskId
+                )
+
+                val joo = JSONObject(awardResp)
+
+                if (joo.optBoolean("success")) {
+                    Log.forest(TAG, "第 $currentRound 轮 限时任务🎁[肥料 * $MawardCount]")
+
+                } else {
+                    val desc = joo.optString("desc", "未知错误")
+                    Log.record(TAG, "农场 限时任务 错误：$desc")
+                    Log.runtime(TAG, "农场 限时任务 错误：$joo")
+
+                }
+                return
+            }
+
+            if (roundTask.optString("taskStatus") != "TODO") {
+                Log.record(TAG, "警告：第 $currentRound 轮任务非 TODO，状态=${roundTask.optString("taskStatus")}")
+                return
+            }
+
+            // 子任务
+            val childTasks = roundTask.optJSONArray("childTaskList") ?: run {
+                Log.record(TAG, "警告：第 $currentRound 轮无子任务列表")
+                return
+            }
+
+            Log.record(TAG, "开始处理第 $currentRound 轮的 ${childTasks.length()} 个子任务")
+
+
+
+            // 5. 遍历子任务
+            for (i in 0 until childTasks.length()) {
+
+                val child = childTasks.optJSONObject(i) ?: run {
+                    Log.record(TAG, "警告：子任务索引 $i 非 JSONObject，跳过")
+                    continue
+                }
+
+                val childTaskId = child.optString("taskId", "未知ID")
+                val actionType = child.optString("actionType")
+                val groupId = child.optString("groupId")  //GROUP_1_STEP_3_GAME_WZZT_30s
+                val taskStatus = child.optString("taskStatus")
+                val taskId = child.optString("taskId") //GROUP_1_STEP_3_GAME_WZZT_30s
+                val sceneCode = child.optString("sceneCode")
+                val taskRequire = child.optInt("taskRequire", 0)
+                val taskProgress = child.optInt("taskProgress", 0)
+                val awardCount = child.optInt("awardCount", 0)
+
+
+                if (taskStatus != "TODO") continue
+                if (groupId == "GROUP_1_STEP_3_GAME_WZZT_30s") continue//完成不了玩游戏30秒
+                Log.record(TAG, "------ 开始处理子任务 $i | ID=$childTaskId ------")
+
+                // ============================
+                //  子任务逻辑处理
+                // ============================
+
+                when (actionType) {
+
+                    // 施肥任务
+                    "SPREAD_MANURE" -> {
+                        val need = taskRequire - taskProgress
+
+                        if (need > 0) {
+                            Log.record(TAG, "施肥任务需补充 $need 次")
+
+                            repeat(need) { index ->
+                                val spreadResult = AntOrchardRpcCall.orchardSpreadManure("", "ch_appcenter__chsub_9patch")
+                                Log.record(TAG, "施肥第 ${index + 1} 次结果：$spreadResult")
+
+                                val resultJson = JSONObject(spreadResult)
+                                val resultCode = resultJson.optString("resultCode", "")
+                                val resultDesc = resultJson.optString("resultDesc", "")
+
+                                if (resultCode != "100") {
+                                    Log.record(TAG, "农场 orchardSpreadManure 错误：$resultDesc")
+                                    Log.runtime(TAG, "农场 orchardSpreadManure 错误：$resultJson")
+                                    return   // ❗施肥失败直接退出整个 limitedTimeChallenge()
+                                }
+                            }
+
+                            Log.record(TAG, "施肥任务成功完成 $need 次")
+                        } else {
+                            Log.record(TAG, "施肥任务无需操作（当前进度 >= 需求）")
+                        }
+                    }
+
+
+                    // 打游戏任务（仅支持 GROUP_1_STEP_1_PLAY_GAME）
+                    "GAME_CENTER" -> {
+
+
+                        val r = AntOrchardRpcCall.noticeGame("2021004165643274")
+
+
+                        val jr = JSONObject(r)
+                        if (jr.optBoolean("success")) {
+                            Log.record(TAG, "游戏任务触发成功 → 子任务应当自动完成")
+                        } else {
+                            Log.record(TAG, "游戏任务触发失败，返回: $r")//
+                        }
+
+                    }
+
+
+                    // 浏览广告任务
+                    "VISIT" -> {
+                        val displayCfg = child.optJSONObject("taskDisplayConfig")
+                        if (displayCfg == null) {
+                            Log.record(TAG, "任务没有 taskDisplayConfig，无法继续")
+                            continue
+                        }
+
+                        val targetUrl = displayCfg.optString("targetUrl", "")
+                        if (targetUrl.isEmpty()) {
+                            Log.record(TAG, "taskDisplayConfig.targetUrl 为空")
+                            continue
+                        }
+
+                        // ① 提取完整的落地页URL
+                        val finalUrl = UrlUtil.getFullNestedUrl(targetUrl, "url") ?: ""
+                        Log.record(TAG, "解析到完整落地页 url = $finalUrl")
+
+                        // ② 从完整URL中提取spaceCodeFeeds
+                        val spaceCodeFeeds = if (finalUrl.isNotEmpty()) {
+                            UrlUtil.extractParamFromUrl(finalUrl, "spaceCodeFeeds")
+                        } else null
+                        Log.record(TAG, "解析d到 spaceCodeFeeds = ${spaceCodeFeeds ?: "null"}")
+
+                        // 容错处理：如果spaceCodeFeeds还是null，尝试从原始targetUrl直接提取
+                        val finalSpaceCode = spaceCodeFeeds ?: UrlUtil.getParamValue(targetUrl, "spaceCodeFeeds") ?: ""
+                        if (finalSpaceCode.isEmpty()) {
+                            Log.record(TAG, "spaceCodeFeeds 解析失败，跳过此任务")
+                            continue
+                        }
+
+                        // -------------------------------------------------------------
+                        // 🔥 触发游戏任务（广告浏览）
+                        // -------------------------------------------------------------
+                        val pageFrom = "ch_url-https://render.alipay.com/p/yuyan/180020010001263018/game.html"
+                        val session = "u_41ba1_2f33e"
+
+                        val r = XLightRpcCall.xlightPlugin(
+                            pageUrl = finalUrl,
+                            pageFrom = pageFrom,
+                            session = session,
+                            spaceCode = finalSpaceCode
+                        )
+
+                        val jr = JSONObject(r)
+                        /*
+                        if (!jr.optBoolean("success")) {
+                            Log.record(TAG, "广告任务触发失败，返回")//: $r
+                            Log.record(TAG, "调试信息 → finalUrl: $finalUrl, spaceCode: $finalSpaceCode")
+                            continue
+                        }*/
+
+                        Log.record(TAG, "广告任务触发成功 → 即将调用 finishTask() 完成任务")
+
+                        // -------------------------------------------------------------
+                        // 🔥 自动完成任务（兼容两种JSON结构）
+                        // -------------------------------------------------------------
+
+                        // 尝试获取playingResult（兼容有无resData的情况）
+                        val playingResult = jr.optJSONObject("resData")?.optJSONObject("playingResult")
+                            ?: jr.optJSONObject("playingResult")
+
+                        if (playingResult == null) {
+                            Log.record(TAG, "playingResult 为空，无法 finishTask")
+                            continue
+                        }
+
+                        val playingBizId = playingResult.optString("playingBizId", "")
+                        if (playingBizId.isEmpty()) {
+                            Log.record(TAG, "playingBizId 为空，无法 finishTask")
+                            continue
+                        }
+
+                        // 获取事件列表中的第一个 eventRewardInfo（作为 playEventInfo）
+                        val eventRewardDetail = playingResult.optJSONObject("eventRewardDetail")
+                        val infoListArray = eventRewardDetail?.optJSONArray("eventRewardInfoList")
+
+                        if (infoListArray == null || infoListArray.length() == 0) {
+                            Log.record(TAG, "eventRewardInfoList 为空，无法 finishTask")
+                            continue
+                        }
+
+                        val playEventInfo = infoListArray.getJSONObject(0)
+
+                        val iepTaskSceneCode = sceneCode
+                        val iepTaskType = groupId
+
+                        val finishResult = XLightRpcCall.finishTask(
+                            playBizId = playingBizId,
+                            playEventInfo = playEventInfo,
+                            iepTaskSceneCode = iepTaskSceneCode,
+                            iepTaskType = iepTaskType
+                        )
+
+                        val fr = JSONObject(finishResult)
+
+                        if (fr.optBoolean("success")) {
+                            Log.record(TAG, "finishTask 完成成功 → 浏览广告任务完成")
+                        } else {
+                            Log.record(TAG, "finishTask 完成失败: $finishResult")
+                        }
+                    }
+
+
+
+
+                    else -> {
+                        Log.record(TAG, "无法处理的任务类型：$childTaskId | actionType=$actionType")
+                    }
+                }
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "limitedTimeChallenge err:", t)
+        }
+    }
+
 
     private suspend fun querySubplotsActivity(taskRequire: Int) {
         try {

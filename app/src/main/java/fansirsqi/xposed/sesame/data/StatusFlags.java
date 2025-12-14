@@ -20,21 +20,31 @@ public final class StatusFlags {
 
     public static final String FLAG_NEVERLAND_STEPCOUNT = "Flag_Neverland_StepCount";  // 今日步数任务
 
+
     public static final String FLAG_AntMember_doAllAvailableSesameTask = "AntMember::doAllAvailableSesameTask";  //
+
+
 
     // --------------------------------------------
     // 芝麻粒炼金 次日奖励标记
     // --------------------------------------------
     public static final String FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD = "zmxy::alchemy::nextDayAward";
 
+
     // --------------------------------------------
     // 运动任务大厅-今日是否已尝试循环处理
     // --------------------------------------------
     public static final String FLAG_ANTSPORTS_TASKCENTER_DONE = "Flag_AntSports_TaskCenter_Done";
 
+
     // --------------------------------------------
     // 芝麻粒炼金 次日奖励标记
     // --------------------------------------------
     public static final String FLAG_TEAM_WATER_DAILY_COUNT = "Flag_Team_Weater_Daily_Count";
+
+    // --------------------------------------------
+    // 农场 小组件回访
+    // --------------------------------------------
+    public static final String FLAG_ANTORCHARD_WIDGET_DAILY_AWARD = "Flag_Antorchard_Widget_Daily_Award";
 
 }

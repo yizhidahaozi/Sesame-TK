@@ -80,7 +80,7 @@ object AntOrchardRpcCall {
     fun receiveTaskAward(sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.receiveTaskAward",
-            "[{\"ignoreLimit\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_alipaysearch__chsub_normal\",\"taskType\":\"$taskType\",\"version\":\"$VERSION\"}]"
+            "[{\"ignoreLimit\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_alipaysearch__chsub_normal\",\"taskType\":\"$taskType\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -111,6 +111,7 @@ object AntOrchardRpcCall {
             "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
         )
     }
+    //砸蛋
     fun smashedGoldenEgg(count: Int): String {
         val jsonArgs = """
         [
@@ -126,6 +127,51 @@ object AntOrchardRpcCall {
 
         return RequestManager.requestString(
             "com.alipay.antorchard.smashedGoldenEgg",
+            jsonArgs
+        )
+    }
+
+    //收取回访奖励 小组件的
+    fun receiveOrchardVisitAward(): String {
+        return RequestManager.requestString(
+            "com.alipay.antorchard.receiveOrchardVisitAward",
+            "[{\"diversionSource\":\"widget\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"widget_shoufei\",\"version\":\"$VERSION\"}]"
+        )
+    }
+
+
+    fun orchardSyncIndex(Wua: String): String {
+        val jsonArgs = """
+         [{
+             "requestType": "NORMAL",
+             "sceneCode": "ORCHARD",
+             "source": "ch_appcenter__chsub_9patch",
+             "syncIndexTypes": "LIMITED_TIME_CHALLENGE",
+             "useWua": true,
+             "version": "$VERSION",
+             "wua": "$Wua"
+         }]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.orchardSyncIndex",
+            jsonArgs
+        )
+    }
+
+    fun noticeGame(appId: String): String {
+        val jsonArgs = """
+          [{
+             "appId": "2021004165643274",
+             "requestType": "NORMAL",
+             "sceneCode": "ORCHARD",
+             "source": "ch_appcenter__chsub_9patch",
+             "version": "$VERSION"
+         }]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.noticeGame",
             jsonArgs
         )
     }
