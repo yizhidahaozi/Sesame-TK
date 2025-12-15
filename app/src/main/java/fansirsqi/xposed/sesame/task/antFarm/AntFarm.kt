@@ -685,12 +685,6 @@ class AntFarm : ModelTask() {
                 tc.countDebug("收取饲料奖励")
             }
 
-            // 雇佣小鸡
-            if (hireAnimal!!.value) {
-                hireAnimal()
-            }
-
-
             // 到访小鸡送礼
             if (visitAnimal!!.value) {
                 visitAnimal()
@@ -719,7 +713,10 @@ class AntFarm : ModelTask() {
                     Log.record(TAG, "抽抽乐未到执行时间，跳过")
                 }
             }
-
+            // 雇佣小鸡
+            if (hireAnimal!!.value) {
+                hireAnimal()
+            }
             if (getFeed!!.value) {
                 letsGetChickenFeedTogether()
                 tc.countDebug("一起拿饲料")
