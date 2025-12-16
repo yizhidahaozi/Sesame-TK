@@ -973,7 +973,7 @@ class AntFarm : ModelTask() {
                     ChildModelTask(
                         sleepTaskId,
                         "AS",
-                        Runnable { this.animalSleepNow() },
+                        suspendRunnable = { this.animalSleepNow() },
                         animalSleepTime
                     )
                 )
@@ -989,7 +989,7 @@ class AntFarm : ModelTask() {
                     ChildModelTask(
                         wakeUpTaskId,
                         "AW",
-                        Runnable { this.animalWakeUpNow() },
+                        suspendRunnable = { this.animalWakeUpNow() },
                         animalWakeUpTime
                     )
                 )
@@ -3007,7 +3007,7 @@ class AntFarm : ModelTask() {
                             ChildModelTask(
                                 taskId,
                                 "HIRE",
-                                Runnable { this.hireAnimal() },
+                                suspendRunnable = { this.hireAnimal() },
                                 beHiredEndTime
                             )
                         )
@@ -3020,7 +3020,7 @@ class AntFarm : ModelTask() {
                             ChildModelTask(
                                 taskId,
                                 "HIRE",
-                                Runnable { this.hireAnimal() },
+                                suspendRunnable = { this.hireAnimal() },
                                 beHiredEndTime
                             )
                         )
@@ -3163,7 +3163,7 @@ class AntFarm : ModelTask() {
                                         ChildModelTask(
                                             "HIRE|$animalId",
                                             "HIRE",
-                                            Runnable { this.hireAnimal() },
+                                            suspendRunnable = { this.hireAnimal() },
                                             beHiredEndTime
                                         )
                                     )
