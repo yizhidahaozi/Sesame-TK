@@ -6,7 +6,7 @@
 
 > [!Important]
 > 
-> ## 👉[耻辱柱名单](./ShameList.MD) 欢迎你向我们举报举报
+> ## 👉[耻辱柱名单](./ShameList.MD) 欢迎你向我们举报
 
 
 
