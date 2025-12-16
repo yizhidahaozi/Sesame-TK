@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.antForest;
 
+import android.annotation.SuppressLint;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -27,26 +28,16 @@ public class WhackMole {
     
     // 单个游戏任务的超时时间（秒），防止任务卡住
     private static final long TASK_TIMEOUT_SECONDS = 30;
-    
+
     // 游戏会话信息
-    private static class GameSession {
-        final String token;
-        final List<String> remainingMoleIds;
-        final int whackedEnergy;
-        final int roundNumber;
-        
-        GameSession(String token, List<String> remainingMoleIds, int whackedEnergy, int roundNumber) {
-            this.token = token;
-            this.remainingMoleIds = remainingMoleIds;
-            this.whackedEnergy = whackedEnergy;
-            this.roundNumber = roundNumber;
-        }
+        private record GameSession(String token, List<String> remainingMoleIds, int whackedEnergy, int roundNumber) {
     }
 
     /**
      * 开6局游戏打地鼠（并发执行）
      * 每局游戏独立计时，严格控制在6秒内完成
      */
+    @SuppressLint("DefaultLocale")
     public static void startWhackMole() {
         String source = "senlinguangchangdadishu";
         List<Future<GameSession>> futures = new ArrayList<>();
@@ -170,14 +161,12 @@ public class WhackMole {
             
             // 打地鼠（带击打间隔）
             int totalEnergy = 0;
-            int hitCount = 0;
             for (Long moleId : bubbleMoleIds) {
                 try {
                     JSONObject whackResp = new JSONObject(AntForestRpcCall.whackMole(moleId, token, source));
                     if (whackResp.optBoolean("success")) {
                         int energy = whackResp.optInt("energyAmount", 0);
                         totalEnergy += energy;
-                        hitCount++;
                         Log.runtime(TAG, "第" + round + "局击打地鼠" + moleId + " 能量+" + energy + "g");
                     }
                 } catch (Exception e) {
