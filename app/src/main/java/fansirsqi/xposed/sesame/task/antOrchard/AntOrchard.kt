@@ -150,10 +150,7 @@ class AntOrchard : ModelTask() {
             if (!Status.hasFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD)) {
                 receiveOrchardVisitAward()
             }
-
-
             limitedTimeChallenge()
-            orchardSpreadManure()
             // 施肥
             val orchardSpreadManureCountValue = orchardSpreadManureCount.value
             if (orchardSpreadManureCountValue > 0 && Status.canSpreadManureToday(userId!!)) {
