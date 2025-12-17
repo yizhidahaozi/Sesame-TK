@@ -265,18 +265,6 @@ class Status {
         }
 
         @JvmStatic
-        fun canSpreadManureToday(uid: String): Boolean {
-            return !INSTANCE.spreadManureList.contains(uid)
-        }
-
-        @JvmStatic
-        fun spreadManureToday(uid: String) {
-            if (INSTANCE.spreadManureList.add(uid)) {
-                save()
-            }
-        }
-
-        @JvmStatic
         fun canAntStallAssistFriendToday(): Boolean {
             return !INSTANCE.antStallAssistFriend.contains(UserMap.currentUid)
         }
