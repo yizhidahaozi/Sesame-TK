@@ -8,7 +8,7 @@ object AntOrchardRpcCall {
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
             "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
-                    + VERSION + "\"}]")
+                    + VERSION + "\"}]");
     }
 
     fun extraInfoGet(): String {
@@ -54,18 +54,29 @@ object AntOrchardRpcCall {
         )
     }
 
+    /*/**
+     * 施肥
+     */
+    fun orchardSpreadManure(wua: String): String {
+        return RequestManager.requestString(
+            "com.alipay.antfarm.orchardSpreadManure",
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
+        )
+    }*/
     /**
      * 施肥
      * @param wua 用户标识
-     * @param source 来源标识
-     * @param useBatchSpread 是否一键5次
+     * @param source 来源标识，可自定义
+     * @param useBatchSpread 一键5次
      */
-    fun orchardSpreadManure(wua: String, source: String, useBatchSpread: Boolean = false): String {
+    @JvmStatic  // 重点：让 Java 能直接用类名调用
+    fun orchardSpreadManure(wua: String, source: String,useBatchSpread : Boolean=false): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSpreadManure",
-            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":$useBatchSpread,\"version\":\"$VERSION\",\"wua\":\"$wua\"}]"
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":$useBatchSpread,\"version\":$VERSION,\"wua\":\"$wua\"}]"
         )
     }
+
 
     fun receiveTaskAward(sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
@@ -95,13 +106,13 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun triggerTbTask(taskId: String, taskPlantType: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.triggerTbTask",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
+        fun triggerTbTask(taskId: String, taskPlantType: String): String {
+            return RequestManager.requestString(
+                "com.alipay.antfarm.triggerTbTask",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+            )
+        }
+    //砸蛋
     fun smashedGoldenEgg(count: Int): String {
         val jsonArgs = """
         [
@@ -113,10 +124,15 @@ object AntOrchardRpcCall {
                 "version": "$VERSION"
             }
         ]
-        """.trimIndent()
-        return RequestManager.requestString("com.alipay.antorchard.smashedGoldenEgg", jsonArgs)
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.smashedGoldenEgg",
+            jsonArgs
+        )
     }
 
+    //收取回访奖励 小组件的
     fun receiveOrchardVisitAward(): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.receiveOrchardVisitAward",
@@ -124,7 +140,8 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun orchardSyncIndex(wua: String): String {
+
+    fun orchardSyncIndex(Wua: String): String {
         val jsonArgs = """
          [{
              "requestType": "NORMAL",
@@ -133,25 +150,38 @@ object AntOrchardRpcCall {
              "syncIndexTypes": "LIMITED_TIME_CHALLENGE",
              "useWua": true,
              "version": "$VERSION",
-             "wua": "$wua"
+             "wua": "$Wua"
          }]
-        """.trimIndent()
-        return RequestManager.requestString("com.alipay.antorchard.orchardSyncIndex", jsonArgs)
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.orchardSyncIndex",
+            jsonArgs
+        )
     }
 
     fun noticeGame(appId: String): String {
         val jsonArgs = """
           [{
-             "appId": "$appId",
+             "appId": "2021004165643274",
              "requestType": "NORMAL",
              "sceneCode": "ORCHARD",
              "source": "ch_appcenter__chsub_9patch",
              "version": "$VERSION"
          }]
-        """.trimIndent()
-        return RequestManager.requestString("com.alipay.antorchard.noticeGame", jsonArgs)
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.noticeGame",
+            jsonArgs
+        )
     }
 
+    /* 助力好友 */
+    //  fun shareP2P(): String {
+    //        return ApplicationHook.requestString("com.alipay.antiep.shareP2P",
+    //                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]")
+    //    }
     fun achieveBeShareP2P(shareId: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.achieveBeShareP2P",

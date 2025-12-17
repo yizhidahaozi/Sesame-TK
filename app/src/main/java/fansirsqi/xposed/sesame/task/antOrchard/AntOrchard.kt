@@ -186,7 +186,8 @@ class AntOrchard : ModelTask() {
             orchardAssistFriend()
 
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG,"start.run err:",t)
+            Log.runtime(TAG, "start.run err:")
+            Log.printStackTrace(TAG, t)
         } finally {
             Log.record(TAG, "执行结束-$name")
         }
@@ -366,6 +367,7 @@ class AntOrchard : ModelTask() {
                 Log.error(TAG,jo.toString())
             }
         } catch (t: Throwable) {
+            Log.runtime(TAG, )
             Log.printStackTrace(TAG, "extraInfoGet err:",t)
         }
     }
@@ -406,7 +408,8 @@ class AntOrchard : ModelTask() {
                 }
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "drawLotteryPlus err:",t)
+            Log.runtime(TAG, "drawLotteryPlus err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -507,7 +510,8 @@ class AntOrchard : ModelTask() {
                 }
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "doOrchardDailyTask err:",t)
+            Log.runtime(TAG, "doOrchardDailyTask 错误:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -566,9 +570,11 @@ class AntOrchard : ModelTask() {
             }
 
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "smashedGoldenEgg err:",t)
+            Log.runtime(TAG, "smashedGoldenEgg err:")
+            Log.printStackTrace(TAG, t)
         }
     }
+
 
     private suspend fun triggerTbTask() {
         try {
@@ -594,6 +600,9 @@ class AntOrchard : ModelTask() {
                             Log.record(TAG,jo3.toString())
                             Log.runtime(TAG,jo3.toString())
                         }
+
+
+
                 }
             } else {
                 Log.record(TAG,jo.getString("resultDesc"))
@@ -789,10 +798,13 @@ class AntOrchard : ModelTask() {
                         }
                     }
 
+
                     // 打游戏任务（仅支持 GROUP_1_STEP_1_PLAY_GAME）
                     "GAME_CENTER" -> {
 
+
                             val r = AntOrchardRpcCall.noticeGame("2021004165643274")
+
 
                             val jr = JSONObject(r)
                             if (ResChecker.checkRes(TAG,jr)) {
@@ -802,6 +814,7 @@ class AntOrchard : ModelTask() {
                             }
 
                     }
+
 
                     // 浏览广告任务
                     "VISIT" -> {
@@ -906,6 +919,9 @@ class AntOrchard : ModelTask() {
                         }
                     }
 
+
+
+
                     else -> {
                         Log.record(TAG, "无法处理的任务类型：$childTaskId | actionType=$actionType")
                     }
@@ -916,6 +932,7 @@ class AntOrchard : ModelTask() {
             Log.printStackTrace(TAG, "limitedTimeChallenge err:", t)
         }
     }
+
 
     private suspend fun querySubplotsActivity(taskRequire: Int) {
         try {
@@ -972,7 +989,8 @@ class AntOrchard : ModelTask() {
                 Log.runtime(TAG,response)
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "querySubplotsActivity err:",t)
+            Log.runtime(TAG, "querySubplotsActivity err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 
@@ -1008,7 +1026,8 @@ class AntOrchard : ModelTask() {
             }
             Status.antOrchardAssistFriendToday()
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "orchardAssistFriend err:",t)
+            Log.runtime(TAG, "orchardAssistFriend err:")
+            Log.printStackTrace(TAG, t)
         }
     }
 }
