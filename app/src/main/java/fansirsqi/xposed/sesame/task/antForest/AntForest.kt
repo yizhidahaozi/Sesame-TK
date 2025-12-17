@@ -4009,54 +4009,73 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         usePropTemplate(bagObject, config, stealthCardConstant!!.value)
     }
 
-    /**
-     * 使用保护罩道具
-     * 功能：保护自己的能量不被好友偷取，防止能量被收走
-     * 一般是限时保护罩，可通过青春特权森林道具领取
-     *
-     * @param bagObject 背包的JSON对象
-     */
-    private fun useShieldCard(bagObject: JSONObject?) {
-        try {
-            Log.record(TAG, "尝试使用保护罩...")
-            var jo = findPropBag(bagObject, "LIMIT_TIME_ENERGY_SHIELD_TREE")
-            if (jo == null) {
-                Log.record(
-                    TAG,
-                    "背包中没有森林保护罩(LIMIT_TIME_ENERGY_SHIELD_TREE)，继续查找其他类型..."
-                )
-                if (youthPrivilege!!.value) {
-                    Log.runtime(TAG, "尝试通过青春特权获取保护罩...")
-                    if (youthPrivilege()) {
-                        jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD_TREE")
-                    }
-                }
-            }
-            if (jo == null) {
-                if (shieldCardConstant!!.value) {
-                    Log.record(TAG, "尝试通过活力值兑换保护罩...")
-                    if (exchangeEnergyShield()) {
-                        jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD")
-                    }
-                }
-            }
-            if (jo == null) {
-                Log.record(TAG, "尝试能量保护罩(ENERGY_SHIELD)...")
-                jo = findPropBag(bagObject, "ENERGY_SHIELD")
-            }
-            if (jo != null) {
-                Log.runtime(TAG, "找到保护罩，准备使用: $jo")
-                if (usePropBag(jo)) {
-                    return  // 使用成功，直接返回
-                }
-            }
-            Log.record(TAG, "背包中未找到任何可用保护罩。")
-            // 如果未使用成功，也刷新一次
-            updateSelfHomePage()
-        } catch (th: Throwable) {
-            Log.printStackTrace(TAG,"useShieldCard err",th)
+/**
+ * 使用保护罩道具
+ * 功能：保护自己的能量不被好友偷取，防止能量被收走。
+ * 支持来源：
+ *   - 背包中已有的多种类型保护罩（按优先级）
+ *   - 青春特权自动领取（若开启）
+ *   - 活力值兑换（若开启且兑换成功）
+ *
+ * @param bagObject 当前背包的 JSON 对象（可能为 null）
+ */
+private fun useShieldCard(bagObject: JSONObject?) {
+    try {
+        Log.record(TAG, "尝试使用保护罩...")
+
+        // 定义支持的保护罩类型（按使用优先级排序）
+        val shieldTypes = listOf(
+            "LIMIT_TIME_ENERGY_SHIELD_TREE",   // 限时森林保护罩（通常来自活动/青春特权）
+            "ENERGY_SHIELD_YONGJIU",           // 限时能量保护罩（可能为旧版道具）
+            "RUIHE_ENERGY_SHIELD",             // 瑞和能量保护罩（合作方专属？）
+            "ENERGY_SHIELD"                    // 通用能量保护罩
+        )
+
+        var jo: JSONObject? = null
+
+        // 1. 先从当前背包中按优先级查找
+        for (type in shieldTypes) {
+            jo = findPropBag(bagObject, type)
+            if (jo != null) break
         }
+
+        // 2. 若未找到，且青春特权开启 → 尝试领取并重新查
+        if (jo == null && youthPrivilege?.value == true) {
+            Log.runtime(TAG, "尝试通过青春特权获取保护罩...")
+            if (youthPrivilege()) {
+                val freshBag = querySelfHome()
+                for (type in shieldTypes) {
+                    jo = findPropBag(freshBag, type)
+                    if (jo != null) break
+                }
+            }
+        }
+
+        // 3. 若仍未找到，且活力值兑换开启 → 尝试兑换
+        if (jo == null && shieldCardConstant?.value == true) {
+            Log.record(TAG, "尝试通过活力值兑换保护罩...")
+            if (exchangeEnergyShield()) {
+                // 兑换后通常获得的是 LIMIT_TIME_ENERGY_SHIELD（注意不是 TREE 后缀）
+                jo = findPropBag(querySelfHome(), "LIMIT_TIME_ENERGY_SHIELD")
+            }
+        }
+
+        // 4. 如果找到，立即使用
+        if (jo != null) {
+            Log.runtime(TAG, "找到保护罩，准备使用: $jo")
+            if (usePropBag(jo)) {
+                return // 使用成功，直接退出
+            }
+        }
+
+        // 5. 未使用成功（无论是否找到），刷新主页确保状态同步
+        // Log.record(TAG, "背包中未找到任何可用保护罩。")
+        // updateSelfHomePage()
+
+    } catch (th: Throwable) {
+        Log.printStackTrace(TAG, "useShieldCard err", th)
     }
+}
 
     /**
      * 使用加速卡道具
@@ -4445,7 +4464,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         private val offsetTimeMath = Average(5)
 
         // 保持向后兼容
-        /** 保护罩续写阈值（HHmm），例如 2355 表示 23小时55分  */
+        /** 保护罩续写阈值（HHmm），例如 2359 表示 23小时59分  */
         private const val SHIELD_RENEW_THRESHOLD_HHMM = 2359
         var giveEnergyRainList: SelectModelField? = null //能量雨赠送列表
         var medicalHealthOption: SelectModelField? = null //医疗健康选项
