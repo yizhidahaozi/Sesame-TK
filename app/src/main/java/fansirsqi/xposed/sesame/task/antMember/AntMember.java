@@ -1,10 +1,12 @@
 package fansirsqi.xposed.sesame.task.antMember;
 
+import fansirsqi.xposed.sesame.hook.SecurityBodyHelper;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -397,11 +399,11 @@ public class AntMember extends ModelTask {
         if ("babanongchang_7d".equals(behaviorId) && "wait_doing".equals(status)) {
           try {
             // 假设getWua()方法存在，返回wua（为空即可）
-            String wua = ""; // 传入空字符串
+            String wua = SecurityBodyHelper.INSTANCE.getSecurityBodyData(4); // 传入空字符串
             String source = "DNHZ_NC_zhimajingnangSF"; // 从buttonUrl提取的source
-            Log.runtime(TAG, "set Wua " + wua);
+            Log.record(TAG, "set Wua " + wua);
 
-            String spreadManureDataStr = AntOrchardRpcCall.INSTANCE.orchardSpreadManure(wua, source);
+            String spreadManureDataStr = AntOrchardRpcCall.INSTANCE.orchardSpreadManure(Objects.requireNonNull(wua), source);
             JSONObject spreadManureData;
             try {
               spreadManureData = new JSONObject(spreadManureDataStr);
