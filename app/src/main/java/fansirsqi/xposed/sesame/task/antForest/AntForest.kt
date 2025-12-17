@@ -4041,15 +4041,12 @@ private fun useShieldCard(bagObject: JSONObject?) {
 
         // 2. 若未找到，且青春特权开启 → 尝试领取并重新查
         if (jo == null && youthPrivilege?.value == true) {
-            Log.runtime(TAG, "尝试通过青春特权获取保护罩...")
+            Log.record(TAG, "尝试通过青春特权获取保护罩...")
             if (youthPrivilege()) {
                 val freshBag = querySelfHome()
-                for (type in shieldTypes) {
-                    jo = findPropBag(freshBag, type)
-                    if (jo != null) break
+                    jo = findPropBag(freshBag, "LIMIT_TIME_ENERGY_SHIELD_TREE")
+                    }
                 }
-            }
-        }
 
         // 3. 若仍未找到，且活力值兑换开启 → 尝试兑换
         if (jo == null && shieldCardConstant?.value == true) {
