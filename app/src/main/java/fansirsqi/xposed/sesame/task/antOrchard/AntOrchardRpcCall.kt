@@ -62,20 +62,21 @@ object AntOrchardRpcCall {
             "com.alipay.antfarm.orchardSpreadManure",
             "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
         )
-    }*/
+    }
+    
     /**
      * 施肥
      * @param wua 用户标识
      * @param source 来源标识，可自定义
+     * @param useBatchSpread 一键5次
      */
     @JvmStatic  // 重点：让 Java 能直接用类名调用
-    fun orchardSpreadManure(wua: String, source: String): String {
+    fun orchardSpreadManure(wua: String, source: String,useBatchSpread : Boolean=false): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSpreadManure",
-            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":$useBatchSpread,\"version\":$VERSION,\"wua\":\"$wua\"}]"
         )
     }
-
 
     fun receiveTaskAward(sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
@@ -105,12 +106,13 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun triggerTbTask(taskId: String, taskPlantType: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.triggerTbTask",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
-        )
-    }
+        fun triggerTbTask(taskId: String, taskPlantType: String): String {
+            return RequestManager.requestString(
+                "com.alipay.antfarm.triggerTbTask",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+            )
+        }
+        
     //砸蛋
     fun smashedGoldenEgg(count: Int): String {
         val jsonArgs = """
@@ -138,7 +140,6 @@ object AntOrchardRpcCall {
             "[{\"diversionSource\":\"widget\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"widget_shoufei\",\"version\":\"$VERSION\"}]"
         )
     }
-
 
     fun orchardSyncIndex(Wua: String): String {
         val jsonArgs = """
