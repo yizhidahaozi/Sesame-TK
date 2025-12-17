@@ -3802,6 +3802,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val propId = propJsonObj.getJSONArray("propIdList").getString(0)
             val propConfigVO = propJsonObj.getJSONObject("propConfigVO")
             val propType = propConfigVO.getString("propType")
+            val holdsNum = propConfigVO.optInt("holdsNum") // 当前持有数量
             val propName = propConfigVO.getString("propName")
             propEmoji(propName)
             val jo: JSONObject?
@@ -3811,7 +3812,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "道具 $propName (类型: $propType), 是否可续用: $isRenewable"
             )
             val propGroup = AntForestRpcCall.getPropGroup(propType)
-            if (isRenewable) {
+            if (isRenewable && holdsNum > 1) {
                 // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
                 val checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false)
                 val checkResponse = JSONObject(checkResponseStr)
