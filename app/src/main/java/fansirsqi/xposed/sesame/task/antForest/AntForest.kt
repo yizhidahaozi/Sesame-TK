@@ -3965,14 +3965,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     continue  // 跳过，尝试下一张
                 }
 
-                // 特定条件检查2: 如果是限时卡，并且设置为"仅限时道具"，则只在过期前1天内使用
                 if ("LIMIT_TIME_ENERGY_DOUBLE_CLICK" == propType && choice == ApplyPropType.ONLY_LIMIT_TIME) {
                     val expireTime = propObj.optLong("recentExpireTime", 0)
-                    if (expireTime > 0 && (expireTime - System.currentTimeMillis() > 24 * 60 * 60 * 1000L)) {
-                        Log.record(TAG, "跳过[$propName]，该卡有效期剩余超过1天 (仅限时模式)")
-                        continue  // 跳过，尝试下一张
+                        // 修改：24 改为 48 小时，日志信息同步更新
+                        if (expireTime > 0 && (expireTime - System.currentTimeMillis() > 2 * 24 * 60 * 60 * 1000L)) {
+                            Log.record(TAG, "跳过[$propName]，该卡有效期剩余超过2天 (仅限时模式)")
+                            continue  // 跳过，尝试下一张
+                        }
                     }
-                }
 
                 // 尝试使用道具
                 Log.runtime(TAG, "尝试使用卡: $propName")
