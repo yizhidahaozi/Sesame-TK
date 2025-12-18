@@ -1320,12 +1320,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             val start = System.currentTimeMillis()
             val response = AntForestRpcCall.queryHomePage()
-           /*
             if (response.trim { it <= ' ' }.isEmpty()) {
-                Log.error(TAG, "获取自己主页信息失败：响应为空$response")
+ //               Log.error(TAG, "获取自己主页信息失败：响应为空$response")
                 return null
             }
-            */
             userHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询自己主页失败:", userHomeObj)) {
@@ -1356,16 +1354,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             val start = System.currentTimeMillis()
             val response = AntForestRpcCall.queryFriendHomePage(userId, fromAct)
-           /*
             if (response.trim { it <= ' ' }.isEmpty()) {
-                Log.error(
-                    TAG,
-                    "获取好友主页信息失败：响应为空, userId: " + UserMap.getMaskName(userId) + response
-                )
+ //               Log.error( TAG, "获取好友主页信息失败：响应为空, userId: " + UserMap.getMaskName(userId) + response)
                 return null
             }
-         */
-
             friendHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询好友主页失败:", friendHomeObj)) {

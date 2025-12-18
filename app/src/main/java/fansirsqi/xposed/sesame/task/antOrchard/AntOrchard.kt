@@ -582,7 +582,9 @@ class AntOrchard : ModelTask() {
     private fun limitedTimeChallenge() {
         try {
             // 1. 请求同步数据
-            val response = AntOrchardRpcCall.orchardSyncIndex("")
+            val wua = SecurityBodyHelper.getSecurityBodyData(4).toString()
+            Log.record(TAG, "set Wua $wua")
+            val response = AntOrchardRpcCall.orchardSyncIndex(wua)
             val root = JSONObject(response)
 
             if (!ResChecker.checkRes(TAG, root)) {

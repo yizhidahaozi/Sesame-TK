@@ -140,7 +140,7 @@ object AntOrchardRpcCall {
     }
 
 
-    fun orchardSyncIndex(Wua: String): String {
+    fun orchardSyncIndex(wua: String): String {
         val jsonArgs = """
          [{
              "requestType": "NORMAL",
@@ -149,7 +149,7 @@ object AntOrchardRpcCall {
              "syncIndexTypes": "LIMITED_TIME_CHALLENGE",
              "useWua": true,
              "version": "$VERSION",
-             "wua": "$Wua"
+             "wua": "$wua"
          }]
     """.trimIndent()
 
@@ -183,7 +183,7 @@ object AntOrchardRpcCall {
     //    }
     fun achieveBeShareP2P(shareId: String): String {
         return RequestManager.requestString(
-            "com.alipay.antiep.achieveBeShareP2P",
+            "com.alipay.antiep.achieveBe          ",
             "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"shareId\":\"$shareId\",\"source\":\"share\",\"version\":\"$VERSION\"}]"
         )
     }

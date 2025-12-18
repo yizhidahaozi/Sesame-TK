@@ -120,10 +120,11 @@ public class WhackMole {
         GlobalThreadPools.sleepCompat((long)(Math.random() * 250)); // 随机小延迟，错开请求时间
         long startTime = System.currentTimeMillis();
         try {
-            Log.runtime(TAG, "第" + round + "局游戏开始");
+
             // 开始游戏
             JSONObject response = new JSONObject(AntForestRpcCall.startWhackMole(source));
-
+            Log.runtime(TAG, "第" + round + "局游戏开始");
+            Log.other(TAG, "第" + round + "局游戏开始:"+response);
             if (!ResChecker.checkRes(TAG + "拼手速游戏启动失败:", response)) {
                 return null;
             }
@@ -155,6 +156,7 @@ public class WhackMole {
                 try {
                     JSONObject whackResp = new JSONObject(AntForestRpcCall.whackMole(moleId, token, source));
                     if (whackResp.optBoolean("success")) {
+                        Log.other(TAG, "第" + round + "局游戏打地鼠:"+whackResp);
                         int energy = whackResp.optInt("energyAmount", 0);
                         totalEnergy += energy;
                         Log.runtime(TAG, "第" + round + "局击打地鼠" + moleId + " 能量+" + energy + "g");
@@ -203,7 +205,7 @@ public class WhackMole {
             
             JSONObject response = new JSONObject(AntForestRpcCall.settlementWhackMole(
                 session.token, session.remainingMoleIds, source));
-                
+            Log.other(TAG, "正在结算第" + session.roundNumber + "局游戏（能量最高）\n"+response);
             if (ResChecker.checkRes(TAG, response)) {
                 int totalEnergy = response.optInt("totalEnergy", 0);
                 int provideEnergy = response.optInt("provideDefaultEnergy", 0);
