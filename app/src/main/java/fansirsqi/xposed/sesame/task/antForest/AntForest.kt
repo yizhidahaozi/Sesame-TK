@@ -1332,7 +1332,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.error(TAG, "查询自己主页失败: " + userHomeObj.optString("resultDesc", "未知错误"))
                 return null
             }
-
+            
             updateSelfHomePage(userHomeObj)
             val end = System.currentTimeMillis()
             // 安全获取服务器时间，如果没有则使用当前时间
@@ -1356,6 +1356,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             val start = System.currentTimeMillis()
             val response = AntForestRpcCall.queryFriendHomePage(userId, fromAct)
+           /*
             if (response.trim { it <= ' ' }.isEmpty()) {
                 Log.error(
                     TAG,
@@ -1363,6 +1364,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
                 return null
             }
+         */
 
             friendHomeObj = JSONObject(response)
             // 检查响应是否成功
