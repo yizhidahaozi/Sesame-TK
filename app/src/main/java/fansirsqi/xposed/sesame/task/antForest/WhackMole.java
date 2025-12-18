@@ -32,7 +32,7 @@ public class WhackMole {
     private static final int GAME_DURATION_MS = 6000;
     
     /** 每局最多击打次数：3次 */
-    private static final int MAX_HITS_PER_GAME = 3;
+    private static final int MAX_HITS_PER_GAME = 3;  //改1保底奖励 ？
     
     // ========== 统计 ==========
     /** 累计获得能量：所有被结算的局 */
