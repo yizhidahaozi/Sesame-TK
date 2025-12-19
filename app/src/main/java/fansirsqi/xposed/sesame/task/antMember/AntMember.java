@@ -28,7 +28,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.TimeUtil;
-import fansirsqi.xposed.sesame.task.antMember.SesameTaskBlacklist;
+import fansirsqi.xposed.sesame.newutil.TaskBlacklist;
 
 public class AntMember extends ModelTask {
   private static final String TAG = AntMember.class.getSimpleName();
@@ -1009,8 +1009,8 @@ public class AntMember extends ModelTask {
    * @return true表示在黑名单中，应该跳过
    */
   private static boolean isTaskInBlacklist(String taskTitle) {
-    return SesameTaskBlacklist.INSTANCE.isTaskInBlacklist(taskTitle);
-  }
+        return TaskBlacklist.INSTANCE.isTaskInBlacklistFuzzy(taskTitle);
+    }
 
   /**
    * 芝麻信用-领取并完成任务（带结果统计）
@@ -1077,9 +1077,9 @@ public class AntMember extends ModelTask {
           Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s);
           // 自动添加到黑名单
           String errorCode = responseObj.optString("errorCode", "");
-          if (!errorCode.isEmpty()) {
-            SesameTaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, errorCode);
-          }
+            if (!errorCode.isEmpty()) {
+                TaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, taskTitle, errorCode);
+            }
           skippedCount++;
           continue;
         }
@@ -1105,9 +1105,9 @@ public class AntMember extends ModelTask {
           Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s);
           // 自动添加到黑名单
           String errorCode = responseObj.optString("errorCode", "");
-          if (!errorCode.isEmpty()) {
-            SesameTaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, errorCode);
-          }
+            if (!errorCode.isEmpty()) {
+                TaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, taskTitle, errorCode);
+            }
           break;
         }
       }

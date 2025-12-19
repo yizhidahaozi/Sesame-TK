@@ -12,8 +12,9 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
-import fansirsqi.xposed.sesame.task.adexchange.UrlUtil
-import fansirsqi.xposed.sesame.task.adexchange.XLightRpcCall
+import fansirsqi.xposed.sesame.task.antOrchard.UrlUtil
+import fansirsqi.xposed.sesame.task.antOrchard.XLightRpcCall
+import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Files
@@ -27,27 +28,6 @@ import org.json.JSONObject
 class AntOrchard : ModelTask() {
     companion object {
         private val TAG = AntOrchard::class.java.simpleName
-
-        // 任务黑名单：某些广告/外跳类任务后端不支持 finishTask 或需要前端行为配合
-        private val ORCHARD_TASK_BLACKLIST = setOf(
-
-            "ORCHARD_NORMAL_KUAISHOU_MAX",  // 逛一逛快手
-            "ORCHARD_NORMAL_DIAOYU1",       // 钓鱼1次
-            "ZHUFANG3IN1",                  // 添加农场小组件并访问
-            "12172",                        // 逛助农好货得肥料
-            "12173",                        // 买好货
-            "70000",                        // 逛好物最高得1500肥料（XLIGHT）"
-            "TOUTIAO",                       // 逛一逛今日头条
-            "ORCHARD_NORMAL_ZADAN10_3000",                       // 农场对对碰
-            "TAOBAO2",                       // 逛一逛闲鱼
-            "TAOBAO",                       // 下载阿福
-            "ORCHARD_NORMAL_JIUYIHUISHOU_VISIT",                      // 旧衣服回收
-            "ORCHARD_NORMAL_SHOUJISHUMAHUISHOU",                      // 数码回收
-            "ORCHARD_NORMAL_TAB3_ZHIFA",                  // 看视频领肥料
-            "ORCHARD_NORMAL_AQ_XIAZAI",                      // 下载AQ
-
-
-        )
     }
 
     private var userId: String? = UserMap.currentUid
@@ -437,8 +417,8 @@ class AntOrchard : ModelTask() {
                 }
 
                 // 黑名单任务：后端不支持 finishTask 或需要端内实际跳转
-                if (ORCHARD_TASK_BLACKLIST.contains(groupId)) {
-                    //  Log.record(TAG, "跳过黑名单任务[$title] groupId=$groupId")
+                if (TaskBlacklist.isTaskInBlacklist(groupId)) {
+                    Log.record(TAG, "跳过黑名单任务[$title] groupId=$groupId")
                     continue
                 }
 
@@ -471,7 +451,12 @@ class AntOrchard : ModelTask() {
                         if (ResChecker.checkRes(TAG,finishResponse)) {
                             Log.forest(TAG, "农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次")
                         } else {
-                            Log.error(TAG, "失败：农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次${finishResponse.optString("desc")}")
+                          //  Log.error(TAG, "失败：农场广告任务📺[$titlge] 第${rightsTimes + cnt + 1}次${finishResponse.optString("desc")}")
+                                // 自动添加到黑名单
+                                val errorCode = finishResponse.optString("code", "")
+                                if (!errorCode.isEmpty()) {
+                                    TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode)
+                                }
                             break
                         }
                         CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
@@ -817,7 +802,7 @@ class AntOrchard : ModelTask() {
                         // 容错处理：如果spaceCodeFeeds还是null，尝试从原始targetUrl直接提取
                         val finalSpaceCode = spaceCodeFeeds ?: UrlUtil.getParamValue(targetUrl, "spaceCodeFeeds") ?: ""
                         if (finalSpaceCode.isEmpty()) {
-                            Log.record(TAG, "spaceCodeFeeds 解析失败，跳过此任务")
+                       //      Log.record(TAG, "spaceCodeFeeds 解析失败，跳过此任务")
                             continue
                         }
 
