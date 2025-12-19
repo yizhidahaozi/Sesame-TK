@@ -1813,8 +1813,6 @@ class AntFarm : ModelTask() {
      */
     private suspend fun doFarmTasks() {
         try {
-            // 使用统一的任务黑名单管理器
-            val badTaskSet: Set<String> = TaskBlacklist.getBlacklist()
             val jo = JSONObject(AntFarmRpcCall.listFarmTask())
             if (ResChecker.checkRes(TAG, jo)) {
                 val farmTaskList = jo.getJSONArray("farmTaskList")
@@ -1825,7 +1823,7 @@ class AntFarm : ModelTask() {
                     val bizKey = task.getString("bizKey")
                     task.optString("taskMode")
                     // 跳过已被屏蔽的任务
-                    if (badTaskSet.contains(bizKey)) continue
+                    if (TaskBlacklist.isTaskInBlacklist(bizKey)) continue
                     // 跳过今日已达上限的任务
                     if (Status.hasFlagToday("farm::task::limit::$bizKey"))continue
 
