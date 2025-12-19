@@ -165,7 +165,7 @@ class Status {
         }
 
         @JvmStatic
-        fun canCooperateWaterToday(uid: String, coopId: String): Boolean {
+        fun canCooperateWaterToday(uid: String?, coopId: String): Boolean {
             return !INSTANCE.cooperateWaterList.contains("${uid}_$coopId")
         }
 
@@ -253,13 +253,13 @@ class Status {
         }
 
         @JvmStatic
-        fun canDonationEgg(uid: String): Boolean {
+        fun canDonationEgg(uid: String?): Boolean {
             return !INSTANCE.donationEggList.contains(uid)
         }
 
         @JvmStatic
-        fun donationEgg(uid: String) {
-            if (INSTANCE.donationEggList.add(uid)) {
+        fun donationEgg(uid: String?) {
+            if (!uid.isNullOrEmpty() && INSTANCE.donationEggList.add(uid)) {
                 save()
             }
         }
@@ -283,7 +283,7 @@ class Status {
 
         @JvmStatic
         fun antStallAssistFriendToday() {
-            if (INSTANCE.antStallAssistFriend.add(UserMap.currentUid)) {
+            if (INSTANCE.antStallAssistFriend.add(UserMap.currentUid!!)) {
                 save()
             }
         }
@@ -295,7 +295,7 @@ class Status {
 
         @JvmStatic
         fun antOrchardAssistFriendToday() {
-            if (INSTANCE.antOrchardAssistFriend.add(UserMap.currentUid)) {
+            if (INSTANCE.antOrchardAssistFriend.add(UserMap.currentUid!!)) {
                 save()
             }
         }
@@ -323,7 +323,7 @@ class Status {
 
         @JvmStatic
         fun pasteTicketTime() {
-            if (INSTANCE.canPasteTicketTime.add(UserMap.currentUid)) {
+            if (INSTANCE.canPasteTicketTime.add(UserMap.currentUid!!)) {
                 save()
             }
         }
@@ -393,7 +393,7 @@ class Status {
         @JvmStatic
         fun greenFinancePointFriend() {
             if (canGreenFinancePointFriend()) return
-            INSTANCE.greenFinancePointFriend.add(UserMap.currentUid)
+            INSTANCE.greenFinancePointFriend.add(UserMap.currentUid!!)
             save()
         }
 
@@ -411,7 +411,7 @@ class Status {
         @JvmStatic
         fun greenFinancePrizesMap() {
             if (!canGreenFinancePrizesMap()) return
-            INSTANCE.greenFinancePrizesMap[UserMap.currentUid] = TimeUtil.getWeekNumber(Date())
+            INSTANCE.greenFinancePrizesMap[UserMap.currentUid!!] = TimeUtil.getWeekNumber(Date())
             save()
         }
 
