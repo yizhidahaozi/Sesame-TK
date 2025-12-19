@@ -3832,7 +3832,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val confirmResponseStr =
                         AntForestRpcCall.consumeProp(propGroup, propId, propType, true)
                     jo = JSONObject(confirmResponseStr)
-                    Log.record(TAG, "发送确认请求: $jo")
+                    // 提取道具名称用于日志显示
+                    val userPropVO = jo.optJSONObject("userPropVO")
+                    val usedPropName = userPropVO?.optString("propName") ?: propName
+                    Log.record(TAG, "已使用$usedPropName")
+
                 } else {
                     // 其他所有情况都视为最终结果，通常是失败
                     // Log.record(TAG, "道具状态异常或使用失败12:"+ status)
@@ -3840,9 +3844,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
             } else {
                 // 非续用类道具，直接使用
-                Log.record(TAG, "非续用类道具，直接使用")
                 val consumeResponse = AntForestRpcCall.consumeProp2(propGroup, propId, propType)
                 jo = JSONObject(consumeResponse)
+                // 提取道具名称用于日志显示
+                val userPropVO = jo.optJSONObject("userPropVO")
+                val usedPropName = userPropVO?.optString("propName") ?: propName
+                Log.record(TAG, "已使用$usedPropName")
             }
 
             // 统一结果处理
