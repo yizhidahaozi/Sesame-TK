@@ -1828,8 +1828,7 @@ class AntFarm : ModelTask() {
                     if (Status.hasFlagToday("farm::task::limit::$bizKey"))continue
 
                     if (TaskStatus.TODO.name == taskStatus) {
-                        if (!badTaskSet.contains(bizKey)) {
-                            if ("VIDEO_TASK" == bizKey) {
+                        if ("VIDEO_TASK" == bizKey) {
                                 val taskVideoDetailjo =
                                     JSONObject(AntFarmRpcCall.queryTabVideoUrl())
                                 if (ResChecker.checkRes(TAG, taskVideoDetailjo)) {
@@ -1848,8 +1847,7 @@ class AntFarm : ModelTask() {
                                             Log.farm("庄园任务🧾[$resultVideojo]")
                                         }
                                     }
-                                }
-                            } else if ("ANSWER" == bizKey) {
+                                } else if ("ANSWER" == bizKey) {
                                 answerQuestion("100") //答题
                             } else {
                                 val taskDetailResult = AntFarmRpcCall.doFarmTask(bizKey)
