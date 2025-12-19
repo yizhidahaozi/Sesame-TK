@@ -28,6 +28,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.task.antMember.SesameTaskBlacklist;
 
 public class AntMember extends ModelTask {
   private static final String TAG = AntMember.class.getSimpleName();
@@ -1003,39 +1004,12 @@ public class AntMember extends ModelTask {
   }
 
   /**
-   * 不能完成的任务黑名单（根据title关键词匹配）
-   */
-  private static final String[] TASK_BLACKLIST = {
-          "每日施肥领水果",           // 需要淘宝操作
-          "坚持种水果",              // 需要淘宝操作
-          "坚持去玩休闲小游戏",       // 需要游戏操作
-          "去AQapp提问",            // 需要下载APP
-          "去AQ提问",               // 需要下载APP
-          "坚持看直播领福利",        // 需要淘宝直播
-          "去淘金币逛一逛",          // 需要淘宝操作
-          "坚持攒保障金",            // 参数错误：promiseActivityExtCheck
-          "芝麻租赁下单得芝麻粒",     // 需要租赁操作
-          "去玩小游戏",              // 参数错误：promiseActivityExtCheck
-          "浏览租赁商家小程序",       // 需要小程序操作
-          "订阅小组件",              // 参数错误：promiseActivityExtCheck
-          "租1笔图书",               // 参数错误：promiseActivityExtCheck
-          "去订阅芝麻小组件",         // 参数错误：promiseActivityExtCheck
-          "坚持攒保障"               // 参数错误：promiseActivityExtCheck（与"坚持攒保障金"类似，防止匹配遗漏）
-  };
-
-  /**
    * 检查任务是否在黑名单中
    * @param taskTitle 任务标题
    * @return true表示在黑名单中，应该跳过
    */
   private static boolean isTaskInBlacklist(String taskTitle) {
-    if (taskTitle == null) return false;
-    for (String blacklistItem : TASK_BLACKLIST) {
-      if (taskTitle.contains(blacklistItem)) {
-        return true;
-      }
-    }
-    return false;
+    return SesameTaskBlacklist.INSTANCE.isTaskInBlacklist(taskTitle);
   }
 
   /**
@@ -1101,6 +1075,11 @@ public class AntMember extends ModelTask {
         responseObj = new JSONObject(s);
         if (!ResChecker.checkRes(TAG, responseObj)) {
           Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s);
+          // 自动添加到黑名单
+          String errorCode = responseObj.optString("errorCode", "");
+          if (!errorCode.isEmpty()) {
+            SesameTaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, errorCode);
+          }
           skippedCount++;
           continue;
         }
@@ -1124,6 +1103,11 @@ public class AntMember extends ModelTask {
           taskCompleted = true;
         } else {
           Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s);
+          // 自动添加到黑名单
+          String errorCode = responseObj.optString("errorCode", "");
+          if (!errorCode.isEmpty()) {
+            SesameTaskBlacklist.INSTANCE.autoAddToBlacklist(taskTitle, errorCode);
+          }
           break;
         }
       }
@@ -1164,7 +1148,7 @@ public class AntMember extends ModelTask {
                   JSONObject prize = completeJo.optJSONObject("data");
                   int num = prize != null ? prize.optInt("zmlNum",
                           prize.optJSONObject("prize") != null ?
-                                  prize.optJSONObject("prize").optInt("num", 0) : 0) : 0;
+                                  Objects.requireNonNull(prize.optJSONObject("prize")).optInt("num", 0) : 0) : 0;
                   Log.other("芝麻炼金⚗️[每日签到成功]#获得" + num + "粒");
                 } else {
                   Log.error(TAG + ".doSesameAlchemy", "炼金签到失败:" + completeRes);
