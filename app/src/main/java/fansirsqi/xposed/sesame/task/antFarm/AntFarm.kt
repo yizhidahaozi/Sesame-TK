@@ -1868,7 +1868,12 @@ class AntFarm : ModelTask() {
                             } else if ("ANSWER" == bizKey) {
                                 answerQuestion("100") //答题
                             } else {
-                                val taskDetailjo = JSONObject(AntFarmRpcCall.doFarmTask(bizKey))
+                                val taskDetailResult = AntFarmRpcCall.doFarmTask(bizKey)
+                                if (taskDetailResult.isNullOrEmpty()) {
+                                    Log.error(TAG, "庄园任务[$title]执行失败：API返回空结果")
+                                    return
+                                }
+                                val taskDetailjo = JSONObject(taskDetailResult)
                                 if (ResChecker.checkRes(TAG, taskDetailjo)) {
                                     Log.farm("庄园任务🧾[$title]")
                                 } else {
