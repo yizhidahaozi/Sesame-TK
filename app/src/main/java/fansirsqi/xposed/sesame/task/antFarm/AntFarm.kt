@@ -26,6 +26,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.DataStore.getOrCreate
+import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
@@ -1812,23 +1813,8 @@ class AntFarm : ModelTask() {
      */
     private suspend fun doFarmTasks() {
         try {
-            val presetBad: MutableSet<String?> = LinkedHashSet(
-                mutableListOf<String?>(
-                    "HEART_DONATION_ADVANCED_FOOD_V2",  //香草芒果冰糕任务
-                    "HEART_DONATE",  //爱心捐赠
-                    "SHANGOU_xiadan",  //去买秋天第一杯奶茶
-                    "OFFLINE_PAY",  //到店付款,线下支付
-                    "ONLINE_PAY",  //在线支付
-                    "HUABEI_MAP_180" //用花呗完成一笔支付
-                )
-            )
-            val typeRef: TypeReference<MutableSet<String?>> =
-                object : TypeReference<MutableSet<String?>>() {
-                }
-            val badTaskSet: MutableSet<String?> =
-                getOrCreate("badFarmTaskSet", typeRef)
-            badTaskSet.addAll(presetBad)
-            DataStore.put("badFarmTaskSet", badTaskSet)
+            // 使用统一的任务黑名单管理器
+            val badTaskSet: Set<String> = TaskBlacklist.getBlacklist()
             val jo = JSONObject(AntFarmRpcCall.listFarmTask())
             if (ResChecker.checkRes(TAG, jo)) {
                 val farmTaskList = jo.getJSONArray("farmTaskList")
@@ -1841,7 +1827,7 @@ class AntFarm : ModelTask() {
                     // 跳过已被屏蔽的任务
                     if (badTaskSet.contains(bizKey)) continue
                     // 跳过今日已达上限的任务
-                    if (Status.hasFlagToday("farm::task::limit::$bizKey")) continue
+                    if (Status.hasFlagToday("farm::task::limit::$bizKey"))continue
 
                     if (TaskStatus.TODO.name == taskStatus) {
                         if (!badTaskSet.contains(bizKey)) {
@@ -1861,7 +1847,7 @@ class AntFarm : ModelTask() {
                                         val resultVideojo =
                                             JSONObject(AntFarmRpcCall.videoTrigger(contentId))
                                         if (ResChecker.checkRes(TAG, resultVideojo)) {
-                                            Log.farm("庄园任务🧾[$title]")
+                                            Log.farm("庄园任务🧾[$resultVideojo]")
                                         }
                                     }
                                 }
@@ -1870,7 +1856,7 @@ class AntFarm : ModelTask() {
                             } else {
                                 val taskDetailResult = AntFarmRpcCall.doFarmTask(bizKey)
                                 if (taskDetailResult.isNullOrEmpty()) {
-                                    Log.error(TAG, "庄园任务[$title]执行失败：API返回空结果")
+                                //     Log.error(TAG, "庄园任务[$title]执行失败：API返回空结果")
                                     return
                                 }
                                 val taskDetailjo = JSONObject(taskDetailResult)
@@ -1883,10 +1869,9 @@ class AntFarm : ModelTask() {
                                         Status.setFlagToday("farm::task::limit::$bizKey")
                                         Log.record(TAG, "庄园任务[$title]今日已达上限，跳过后续执行")
                                     } else {
-                                        // 其他错误，永久屏蔽该任务
+                                        // 其他错误，使用统一黑名单管理器自动处理
                                         Log.error("庄园任务失败：$title\n$taskDetailjo")
-                                        badTaskSet.add(bizKey) // 避免重复失败
-                                        DataStore.put("badFarmTaskSet", badTaskSet)
+                                        TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode)
                                     }
                                 }
                             }
