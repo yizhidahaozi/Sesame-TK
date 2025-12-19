@@ -1,193 +1,214 @@
-package fansirsqi.xposed.sesame.util.maps;
+package fansirsqi.xposed.sesame.util.maps
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
-import java.io.File;
-import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import de.robv.android.xposed.XposedHelpers;
-import fansirsqi.xposed.sesame.entity.UserEntity;
-import fansirsqi.xposed.sesame.hook.ApplicationHook;
-import fansirsqi.xposed.sesame.util.Files;
-import fansirsqi.xposed.sesame.util.JsonUtil;
-import fansirsqi.xposed.sesame.util.Log;
-import lombok.Getter;
+import com.fasterxml.jackson.core.type.TypeReference
+import fansirsqi.xposed.sesame.entity.UserEntity
+import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.JsonUtil
+import fansirsqi.xposed.sesame.util.Log
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 用于管理和操作用户数据的映射关系，
- * 通常在应用程序中用于处理用户信息，
- * 如用户的 ID、昵称、账号、好友列表等。
- * 通过该类可以高效地加载、存储和操作用户信息，
- * 同时提供线程安全的访问机制。
+ * 用于管理和操作用户数据的映射关系。
+ * 转换为 Kotlin object 单例模式。
  */
-public class UserMap {
-    private static final String TAG = UserMap.class.getSimpleName();
+object UserMap {
+    private val TAG = UserMap::class.java.simpleName
+
     // 存储用户信息的线程安全映射
-    private static final Map<String, UserEntity> userMap = new ConcurrentHashMap<>();
-    // 只读的用户信息映射
-    private static final Map<String, UserEntity> readOnlyUserMap = Collections.unmodifiableMap(userMap);
+    // ConcurrentHashMap 不允许 key 或 value 为 null
+    private val userMap = ConcurrentHashMap<String, UserEntity>()
+
     /**
      * 当前用户ID
+     * 使用 @JvmStatic 和 @JvmField 保持 Java 互操作性
      */
-    @Getter
-    public static String currentUid = null;
+    var currentUid: String? = null
+        private set // 外部只能通过 setCurrentUserId 修改
 
     /**
      * 获取只读的用户信息映射
-     *
-     * @return 只读的用户映射
      */
-    public static Map<String, UserEntity> getUserMap() {
-        return readOnlyUserMap;
+    @JvmStatic
+    fun getUserMap(): Map<String, UserEntity> {
+        return Collections.unmodifiableMap(userMap)
     }
 
     /**
      * 获取所有用户ID的集合
-     *
-     * @return 用户ID集合
      */
-    public static Set<String> getUserIdSet() {
-        return userMap.keySet();
+    @JvmStatic
+    fun getUserIdSet(): Set<String> {
+        return userMap.keys
     }
 
     /**
      * 设置当前用户ID
-     *
-     * @param userId 用户ID
      */
-    public static synchronized void setCurrentUserId(String userId) {
-        currentUid = (userId == null || userId.isEmpty()) ? null : userId;
+    @JvmStatic
+    @Synchronized
+    fun setCurrentUserId(userId: String?) {
+        Log.runtime(TAG, "setCurrentUserId: $userId")
+        currentUid = if (userId.isNullOrEmpty()) null else userId
     }
 
     /**
      * 获取当前用户的掩码名称
-     *
-     * @return 掩码名称
+     * 修复：如果 currentUid 为 null，直接返回 null，避免 ConcurrentHashMap 崩溃
      */
-    public static String getCurrentMaskName() {
-        return getMaskName(currentUid);
+    @JvmStatic
+    fun getCurrentMaskName(): String? {
+        return getMaskName(currentUid)
     }
 
     /**
      * 获取指定用户的掩码名称
-     *
-     * @param userId 用户ID
-     * @return 掩码名称
+     * 修复：增加了 userId 判空检查
      */
-    public static String getMaskName(String userId) {
-        UserEntity userEntity = userMap.get(userId);
-        return userEntity == null ? null : userEntity.getMaskName();
+    @JvmStatic
+    fun getMaskName(userId: String?): String? {
+        if (userId == null) {
+            Log.runtime(TAG, "getMaskName: userId is null")
+            return null
+        } // 关键修复：防止 userMap.get(null) 崩溃
+        return userMap[userId]?.maskName
     }
 
     /**
      * 获取指定用户实体
-     *
-     * @param userId 用户ID
-     * @return 用户实体
      */
-    public static UserEntity get(String userId) {
-        return userMap.get(userId);
+    @JvmStatic
+    fun get(userId: String?): UserEntity? {
+        if (userId == null) return null // 关键修复
+        return userMap[userId]
     }
 
     /**
      * 添加用户到映射
-     *
-     * @param userEntity 用户实体
      */
-    public static synchronized void add(UserEntity userEntity) {
-        if (userEntity.getUserId() != null && !userEntity.getUserId().isEmpty()) {
-            userMap.put(userEntity.getUserId(), userEntity);
+    @JvmStatic
+    @Synchronized
+    fun add(userEntity: UserEntity?) {
+        if (userEntity == null) return
+        val uid = userEntity.userId
+        if (!uid.isNullOrEmpty()) {
+            userMap[uid] = userEntity
         }
     }
 
     /**
      * 从映射中移除指定用户
-     *
-     * @param userId 用户ID
      */
-    public static synchronized void remove(String userId) {
-        userMap.remove(userId);
+    @JvmStatic
+    @Synchronized
+    fun remove(userId: String?) {
+        if (userId != null) {
+            userMap.remove(userId)
+        }
     }
 
     /**
      * 加载用户数据
-     *
-     * @param userId 用户ID
      */
-    public static synchronized void load(String userId) {
-        userMap.clear();
-        if (userId == null || userId.isEmpty()) {
-            Log.runtime(TAG, "Skip loading user map for empty userId");
-            return;
+    @JvmStatic
+    @Synchronized
+    fun load(userId: String?) {
+        userMap.clear()
+        if (userId.isNullOrEmpty()) {
+            Log.error(TAG, "Skip loading user map for empty userId")
+            return
         }
         try {
-            File friendIdMapFile = Files.getFriendIdMapFile(userId);
+            val friendIdMapFile = Files.getFriendIdMapFile(userId)
             if (friendIdMapFile == null) {
-                Log.runtime(TAG, "Friend ID map file is null for userId: " + userId);
-                return;
+                Log.error(TAG, "Friend ID map file is null for userId: $userId")
+                return
             }
-            String body = Files.readFromFile(friendIdMapFile);
-            if (!body.isEmpty()) {
-                Map<String, UserEntity.UserDto> dtoMap = JsonUtil.parseObject(body, new TypeReference<>() {
-                });
-                for (UserEntity.UserDto dto : dtoMap.values()) {
-                    userMap.put(dto.getUserId(), dto.toEntity());
+            val body = Files.readFromFile(friendIdMapFile)
+            if (body.isNotEmpty()) {
+                // Kotlin 中使用 TypeReference 的方式
+                val dtoMap: Map<String, UserEntity.UserDto>? = JsonUtil.parseObject(
+                    body,
+                    object : TypeReference<Map<String, UserEntity.UserDto>>() {}
+                )
+
+                dtoMap?.values?.forEach { dto ->
+                    // 再次确保 Key 和 Value 不为 null
+                    val uid = dto.userId
+                    val entity = dto.toEntity()
+                    if (!uid.isNullOrEmpty()) {
+                        userMap[uid] = entity
+                    }
                 }
             }
-        } catch (Exception e) {
-            Log.printStackTrace(e);
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
         }
     }
 
     /**
      * 卸载用户数据
      */
-    public static synchronized void unload() {
-        userMap.clear();
+    @JvmStatic
+    @Synchronized
+    fun unload() {
+        userMap.clear()
     }
 
     /**
      * 保存用户数据到文件
-     *
-     * @param userId 用户ID
-     * @return 保存结果
      */
-    public static synchronized boolean save(String userId) {
-        return Files.write2File(JsonUtil.formatJson(userMap), Files.getFriendIdMapFile(userId));
+    @JvmStatic
+    @Synchronized
+    fun save(userId: String?): Boolean {
+        if (userId.isNullOrEmpty()) return false
+        return Files.write2File(JsonUtil.formatJson(userMap), Files.getFriendIdMapFile(userId))
     }
 
     /**
      * 加载当前用户的数据
-     *
-     * @param userId 用户ID
      */
-    public static synchronized void loadSelf(String userId) {
-        userMap.clear();
+    @JvmStatic
+    @Synchronized
+    fun loadSelf(userId: String?) {
+        userMap.clear()
+        if (userId.isNullOrEmpty()) return
+
         try {
-            String body = Files.readFromFile(Files.getSelfIdFile(userId));
-            if (!body.isEmpty()) {
-                UserEntity.UserDto dto = JsonUtil.parseObject(body, new TypeReference<>() {
-                });
-                userMap.put(dto.getUserId(), dto.toEntity());
+            val body = Files.readFromFile(Files.getSelfIdFile(userId))
+            if (body.isNotEmpty()) {
+                val dto: UserEntity.UserDto? = JsonUtil.parseObject(
+                    body,
+                    object : TypeReference<UserEntity.UserDto>() {}
+                )
+
+                if (dto != null) {
+                    val uid = dto.userId
+                    val entity = dto.toEntity()
+                    if (!uid.isNullOrEmpty()) {
+                        userMap[uid] = entity
+                    }
+                }
             }
-        } catch (Exception e) {
-            Log.printStackTrace(e);
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
         }
     }
 
     /**
      * 保存当前用户数据到文件
-     *
-     * @param userEntity 用户实体
      */
-    public static synchronized void saveSelf(UserEntity userEntity) {
-        String body = JsonUtil.formatJson(userEntity);
-        Files.write2File(body, Files.getSelfIdFile(userEntity.getUserId()));
+    @JvmStatic
+    @Synchronized
+    fun saveSelf(userEntity: UserEntity?) {
+        Log.runtime(TAG, "saveSelf: $userEntity")
+        if (userEntity != null) {
+            // 2. 直接存入对象！DataStore 会自动转 JSON 并写入文件
+            DataStore.put("activedUser", userEntity)
+            Log.runtime(TAG, "已更新当前用户信息到 DataStore")
+        }
+        val body = JsonUtil.formatJson(userEntity)
+        Files.write2File(body, Files.getSelfIdFile(userEntity?.userId))
     }
 }
