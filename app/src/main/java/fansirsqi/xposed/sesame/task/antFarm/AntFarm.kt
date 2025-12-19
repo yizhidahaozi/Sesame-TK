@@ -1827,7 +1827,7 @@ class AntFarm : ModelTask() {
 
                     // 跳过今日已达上限的任务
                     if (Status.hasFlagToday("farm::task::limit::$bizKey")) {
-                        Log.farm("庄园任务[$title]今日已达上限，跳过执行")
+                        Log.record("庄园任务[$title]今日已达上限，跳过执行")
                         continue
                     }
 
@@ -1848,7 +1848,7 @@ class AntFarm : ModelTask() {
                                         val resultVideojo =
                                             JSONObject(AntFarmRpcCall.videoTrigger(contentId))
                                         if (ResChecker.checkRes(TAG, resultVideojo)) {
-                                            Log.farm("庄园任务🧾[$resultVideojo]")
+                                            Log.farm("庄园任务1🧾[$title]")
                                         }
                                     }
                                 } else {
@@ -1859,7 +1859,7 @@ class AntFarm : ModelTask() {
                                     }
                                     val taskDetailjo = JSONObject(taskDetailResult)
                                     if (ResChecker.checkRes(TAG, taskDetailjo)) {
-                                        Log.farm("庄园任务🧾[$title]")
+                                        Log.farm("庄园任务2🧾[$title]")
                                     } else {
                                         val resultCode = taskDetailjo.optString("resultCode", "")
                                         if (resultCode == "309") {

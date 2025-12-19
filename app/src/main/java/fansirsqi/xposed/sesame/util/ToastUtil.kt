@@ -33,13 +33,13 @@ object ToastUtil {
         // 1. 修复逻辑错误：处理前缀拼接
         var finalMessage = message
         val shouldShow = showToast.value
-        val perfix = toastPerfix.value
+        val prefix = toastPerfix.value
 
-        Log.record(TAG, "perfix::$perfix")
+      //  Log.record(TAG, "prefix::$prefix")
 
         // 修复：必须同时满足 "不为空" 且 "不等于字符串null"
-        if (!perfix.isNullOrBlank() && perfix != "null") {
-            finalMessage = "$perfix:$message"
+        if (!prefix.isNullOrBlank() && prefix != "null") {
+            finalMessage = "$prefix:$message"
         }
 
         Log.runtime(TAG, "showToast::$shouldShow::$finalMessage")
@@ -54,13 +54,13 @@ object ToastUtil {
 
     fun makeText(context: Context?, message: String?, duration: Int): Toast {
         var finalMessage = message
-        val perfix = toastPerfix.value
+        val prefix = toastPerfix.value
 
-        Log.record(TAG, "perfix::$perfix")
+       // Log.record(TAG, "prefix::$prefix")
 
         // 修复逻辑
-        if (!perfix.isNullOrBlank() && perfix != "null") {
-            finalMessage = "$perfix:$message"
+        if (!prefix.isNullOrBlank() && prefix != "null") {
+            finalMessage = "$prefix:$message"
         }
 
         val toast = Toast.makeText(context, finalMessage, duration)
