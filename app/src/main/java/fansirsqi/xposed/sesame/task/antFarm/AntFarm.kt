@@ -1824,8 +1824,12 @@ class AntFarm : ModelTask() {
                     task.optString("taskMode")
                     // 跳过已被屏蔽的任务
                     if (TaskBlacklist.isTaskInBlacklist(bizKey)) continue
+
                     // 跳过今日已达上限的任务
-                    if (Status.hasFlagToday("farm::task::limit::$bizKey"))continue
+                    if (Status.hasFlagToday("farm::task::limit::$bizKey")) {
+                        Log.farm("庄园任务[$title]今日已达上限，跳过执行")
+                        continue
+                    }
 
                     if (TaskStatus.TODO.name == taskStatus) {
                         if ("VIDEO_TASK" == bizKey) {
@@ -1847,30 +1851,28 @@ class AntFarm : ModelTask() {
                                             Log.farm("庄园任务🧾[$resultVideojo]")
                                         }
                                     }
-                                } else if ("ANSWER" == bizKey) {
-                                answerQuestion("100") //答题
-                            } else {
-                                val taskDetailResult = AntFarmRpcCall.doFarmTask(bizKey)
-                                if (taskDetailResult.isNullOrEmpty()) {
-                                //     Log.error(TAG, "庄园任务[$title]执行失败：API返回空结果")
-                                    return
-                                }
-                                val taskDetailjo = JSONObject(taskDetailResult)
-                                if (ResChecker.checkRes(TAG, taskDetailjo)) {
-                                    Log.farm("庄园任务🧾[$title]")
                                 } else {
-                                    val resultCode = taskDetailjo.optString("resultCode", "")
-                                    if (resultCode == "309") {
-                                        // 任务达到当日上限，标记今日不再执行
-                                        Status.setFlagToday("farm::task::limit::$bizKey")
-                                        Log.record(TAG, "庄园任务[$title]今日已达上限，跳过后续执行")
+                                    val taskDetailResult = AntFarmRpcCall.doFarmTask(bizKey)
+                                    if (taskDetailResult.isNullOrEmpty()) {
+                                    //     Log.error(TAG, "庄园任务[$title]执行失败：API返回空结果")
+                                        return
+                                    }
+                                    val taskDetailjo = JSONObject(taskDetailResult)
+                                    if (ResChecker.checkRes(TAG, taskDetailjo)) {
+                                        Log.farm("庄园任务🧾[$title]")
                                     } else {
-                                        // 其他错误，使用统一黑名单管理器自动处理
-                                        Log.error("庄园任务失败：$title\n$taskDetailjo")
-                                        TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode)
+                                        val resultCode = taskDetailjo.optString("resultCode", "")
+                                        if (resultCode == "309") {
+                                            // 任务达到当日上限，标记今日不再执行
+                                            Status.setFlagToday("farm::task::limit::$bizKey")
+                                            Log.record(TAG, "庄园任务[$title]今日已达上限，跳过后续执行")
+                                        } else {
+                                            // 其他错误，使用统一黑名单管理器自动处理
+                                            Log.error("庄园任务失败：$title\n$taskDetailjo")
+                                            TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode)
+                                        }
                                     }
                                 }
-                            }
                         }
                     }
                     if ("ANSWER" == bizKey && !Status.hasFlagToday(CACHED_FLAG)) { //单独处理答题任务

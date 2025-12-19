@@ -485,7 +485,11 @@ class Status {
         @JvmStatic
         fun unload() {
             try {
-                JsonUtil.copyMapper().updateValue(INSTANCE, Status())
+                // 创建新状态实例并确保清空所有每日标记
+                val newStatus = Status()
+                // 确保清空flagList
+                INSTANCE.flagList.clear()
+                JsonUtil.copyMapper().updateValue(INSTANCE, newStatus)
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
             }
