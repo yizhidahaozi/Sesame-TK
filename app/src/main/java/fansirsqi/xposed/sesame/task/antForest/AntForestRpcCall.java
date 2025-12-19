@@ -523,7 +523,8 @@ public class AntForestRpcCall {
     }
 
     /** 6秒拼手速 打地鼠 */
-    public static String startWhackMole() {
+    public static String startWhackMole() throws JSONException
+    {
         JSONObject param = new JSONObject();
         param.put("source", "senlinguangchangdadishu");
         return RequestManager.requestString(
@@ -533,7 +534,8 @@ public class AntForestRpcCall {
     }
 
     /** 打单个地鼠 道具 */
-    public static String whackMole(long moleId, String token) {
+    public static String whackMole(long moleId, String token) throws JSONException
+    {
         JSONObject param = new JSONObject();
         param.put("moleId", moleId);
         param.put("source", "senlinguangchangdadishu");
@@ -546,7 +548,8 @@ public class AntForestRpcCall {
         );
     }
 
-    public static String settlementWhackMole(String token) {
+    public static String settlementWhackMole(String token) 
+    throws JSONException {
         // moleIdList 改为 1 ,20（包含 1-20）
         List<Integer> moleIdList = IntStream.rangeClosed(1, 20)
                 .boxed()
