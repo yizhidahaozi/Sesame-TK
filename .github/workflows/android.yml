@@ -134,7 +134,8 @@ jobs:
           x86_file=$(basename "${{ steps.extract_apks.outputs.signed_x86 }}")
           x86_64_file=$(basename "${{ steps.extract_apks.outputs.signed_x86_64 }}")
           universal_file=$(basename "${{ steps.extract_apks.outputs.signed_universal }}")
-          version=$(echo "$arm64_file" | sed -E 's/.*-(arm64-v8a)-(v[^-]+).*-signed\.apk/\2/')
+#          version=$(echo "$arm64_file" | sed -E 's/.*-(arm64-v8a)-(v[^-]+).*-signed\.apk/\2/')
+          version="${{ github.ref_name }}"
           echo "arm64_file=$arm64_file" >> $GITHUB_OUTPUT
           echo "armv7_file=$armv7_file" >> $GITHUB_OUTPUT
           echo "x86_file=$x86_file" >> $GITHUB_OUTPUT
@@ -204,7 +205,6 @@ jobs:
 
 
       - name: 📮 Post to Telegram channel
-        if: github.ref == 'refs/heads/n'
         env:
           CHANNEL_ID: ${{ secrets.TG_CHAT_ID }}
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
