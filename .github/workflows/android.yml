@@ -134,7 +134,6 @@ jobs:
           x86_file=$(basename "${{ steps.extract_apks.outputs.signed_x86 }}")
           x86_64_file=$(basename "${{ steps.extract_apks.outputs.signed_x86_64 }}")
           universal_file=$(basename "${{ steps.extract_apks.outputs.signed_universal }}")
-#          version=$(echo "$arm64_file" | sed -E 's/.*-(arm64-v8a)-(v[^-]+).*-signed\.apk/\2/')
           version="${{ github.ref_name }}"
           echo "arm64_file=$arm64_file" >> $GITHUB_OUTPUT
           echo "armv7_file=$armv7_file" >> $GITHUB_OUTPUT
