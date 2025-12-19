@@ -173,14 +173,12 @@ class AntOrchard : ModelTask() {
             } else if (orchardSpreadManureCountValue >= 10) {
                 querySubplotsActivity(10)
             }
-
             // 助力
             orchardAssistFriend()
-
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "start.run err:",t)
         } finally {
-            Log.error(TAG, "执行结束-$name")
+            Log.record(TAG, "执行结束-$name")
         }
     }
 
@@ -819,7 +817,7 @@ class AntOrchard : ModelTask() {
                         // 容错处理：如果spaceCodeFeeds还是null，尝试从原始targetUrl直接提取
                         val finalSpaceCode = spaceCodeFeeds ?: UrlUtil.getParamValue(targetUrl, "spaceCodeFeeds") ?: ""
                         if (finalSpaceCode.isEmpty()) {
-                            Log.error(TAG, "spaceCodeFeeds 解析失败，跳过此任务")
+                            Log.record(TAG, "spaceCodeFeeds 解析失败，跳过此任务")
                             continue
                         }
 
