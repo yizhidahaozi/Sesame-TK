@@ -10,14 +10,10 @@ import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
+import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
-import fansirsqi.xposed.sesame.task.antOrchard.UrlUtil
-import fansirsqi.xposed.sesame.task.antOrchard.XLightRpcCall
-import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.util.CoroutineUtils
-import fansirsqi.xposed.sesame.util.Detector
-import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.RandomUtil
@@ -162,21 +158,7 @@ class AntOrchard : ModelTask() {
         }
     }
 
-    private fun getWua(): String {
-        if (wuaList == null) {
-            try {
-                val content = Files.readFromFile(Files.getWuaFile())
-                wuaList = content.split("\n").toTypedArray()
-            } catch (ignored: Throwable) {
-                wuaList = emptyArray()
-            }
-        }
-        return if (wuaList!!.isNotEmpty()) {
-            wuaList!![RandomUtil.nextInt(0, wuaList!!.size - 1)]
-        } else {
-            Detector.genWua()
-        }
-    }
+
 
     private fun canSpreadManureContinue(stageBefore: Int, stageAfter: Int): Boolean {
         return if (stageAfter - stageBefore > 1) {

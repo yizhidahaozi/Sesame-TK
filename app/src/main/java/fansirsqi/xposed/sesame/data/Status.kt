@@ -230,14 +230,16 @@ class Status {
         }
 
         @JvmStatic
-        fun canMemberSignInToday(uid: String): Boolean {
+        fun canMemberSignInToday(uid: String?): Boolean {
             return !INSTANCE.memberSignInList.contains(uid)
         }
 
         @JvmStatic
-        fun memberSignInToday(uid: String) {
-            if (INSTANCE.memberSignInList.add(uid)) {
-                save()
+        fun memberSignInToday(uid: String?) {
+            if (uid != null) {
+                if (INSTANCE.memberSignInList.add(uid)) {
+                    save()
+                }
             }
         }
 
