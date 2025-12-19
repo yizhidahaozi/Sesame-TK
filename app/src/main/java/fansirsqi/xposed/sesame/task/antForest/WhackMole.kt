@@ -1,219 +1,214 @@
-package fansirsqi.xposed.sesame.task.antForest;
+package fansirsqi.xposed.sesame.task.antForest
 
-import android.annotation.SuppressLint;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.ResChecker;
+import android.annotation.SuppressLint
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.ResChecker
+import kotlinx.coroutines.*
+import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * 6秒拼手速打地鼠（纯净版）
- * - 只打普通地鼠
- * - 每局固定3次
- * - 10局并发，6秒后全结算
+ * 6秒拼手速打地鼠（Kotlin优化版）
  * 
- * @author Ghostxx
+ * 主要优化点：
+ * 1. 使用Kotlin协程替代线程池，提高并发性能和资源利用率
+ * 2. 使用data class替代record，提供更多功能
+ * 3. 使用Kotlin的集合操作和扩展函数简化代码
+ * 4. 使用Kotlin的字符串模板简化日志输出
+ * 5. 使用scope函数和let/run等提高代码可读性
+ * 6. 使用更安全的空值处理
+ * 
+ * @author Ghostxx (优化版)
  */
-public class WhackMole {
-    private static final String TAG = WhackMole.class.getSimpleName();
-    private static final String SOURCE = "senlinguangchangdadishu";
+object WhackMole {
+    private const val TAG = "WhackMole"
+    private const val SOURCE = "senlinguangchangdadishu"
     
     // ========== 核心配置 ==========
     /** 一次性启动的游戏局数：10局并发 */
-    private static final int TOTAL_GAMES = 10;
+    private const val TOTAL_GAMES = 10
     
     /** 游戏总时长（毫秒）：严格等待6秒，让所有局完成 */
-    private static final int GAME_DURATION_MS = 6000;
+    private const val GAME_DURATION_MS = 6000L
     
-    /** 每局最多击打次数：3次 */
-    private static final int MAX_HITS_PER_GAME = 3;  //改1保底奖励 ？
+    /** 每局最多击打次数：1次（设置为0时直接结算，不进行击打） */
+    private var MAX_HITS_PER_GAME = 1
     
     // ========== 统计 ==========
     /** 累计获得能量：所有被结算的局 */
-    private static final AtomicInteger totalEnergyEarned = new AtomicInteger(0);
+    private val totalEnergyEarned = AtomicInteger(0)
     
-    // ========== 内部类 ==========
-    /** 游戏会话：存储单局游戏的token、剩余ID、能量和局号 */
-    private record GameSession(String token, List<String> remainingIds, 
-                               int whackedEnergy, int roundNumber) {}
+    /** 全局协程作用域，用于管理所有协程 */
+    private val globalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // ========== 数据类 ==========
+    /**
+     * 游戏会话：存储单局游戏的token、剩余ID、能量和局号
+     * 使用data class替代record，提供更多功能如copy、equals等
+     */
+    data class GameSession(
+        val token: String,
+        val remainingIds: List<String>,
+        val whackedEnergy: Int,
+        val roundNumber: Int
+    )
     
     // ========== 自动入口 ==========
+    /**
+     * 启动打地鼠游戏
+     * 使用Kotlin协程作用域和协程构建器，更高效地管理并发任务
+     */
     @SuppressLint("DefaultLocale")
-    public static void startWhackMole() {
-        Log.other(TAG, String.format("纯净版打地鼠启动 一次性启动%d局", TOTAL_GAMES));
-        
-        // 1. 一次性启动所有局
-        ThreadPoolExecutor executor = createExecutor(TOTAL_GAMES);
-        List<Future<GameSession>> futures = new ArrayList<>();
-        
-        try {
-            for (int i = 1; i <= TOTAL_GAMES; i++) {
-                final int gameNum = i;
-                futures.add(executor.submit(() -> startSingleRound(gameNum)));
-            }
-            
-            Log.other(TAG, "已启动" + TOTAL_GAMES + "局游戏，等待6秒...");
-            
-            // 2. 严格等待6秒，让所有局同时完成
-            GlobalThreadPools.sleepCompat(GAME_DURATION_MS);
-            
-            // 3. 快速收集所有结果
-            List<GameSession> sessions = new ArrayList<>();
-            for (Future<GameSession> future : futures) {
-                try {
-                    GameSession session = future.get(3, TimeUnit.SECONDS);
-                    if (session != null) {
-                        sessions.add(session);
-                    }
-                } catch (Exception e) {
-                    Log.other(TAG, "收集游戏结果失败: " + e.getMessage());
+    fun startWhackMole() {
+        // 从AntForest获取自定义击打次数
+        MAX_HITS_PER_GAME = AntForest.whackMoleHits!!.value
+        Log.other(TAG, "纯净版打地鼠启动 一次性启动${TOTAL_GAMES}局 每局击打${MAX_HITS_PER_GAME}次")
+        // 使用全局协程作用域，确保协程不会被意外取消
+        globalScope.launch {
+            try {
+                // 1. 使用async并发启动所有局
+                val deferredSessions = (1..TOTAL_GAMES).map { roundNum ->
+                    async { startSingleRound(roundNum) }
                 }
-            }
-            
-            if (sessions.isEmpty()) {
-                Log.other(TAG, "所有局都失败了！");
-                return;
-            }
-            
-            // 4. 按能量从高到低排序
-            sessions.sort((a, b) -> Integer.compare(b.whackedEnergy(), a.whackedEnergy()));
-            
-            // 5. 依次结算所有局（从最高到最低）
-            for (GameSession session : sessions) {
-                settleBestRound(session);
-                totalEnergyEarned.addAndGet(session.whackedEnergy());
+                Log.other(TAG, "已启动${TOTAL_GAMES}局游戏，等待6秒...")
+                // 2. 使用delay替代Thread.sleep，非阻塞等待
+                delay(GAME_DURATION_MS)
+                // 3. 使用awaitAll收集所有结果
+                val sessions = deferredSessions.awaitAll().filterNotNull()
+                if (sessions.isEmpty()) {
+                    Log.other(TAG, "所有局都失败了！")
+                    return@launch
+                }
+                // 4. 使用Kotlin的sortedByDescending函数按能量从高到低排序
+                val sortedSessions = sessions.sortedByDescending { it.whackedEnergy }
                 
-                // 小间隔，避免结算请求被限流
-                if (sessions.indexOf(session) < sessions.size() - 1) {
-                    GlobalThreadPools.sleepCompat(100);
+                // 5. 依次结算所有局（从最高到最低）
+                sortedSessions.forEachIndexed { index, session ->
+                    settleBestRound(session)
+                    totalEnergyEarned.addAndGet(session.whackedEnergy)
+                    
+                    // 小间隔，避免结算请求被限流
+                    if (index < sortedSessions.size - 1) {
+                        delay(100)
+                    }
                 }
+                
+                Log.forest("森林能量⚡️[6秒完成${TOTAL_GAMES}局 总计${totalEnergyEarned.get()}g]")
+                
+            } catch (e: CancellationException) {
+                // 协程取消异常，不需要处理日志
+                Log.other(TAG, "打地鼠协程被取消")
+            } catch (e: Exception) {
+                Log.other(TAG, "打地鼠过程中发生异常: ${e.message}")
             }
-            
-            Log.forest("森林能量⚡️[6秒完成" + TOTAL_GAMES + "局 总计" + totalEnergyEarned.get() + "g]");
-            
-        } finally {
-            shutdownExecutor(executor);
         }
     }
     
     // ========== 单局游戏 ==========
-    private static GameSession startSingleRound(int round) {
+    /**
+     * 启动单局游戏
+     * 使用Kotlin的空值安全操作符和扩展函数简化代码
+     */
+    private suspend fun startSingleRound(round: Int): GameSession? = withContext(Dispatchers.IO) {
         try {
-            JSONObject startResp = new JSONObject(AntForestRpcCall.startWhackMole(SOURCE));
-            if (!ResChecker.checkRes(TAG + "启动失败:", startResp)) {
-                return null;
+            val startResp = JSONObject(AntForestRpcCall.startWhackMole(SOURCE))
+            if (!ResChecker.checkRes("$TAG 启动失败:", startResp)) {
+                return@withContext null
             }
             
             // 检测：如果用户基础信息缺失，说明服务器限制新开
-            JSONObject userBaseInfo = startResp.optJSONObject("userBaseInfo");
+            val userBaseInfo = startResp.optJSONObject("userBaseInfo")
             if (userBaseInfo == null) {
-                Log.other(TAG, "服务器限制：无法新开游戏，userBaseInfo=null");
-                return null;
+                Log.other(TAG, "服务器限制：无法新开游戏，userBaseInfo=null")
+                return@withContext null
             }
             
-            String token = startResp.optString("token");
-            JSONArray moleArray = startResp.optJSONArray("moleInfo");
-            if (moleArray == null || moleArray.length() == 0) {
-                return null;
-            }
+            val token = startResp.optString("token")
+            val moleArray = startResp.optJSONArray("moleArray")
+                ?: return@withContext null
             
-            // 只取前3个普通地鼠（按数组顺序，不排序）
-            List<Long> targetIds = new ArrayList<>();
-            for (int i = 0; i < moleArray.length() && targetIds.size() < MAX_HITS_PER_GAME; i++) {
-                JSONObject m = moleArray.getJSONObject(i);
-                if (m.has("bubbleId")) {
-                    targetIds.add(m.getLong("id"));
-                }
-            }
+            var totalEnergy = 0
+            var hitCount = 0
             
-            int totalEnergy = 0;
-            int hitCount = 0;
-            
-            // 击打3次
-            for (Long moleId : targetIds) {
-                if (hitCount >= MAX_HITS_PER_GAME) break;
+            // 如果MAX_HITS_PER_GAME为0，则直接结算不进行击打
+            if (MAX_HITS_PER_GAME == 0) {
+                Log.other(TAG, "第${round}局设置为直接结算模式，跳过击打")
+            } else {
+                // 使用Kotlin的take和map函数提取目标ID
+                val targetIds = (0 until moleArray.length())
+                    .asSequence()
+                    .map { moleArray.getJSONObject(it) }
+                    .filter { it.has("bubbleId") }
+                    .take(MAX_HITS_PER_GAME)
+                    .map { it.getLong("id") }
+                    .toList()
                 
-                int energy = whackMoleSync(moleId, token);
-                
-                if (energy > 0) {
-                    totalEnergy += energy;
-                    hitCount++;
-                    Log.other(TAG, String.format("第%d局 第%d击 energy=%d", round, hitCount, energy));
+                // 击打地鼠
+                for (moleId in targetIds) {
+                    if (hitCount >= MAX_HITS_PER_GAME) break
+                    val energy = whackMoleSync(moleId, token)
+                    if (energy > 0) {
+                        totalEnergy += energy
+                        hitCount++
+                        Log.other(TAG, "第${round}局 第${hitCount}击 energy=$energy")
+                    }
                 }
+                
+                Log.other(TAG, "第${round}局完成 击打${hitCount}次 获得${totalEnergy}g")
             }
-            
-            Log.other(TAG, String.format("第%d局完成 击打%d次 获得%dg", round, hitCount, totalEnergy));
-            
-            // 构建剩余ID（全部未击打）
-            List<String> remainingIds = new ArrayList<>();
-            for (int i = 0; i < moleArray.length(); i++) {
-                remainingIds.add(moleArray.getJSONObject(i).getString("id"));
-            }
-            
-            return new GameSession(token, remainingIds, totalEnergy, round);
-            
-        } catch (Exception e) {
-            Log.other(TAG, "第" + round + "局异常: " + e.getMessage());
-            return null;
+            // 使用Kotlin的map函数构建剩余ID列表
+            val remainingIds = (0 until moleArray.length())
+                .map { moleArray.getJSONObject(it).getString("id") }
+            GameSession(token, remainingIds, totalEnergy, round)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.other(TAG, "第${round}局异常: ${e.message}")
+            null
         }
     }
     
     // ========== 同步击打 ==========
-    private static int whackMoleSync(long moleId, String token) {
+    /**
+     * 同步击打地鼠
+     * 使用Kotlin的简洁语法和空值安全操作符
+     */
+    private suspend fun whackMoleSync(moleId: Long, token: String): Int = withContext(Dispatchers.IO) {
         try {
-            JSONObject resp = new JSONObject(
-                AntForestRpcCall.whackMole(moleId, token, SOURCE)
-            );
-            return resp.optBoolean("success") ? resp.optInt("energyAmount", 0) : 0;
-        } catch (Exception e) {
-            return 0;
+            val resp = JSONObject(AntForestRpcCall.whackMole(moleId, token, SOURCE))
+            if (resp.optBoolean("success")) resp.optInt("energyAmount", 0) else 0
+        } catch (e: CancellationException) {
+            // 协程取消异常，重新抛出
+            throw e
+        } catch (_: Exception) {
+            0
         }
     }
     
     // ========== 结算 ==========
-    private static void settleBestRound(GameSession session) {
+    /**
+     * 结算最佳回合
+     * 使用Kotlin的字符串模板简化输出
+     */
+    private suspend fun settleBestRound(session: GameSession) = withContext(Dispatchers.IO) {
         try {
-            JSONObject resp = new JSONObject(
+            val resp = JSONObject(
                 AntForestRpcCall.settlementWhackMole(session.token, session.remainingIds, SOURCE)
-            );
+            )
             
             if (ResChecker.checkRes(TAG, resp)) {
-                int total = resp.optInt("totalEnergy", 0);
-                int provide = resp.optInt("provideDefaultEnergy", 0);
-                Log.forest(String.format(
-                    "森林能量⚡️[第%d局结算 地鼠%dg 默认%dg 总计%dg]",
-                    session.roundNumber, total - provide, provide, total
-                ));
+                val total = resp.optInt("totalEnergy", 0)
+                val provide = resp.optInt("provideDefaultEnergy", 0)
+                Log.forest(
+                    "森林能量⚡️[第${session.roundNumber}局结算 " +
+                    "地鼠${total - provide}g 默认${provide}g 总计${total}g]"
+                )
             }
-        } catch (Exception e) {
-            Log.other(TAG, "结算异常: " + e.getMessage());
-        }
-    }
-    
-    // ========== 线程池工具 ==========
-    private static ThreadPoolExecutor createExecutor(int threads) {
-        return new ThreadPoolExecutor(
-            threads, threads, 0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(),
-            r -> new Thread(r, "WhackMole-" + System.nanoTime())
-        );
-    }
-    
-    private static void shutdownExecutor(ExecutorService executor) {
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(15, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
+        } catch (e: CancellationException) {
+            // 协程取消异常，重新抛出
+            throw e
+        } catch (e: Exception) {
+            Log.other(TAG, "结算异常: ${e.message}")
         }
     }
 }
