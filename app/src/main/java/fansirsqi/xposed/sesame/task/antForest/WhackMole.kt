@@ -31,8 +31,8 @@ object WhackMole {
     /** 游戏总时长（毫秒）：严格等待6秒，让所有局完成 */
     private const val GAME_DURATION_MS = 6000L
     
-    /** 每局最多击打次数：1次（设置为0时直接结算，不进行击打） */
-    private var MAX_HITS_PER_GAME = 1
+    /** 每局最多击打次数：3次（设置为0时直接结算，不进行击打） */
+    private var MAX_HITS_PER_GAME = 3
     
     // ========== 统计 ==========
     /** 累计获得能量：所有被结算的局 */
@@ -61,7 +61,7 @@ object WhackMole {
     @SuppressLint("DefaultLocale")
     fun startWhackMole() {
         // 从AntForest获取自定义击打次数
-        MAX_HITS_PER_GAME = AntForest.whackMoleHits!!.value
+        MAX_HITS_PER_GAME = AntForest.whackMoleHits?.value ?: 3
         Log.other(TAG, "纯净版打地鼠启动 一次性启动${TOTAL_GAMES}局 每局击打${MAX_HITS_PER_GAME}次")
         // 使用全局协程作用域，确保协程不会被意外取消
         globalScope.launch {
@@ -95,7 +95,7 @@ object WhackMole {
                 
                 Log.forest("森林能量⚡️[6秒完成${TOTAL_GAMES}局 总计${totalEnergyEarned.get()}g]")
                 
-            } catch (e: CancellationException) {
+            } catch (_: CancellationException) {
                 // 协程取消异常，不需要处理日志
                 Log.other(TAG, "打地鼠协程被取消")
             } catch (e: Exception) {
