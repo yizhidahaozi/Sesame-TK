@@ -1907,18 +1907,6 @@ class AntMember : ModelTask() {
     private suspend fun processAlchemyTasks(taskList: JSONArray?) {
         if (taskList == null || taskList.length() == 0) return
 
-        // 黑名单：确实做不了或需要其它 App 配合的任务
-        val blackList = arrayOf<String?>(
-            "每日施肥",
-            "芝麻租赁",
-            "休闲小游戏",
-            "AQApp",
-            "订阅炼金",
-            "租游戏账号",
-            "芝麻大表鸽",
-            "坚持签到"
-        )
-
         for (i in 0..<taskList.length()) {
             val task = taskList.getJSONObject(i)
             val title = task.optString("title")
@@ -1928,15 +1916,8 @@ class AntMember : ModelTask() {
 
             if (finishFlag) continue
 
-            // 黑名单检查
-            var isBlack = false
-            for (blackKey in blackList) {
-                if (title.contains(blackKey!!)) {
-                    isBlack = true
-                    break
-                }
-            }
-            if (isBlack) {
+            // 使用TaskBlacklist进行黑名单检查
+            if (isTaskInBlacklistFuzzy(title)) {
                 Log.record(TAG, "跳过黑名单任务: $title")
                 continue
             }
