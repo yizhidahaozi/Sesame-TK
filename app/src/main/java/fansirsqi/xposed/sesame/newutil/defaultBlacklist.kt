@@ -52,7 +52,7 @@ val defaultBlacklist = setOf(
     "去浏览租赁大促会场",        // 存在进行中的生活记录：PROMISE_HAS_PROCESSING_TEMPLATE
     "逛一逛免费领点餐优惠",      // 存在进行中的生活记录：PROMISE_HAS_PROCESSING_TEMPLATE
 
-    // processAlchemyTasks方法中常见任务
+    // processAlchemyTasks方法中常见任务  芝麻炼金
     "每日施肥",
     "芝麻租赁",
     "休闲小游戏",
@@ -61,6 +61,8 @@ val defaultBlacklist = setOf(
     "租游戏账号",
     "芝麻大表鸽",
     "坚持签到",
+    "坚持去玩休闲小游戏",     // 参数错误：ILLEGAL_ARGUMENT
+    "租游戏账号得芝麻粒",      // 参数错误：ILLEGAL_ARGUMENT
 
     // 农场任务
     "ORCHARD_NORMAL_KUAISHOU_MAX",  // 逛一逛快手

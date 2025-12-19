@@ -2014,7 +2014,13 @@ class AntMember : ModelTask() {
                     val reward = task.optInt("rewardAmount", 0)
                     Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒")
                 } else {
-                    Log.error(TAG, "任务提交失败: " + title + " - " + finishJo.optString("resultView", finishRes))
+                    val errorCode = finishJo.optString("resultCode", "")
+                   //  val errorMsg = finishJo.optString("resultView", finishRes)
+                   //  Log.error(TAG, "任务提交失败: $title - $errorMsg")
+                    // 自动添加到黑名单
+                    if (!errorCode.isEmpty()) {
+                        autoAddToBlacklist(title, title, errorCode)
+                    }
                 }
             }
             delay(2000)
