@@ -205,11 +205,13 @@ public class AntSports extends ModelTask {
                 }));
             }
 
-            if (sportsTasks.getValue()) {
+            // 运动任务
+            if (!Status.hasFlagToday("sport::tasks") && sportsTasks.getValue()) {
                 // 先执行原有运动任务面板逻辑
                 sportsTasks();
                 // 再处理首页推荐能量球对应的任务
                 sportsEnergyBubbleTask();
+                Status.setFlagToday("sport::tasks");
             }
 
             ClassLoader loader = ApplicationHook.getClassLoader();
@@ -255,32 +257,6 @@ public class AntSports extends ModelTask {
             Log.printStackTrace(TAG, t);
         } finally {
             Log.record(TAG, "执行结束-" + getName());
-        }
-    }
-
-    private void coinExchangeItem(String itemId) {
-        try {
-            JSONObject jo = new JSONObject(AntSportsRpcCall.queryItemDetail(itemId));
-            if (!ResChecker.checkRes(TAG + "查询商品详情失败:", jo)) {
-                return;
-            }
-            jo = jo.getJSONObject("data");
-            if (!"OK".equals(jo.optString("exchangeBtnStatus"))) {
-                return;
-            }
-            jo = jo.getJSONObject("itemBaseInfo");
-            String itemTitle = jo.getString("itemTitle");
-            int valueCoinCount = jo.getInt("valueCoinCount");
-            jo = new JSONObject(AntSportsRpcCall.exchangeItem(itemId, valueCoinCount));
-            if (!ResChecker.checkRes(TAG + "兑换商品失败:", jo)) {
-                return;
-            }
-            jo = jo.getJSONObject("data");
-            if (jo.optBoolean("exgSuccess")) {
-                Log.other(TAG, "运动好礼🎐兑换[" + itemTitle + "]花费" + valueCoinCount + "运动币");
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "trainMember err:",t);
         }
     }
 
