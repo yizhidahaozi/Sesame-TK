@@ -3,7 +3,7 @@ package fansirsqi.xposed.sesame.task.antForest;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONArray;
-import java.util.Arrays;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -529,7 +529,7 @@ public class AntForestRpcCall {
         param.put("source", "senlinguangchangdadishu");
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.startWhackMole",
-                "[" + param.toString() + "]"
+                "[" + param + "]"
         );
     }
 
@@ -551,7 +551,7 @@ public class AntForestRpcCall {
     public static String settlementWhackMole(String token) 
     throws JSONException {
         // moleIdList 改为 1 ,20（包含 1-20）
-        List<Integer> moleIdList = IntStream.rangeClosed(1, 20)
+        List<Integer> moleIdList = IntStream.rangeClosed(1, 25)
                 .boxed()
                 .collect(Collectors.toList());
         JSONObject param = new JSONObject();
@@ -562,7 +562,7 @@ public class AntForestRpcCall {
         param.put("version", VERSION);
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.settlementWhackMole",
-                "[" + param.toString() + "]"
+                "[" + param + "]"
         );
     }
 
