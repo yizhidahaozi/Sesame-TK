@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 核心优化策略：
  * 1. 串行启动：避免并发请求触发服务器限流
- * 2. 随机间隔：启动间隔600-1000ms随机，击打间隔50-60ms随机，模拟真人操作
+ * 2. 随机间隔：启动间隔1000-2000ms随机，击打间隔50-60ms随机，模拟真人操作
  * 3. 智能等待：凑满6秒总时长，确保游戏逻辑完整
  * 4. 限流检测：检测到userBaseInfo=null时增加500ms退避时间
  * 5. 动态模式：支持击打模式（MAX_HITS_PER_GAME>0）和直接结算模式（=0）
@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 object WhackMole {
     private const val TAG = "WhackMole"
     // ========== 核心配置 ==========
-    /** 一次性启动的游戏局数：10局 */
-    private const val TOTAL_GAMES = 10
+    /** 一次性启动的游戏局数：5局 */
+    private const val TOTAL_GAMES = 5
     /** 游戏总时长（毫秒）：严格等待10秒，让所有局完成 */
     private const val GAME_DURATION_MS = 10000L
     /** 全局协程作用域：用于管理所有协程，SupervisorJob确保子协程失败不影响其他 */
@@ -54,7 +54,7 @@ object WhackMole {
     @SuppressLint("DefaultLocale")
     fun startWhackMole() {
         // 记录新规则到日志
-        Log.other(TAG, "打地鼠启动 ${TOTAL_GAMES}局 新规则：只启动存储token，10秒后并发结算")
+        Log.other(TAG, "打地鼠启动 ${TOTAL_GAMES}局 新规则：只启动存储token，10秒后串行结算")
 
         // 在IO协程中执行，避免阻塞主线程
         globalScope.launch {
@@ -68,9 +68,9 @@ object WhackMole {
                     if (session != null) {
                         sessions.add(session)
                     }
-                    // 随机间隔600-1000ms，避免并发请求触发服务器限流
+                    // 随机间隔1000-2000ms，避免并发请求触发服务器限流
                     if (roundNum < TOTAL_GAMES) {
-                        val delayMs = (600..1000).random()
+                        val delayMs = (1000..2000).random()
                         delay(delayMs.toLong())
                     }
                 }
@@ -86,19 +86,14 @@ object WhackMole {
                     Log.other(TAG, "已启动${sessions.size}局，已超过10秒，立即结算")
                 }
 
-                // 并发结算所有游戏局
-                val settleJobs = sessions.map { session ->
-                    globalScope.async {
-                        settleBestRound(session)
-                    }
+                // 串行结算所有游戏局
+                var totalEnergy = 0
+                sessions.forEach { session ->
+                    totalEnergy += settleBestRound(session)
                 }
 
-                // 等待所有结算完成并收集能量
-                val energyResults = settleJobs.awaitAll()
-                val totalEnergy = energyResults.sum()
-
                 // 最终日志：显示成功局数和总能量
-                Log.forest("森林能量⚡️[打地鼠${sessions.size}局并发结算 总计${totalEnergy}g]")
+                Log.forest("森林能量⚡️[打地鼠${sessions.size}局串行结算 总计${totalEnergy}g]")
 
             } catch (_: CancellationException) {
                 Log.other(TAG, "打地鼠协程被取消")
