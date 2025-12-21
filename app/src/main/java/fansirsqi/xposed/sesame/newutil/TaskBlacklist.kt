@@ -115,6 +115,7 @@ object TaskBlacklist {
         // 检查是否是应该自动加入黑名单的错误码
         val shouldAutoAdd = when (errorCode) {
             "400000040" -> true // "不支持rpc调用" - 仅农场任务
+            "104",
             "OP_REPEAT_CHECK", "ILLEGAL_ARGUMENT", "PROMISE_HAS_PROCESSING_TEMPLATE" -> true
             else -> false
         }
@@ -125,7 +126,9 @@ object TaskBlacklist {
                 "400000040" -> "不支持rpc调用"
                 "OP_REPEAT_CHECK" -> "操作太频繁"
                 "ILLEGAL_ARGUMENT" -> "参数错误"
+                "104",
                 "PROMISE_HAS_PROCESSING_TEMPLATE" -> "存在进行中的生活记录"
+
                 else -> "未知错误"
             }
             val taskInfo = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
