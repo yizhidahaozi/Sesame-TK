@@ -1393,7 +1393,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (closeWhackMole!!.value) {
                 val whackMoleFlag = "forest::whackMole::executed"
                 // 检查今天是否已执行过打地鼠
-                if (Status.hasFlagToday("whackMoleFlag")) {
+                if (Status.hasFlagToday(whackMoleFlag)) {
                     Log.record(TAG, "⏭️ 今天已完成过6秒拼手速，跳过执行")
                 } else {
                     // 主动执行打地鼠（今日首次）
