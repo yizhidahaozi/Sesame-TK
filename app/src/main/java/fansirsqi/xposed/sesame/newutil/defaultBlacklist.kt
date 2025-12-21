@@ -4,11 +4,8 @@ package fansirsqi.xposed.sesame.newutil
  * 默认黑名单列表（包含常见无法完成的任务）
  *
  * 使用方法：
- * 1. 检查任务是否在黑名单中（精确匹配）：
- *    if (TaskBlacklist.isTaskInBlacklist(taskId)) { 跳过任务 }
- *
- * 2. 检查任务是否在黑名单中（模糊匹配，适用于芝麻信用任务）：
- *    if (TaskBlacklist.isTaskInBlacklistFuzzy(taskTitle)) { 跳过任务 }
+ * 1. 检查任务是否在黑名单中（模糊匹配）：
+ *    if (TaskBlacklist.isTaskInBlacklist(taskInfo)) { 跳过任务 }
  *
  * 3. 根据错误码自动添加任务到黑名单：
  *    TaskBlacklist.autoAddToBlacklist(taskId, taskTitle, errorCode)
