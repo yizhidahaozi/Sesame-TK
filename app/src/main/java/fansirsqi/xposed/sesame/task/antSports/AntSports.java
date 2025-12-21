@@ -28,6 +28,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField;
+import fansirsqi.xposed.sesame.newutil.TaskBlacklist;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
@@ -68,8 +69,6 @@ public class AntSports extends ModelTask {
     // 记录训练好友获得0金币的次数
     private int zeroTrainCoinCount = 0;
 
-    // 运动任务黑名单
-    private StringModelField sportsTaskBlacklist;
 
     //健康岛任务
     private BooleanModelField neverlandTask;  //健康岛任务
@@ -477,10 +476,12 @@ public class AntSports extends ModelTask {
                 }
 
                 // 只处理有 channel 字段的记录（广告任务），引导/订阅等不处理
+                String id=bubble.optString("id");
                 String taskId = bubble.optString("channel", "");
                 if (taskId.isEmpty()) {
                     continue;
                 }
+                if(TaskBlacklist.INSTANCE.isTaskInBlacklist(id)) continue;
 
                 String sourceName = bubble.optString("simpleSourceName", "");
                 int coinAmount = bubble.optInt("coinAmount", 0);
@@ -501,7 +502,11 @@ public class AntSports extends ModelTask {
                 } else {
                     String errorCode = completeRes.optString("errorCode", "");
                     String errorMsg = completeRes.optString("errorMsg", "");
-                    Log.error(TAG, "运动球任务❌[" + sourceName + "]#" + completeRes+" 任务："+bubble);
+                    Log.error(TAG, "运动球任务❌[" + sourceName + "]#" + completeRes+" 任务："+ bubble);
+
+                    if(!id.isEmpty()) {
+                        TaskBlacklist.INSTANCE.addToBlacklist(id);
+                    }
                 }
 
                 // 每处理一个任务随机休息 1-3 秒
