@@ -17,7 +17,9 @@ object TaskBlacklist {
      */
     fun getBlacklist(): Set<String> {
         return try {
-            DataStore.getOrCreate(BLACKLIST_KEY, object : TypeReference<Set<String>>() {})
+            val storedBlacklist = DataStore.getOrCreate(BLACKLIST_KEY, object : TypeReference<Set<String>>() {})
+            // 合并存储的黑名单和默认黑名单
+            (storedBlacklist + defaultBlacklist).toSet()
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "获取黑名单失败，使用默认黑名单", e)
             defaultBlacklist

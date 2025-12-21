@@ -78,9 +78,9 @@ val defaultBlacklist = setOf(
     "ORCHARD_NORMAL_AQ_XIAZAI",     // 下载AQ
     
     // 庄园任务
-    "HEART_DONATION_ADVANCED_FOOD_V2",  //香草芒果冰糕任务
+    "HEART_DONATION_ADVANCED_FOOD_V2",  //去买秋天第一杯奶茶
     "HEART_DONATE",  //爱心捐赠
-    "SHANGOU_xiadan",  //去买秋天第一杯奶茶
+    "SHANGOU_xiadan",  //逛闪购外卖1元起吃
     "OFFLINE_PAY",  //到店付款,线下支付
     "ONLINE_PAY",  //在线支付
     "HUABEI_MAP_180" //用花呗完成一笔支付

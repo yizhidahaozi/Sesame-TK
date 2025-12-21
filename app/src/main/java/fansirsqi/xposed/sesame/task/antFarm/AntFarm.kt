@@ -1824,7 +1824,14 @@ class AntFarm : ModelTask() {
                 val bizKey = task.getString("bizKey")
 
                 // 1. 预检查：黑名单与每日上限
-                if (TaskBlacklist.isTaskInBlacklist(title)) continue
+                // 检查任务标题和业务键是否在黑名单中
+                val titleInBlacklist = TaskBlacklist.isTaskInBlacklist(title)
+                val bizKeyInBlacklist = TaskBlacklist.isTaskInBlacklist(bizKey)
+              //   Log.record(TAG, "庄园任务检查 - 标题: $title, 业务键: $bizKey, 标题在黑名单: $titleInBlacklist, 业务键在黑名单: $bizKeyInBlacklist")
+                if (titleInBlacklist || bizKeyInBlacklist) {
+              //      Log.record(TAG, "跳过黑名单任务: $title ($bizKey)")
+                    continue
+                }
                 if (Status.hasFlagToday("farm::task::limit::$bizKey")) continue
 
                 // 2. 执行 TODO 任务
