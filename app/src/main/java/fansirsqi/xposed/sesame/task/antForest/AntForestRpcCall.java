@@ -551,7 +551,7 @@ public class AntForestRpcCall {
     public static String settlementWhackMole(String token) 
     throws JSONException {
         // moleIdList 改为 1 ,20（包含 1-20）
-        List<Integer> moleIdList = IntStream.rangeClosed(1, 25)
+        List<Integer> moleIdList = IntStream.rangeClosed(1, 15)
                 .boxed()
                 .collect(Collectors.toList());
         JSONObject param = new JSONObject();

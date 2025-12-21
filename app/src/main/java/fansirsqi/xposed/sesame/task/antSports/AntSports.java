@@ -505,7 +505,7 @@ public class AntSports extends ModelTask {
                 }
 
                 // 每处理一个任务随机休息 1-3 秒
-                int sleepMs = RandomUtil.nextInt(1000, 3000);
+                int sleepMs = RandomUtil.nextInt(10000, 30000);
                 GlobalThreadPools.sleepCompat(sleepMs);
             }
 
