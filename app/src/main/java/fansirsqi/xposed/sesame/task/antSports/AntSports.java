@@ -505,7 +505,7 @@ public class AntSports extends ModelTask {
                     Log.error(TAG, "运动球任务❌[" + sourceName + "]#" + completeRes+" 任务："+ bubble);
 
                     if(!id.isEmpty()) {
-                        TaskBlacklist.INSTANCE.addToBlacklist(id);
+                        TaskBlacklist.INSTANCE.addToBlacklist(id,sourceName);
                     }
                 }
 
