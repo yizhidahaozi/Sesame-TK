@@ -61,8 +61,6 @@ object WhackMole {
      */
     @SuppressLint("DefaultLocale")
     fun startWhackMole() {
-        // 记录新规则到日志
-        Log.other(TAG, "打地鼠启动 ${totalGames}局 新规则：只启动存储token，10秒后串行结算")
         // 在IO协程中执行，避免阻塞主线程
         globalScope.launch {
             try {
