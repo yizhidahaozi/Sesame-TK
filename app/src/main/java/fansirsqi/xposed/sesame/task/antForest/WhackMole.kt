@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.antForest
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
 import kotlinx.coroutines.*
@@ -144,6 +145,7 @@ object WhackMole {
 
             val token = startResp.optString("token")
             Log.other(TAG, "第${round}局启动成功，token=$token")
+            Toast.show("打地鼠 第${round}局启动成功:"+"token=$token"+"\n请速回蚂蚁森林滑块验证，10秒后结算")
             GameSession(token, round)
         } catch (e: CancellationException) {
             throw e
