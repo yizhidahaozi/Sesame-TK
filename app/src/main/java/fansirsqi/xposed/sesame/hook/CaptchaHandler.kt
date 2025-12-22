@@ -21,7 +21,7 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
             }
             
         } catch (e: Exception) {
-            Log.error("CaptchaHandler", "处理验证码页面时发生异常: ${e.message}")
+           Log.record("CaptchaHandler", "处理验证码页面时发生异常: ${e.message}")
         }
         
         // 返回false表示未消费事件，允许其他处理器继续处理
@@ -33,16 +33,16 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
      */
     private fun handleSlideCaptcha(root: ViewImage): Boolean {
         return try {
-            Log.error("CaptchaHandler", "========== 开始处理滑动验证码 ==========")
+           Log.record("CaptchaHandler", "========== 开始处理滑动验证码 ==========")
             // 先检测是否有"向右滑动验证"文字
             val slideText = root.xpath2One("//android.widget.TextView[contains(@text,'向右滑动验证')]")
             if (slideText == null) {
-                Log.error("CaptchaHandler", "未找到'向右滑动验证'文字，跳过处理")
+               Log.record("CaptchaHandler", "未找到'向右滑动验证'文字，跳过处理")
                 return false
             }
 
             // 打印验证文字的详细信息
-                Log.error("CaptchaHandler", "发现'向右滑动验证'文字: ${slideText.text}")
+               Log.record("CaptchaHandler", "发现'向右滑动验证'文字: ${slideText.text}")
                 
                 // 尝试多种方式获取文字位置信息
                 var textLocation: IntArray? = null
@@ -50,9 +50,9 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
             try {
                     // 方法1: 尝试locationOnScreen
                     textLocation = slideText.locationOnScreen()
-                    Log.error("CaptchaHandler", "locationOnScreen()结果: ${textLocation?.contentToString()}")
+                   Log.record("CaptchaHandler", "locationOnScreen()结果: ${textLocation?.contentToString()}")
                 } catch (e: Exception) {
-                    Log.error("CaptchaHandler", "locationOnScreen()失败: ${e.message}")
+                   Log.record("CaptchaHandler", "locationOnScreen()失败: ${e.message}")
                 }
                 
                 
@@ -74,12 +74,12 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
                         if (originView != null) {
                             textRight = textLeft + originView.width
                             textBottom = textTop + originView.height
-                            Log.error("CaptchaHandler", "使用locationOnScreen+originView尺寸获取位置")
+                           Log.record("CaptchaHandler", "使用locationOnScreen+originView尺寸获取位置")
                         } else {
-                            Log.error("CaptchaHandler", "验证文字originView为null")
+                           Log.record("CaptchaHandler", "验证文字originView为null")
                         }
                     } catch (e: Exception) {
-                        Log.error("CaptchaHandler", "获取验证文字originView尺寸失败: ${e.message}")
+                       Log.record("CaptchaHandler", "获取验证文字originView尺寸失败: ${e.message}")
                     }
                 }
 
@@ -88,30 +88,30 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
                 val textCenterX = textLeft + textWidth / 2
                 val textCenterY = textTop + textHeight / 2
 
-                    Log.error("CaptchaHandler", "文字位置: (${textLeft}, ${textTop}, ${textRight}, ${textBottom})")
-                    Log.error("CaptchaHandler", "文字宽度: $textWidth, 高度: $textHeight")
-                    Log.error("CaptchaHandler", "文字中心: ($textCenterX, $textCenterY)")
-                    Log.error("CaptchaHandler", "文字类型: ${slideText.type}")
+                   Log.record("CaptchaHandler", "文字位置: (${textLeft}, ${textTop}, ${textRight}, ${textBottom})")
+                   Log.record("CaptchaHandler", "文字宽度: $textWidth, 高度: $textHeight")
+                   Log.record("CaptchaHandler", "文字中心: ($textCenterX, $textCenterY)")
+                   Log.record("CaptchaHandler", "文字类型: ${slideText.type}")
                     
                     // 获取下一个兄弟节点（滑块）
-                        Log.error("CaptchaHandler", "========== 获取下一个兄弟节点 ==========")
+                       Log.record("CaptchaHandler", "========== 获取下一个兄弟节点 ==========")
                         try {
                             // 首先检查slideText的基本信息
                             val slideTextParent = slideText.parentNode()
-                            Log.error("CaptchaHandler", "slideText父节点: $slideTextParent")
-                            Log.error("CaptchaHandler", "slideText类型: ${slideText.type}")
+                           Log.record("CaptchaHandler", "slideText父节点: $slideTextParent")
+                           Log.record("CaptchaHandler", "slideText类型: ${slideText.type}")
                             
                             val nextSibling = slideText.nextSibling()
                             if (nextSibling != null) {
-                                Log.error("CaptchaHandler", "找到下一个兄弟节点")
+                               Log.record("CaptchaHandler", "找到下一个兄弟节点")
                                 
                                 try {
                                     val siblingType = nextSibling.type
-                                    Log.error("CaptchaHandler", "兄弟节点类型: $siblingType")
+                                   Log.record("CaptchaHandler", "兄弟节点类型: $siblingType")
                                     
                                     // 检查是否是FrameLayout
                                     if (siblingType == "android.widget.FrameLayout") {
-                                        Log.error("CaptchaHandler", "*** 找到FrameLayout滑块 ***")
+                                       Log.record("CaptchaHandler", "*** 找到FrameLayout滑块 ***")
                                         
                                         // 获取兄弟节点的位置信息
                                         val siblingLocation = nextSibling.locationOnScreen()
@@ -126,44 +126,44 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
                                                     val siblingRight = siblingLeft + siblingWidth
                                                     val siblingBottom = siblingTop + siblingHeight
                                                     
-                                                    Log.error("CaptchaHandler", "最终滑块位置: [$siblingLeft, $siblingTop, $siblingRight, $siblingBottom]")
+                                                   Log.record("CaptchaHandler", "最终滑块位置: [$siblingLeft, $siblingTop, $siblingRight, $siblingBottom]")
                                                 } else {
-                                                    Log.error("CaptchaHandler", "滑块originView为null")
+                                                   Log.record("CaptchaHandler", "滑块originView为null")
                                                 }
                                             } catch (e: Exception) {
-                                                Log.error("CaptchaHandler", "处理滑块时异常: ${e.message}")
+                                               Log.record("CaptchaHandler", "处理滑块时异常: ${e.message}")
                                             }
                                         } else {
-                                            Log.error("CaptchaHandler", "无法获取滑块位置信息")
+                                           Log.record("CaptchaHandler", "无法获取滑块位置信息")
                                         }
                                     } else {
-                                        Log.error("CaptchaHandler", "下一个兄弟节点不是FrameLayout，继续寻找")
+                                       Log.record("CaptchaHandler", "下一个兄弟节点不是FrameLayout，继续寻找")
                                         // 如果不是FrameLayout，尝试获取下一个的下一个
                                         val nextNextSibling = nextSibling.nextSibling()
                                         if (nextNextSibling != null) {
                                             val nextNextType = nextNextSibling.type
-                                            Log.error("CaptchaHandler", "下下个兄弟节点类型: $nextNextType")
+                                           Log.record("CaptchaHandler", "下下个兄弟节点类型: $nextNextType")
                                             if (nextNextType == "android.widget.FrameLayout") {
-                                                Log.error("CaptchaHandler", "*** 找到FrameLayout滑块（下下个）***")
+                                               Log.record("CaptchaHandler", "*** 找到FrameLayout滑块（下下个）***")
                                                 // 这里可以添加对第二个FrameLayout的处理逻辑
                                             }
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    Log.error("CaptchaHandler", "获取兄弟节点信息时异常: ${e.message}")
+                                   Log.record("CaptchaHandler", "获取兄弟节点信息时异常: ${e.message}")
                                 }
                             } else {
-                                Log.error("CaptchaHandler", "未找到下一个兄弟节点")
+                               Log.record("CaptchaHandler", "未找到下一个兄弟节点")
                             }
                         } catch (e: Exception) {
-                            Log.error("CaptchaHandler", "获取下一个兄弟节点时异常: ${e.message}")
+                           Log.record("CaptchaHandler", "获取下一个兄弟节点时异常: ${e.message}")
                             e.printStackTrace()
                         }
                 
                 return false
             
         } catch (e: Exception) {
-            Log.error("CaptchaHandler", "滑动验证码处理异常: ${e.message}")
+           Log.record("CaptchaHandler", "滑动验证码处理异常: ${e.message}")
             false
         }
     }
