@@ -39,6 +39,7 @@ import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.IconManager
+import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.widget.ListDialog
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.Detector
@@ -181,21 +182,21 @@ class MainActivity : BaseActivity() {
     fun onClick(v: View) {
         when (v.id) {
             R.id.btn_forest_log -> {
-                openLogFile(Files.getForestLogFile())
+                newOpenLogFile(Files.getForestLogFile())
             }
 
             R.id.btn_farm_log -> {
-                openLogFile(Files.getFarmLogFile())
+                newOpenLogFile(Files.getFarmLogFile())
             }
 
             R.id.btn_view_error_log_file -> {
                 executeWithVerification {
-                    openLogFile(Files.getErrorLogFile())
+                    newOpenLogFile(Files.getErrorLogFile())
                 }
             }
 
             R.id.btn_view_all_log_file -> {
-                openLogFile(Files.getRecordLogFile())
+                newOpenLogFile(Files.getRecordLogFile())
             }
 
             R.id.btn_github -> {
@@ -229,6 +230,34 @@ class MainActivity : BaseActivity() {
         }
         startActivity(intent)
     }
+
+
+
+    /**
+     * 打开高性能日志文件查看器 (Compose版)
+     *
+     * @param logFile 要打开的日志文件
+     */
+    private fun newOpenLogFile(logFile: File) {
+        // 检查文件是否存在
+        if (!logFile.exists()) {
+            ToastUtil.showToast(this, "日志文件不存在: ${logFile.name}")
+            return
+        }
+
+        // 使用 Uri.fromFile 或者 toUri
+        val fileUri = logFile.toUri()
+
+        // 跳转到新的 LogViewerComposeActivity
+        val intent = Intent(this, LogViewerComposeActivity::class.java).apply {
+            data = fileUri
+            // Compose 页面不需要 "nextLine" 或 "canClear" 这种参数了
+            // 因为 Compose 页面自带逻辑，或者你可以在 ViewModel 里处理
+        }
+        startActivity(intent)
+    }
+
+
 
     /**
      * 打开GitHub项目页面

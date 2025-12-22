@@ -53,6 +53,12 @@
         <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+        <!-- 高性能日志查看器 (Compose) -->
+        <!-- theme 必须设置为 NoActionBar，因为 Compose 自带了 TopAppBar -->
+        <activity
+            android:name=".ui.log.LogViewerComposeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
 
 
         <!-- for-hide-icon -->
