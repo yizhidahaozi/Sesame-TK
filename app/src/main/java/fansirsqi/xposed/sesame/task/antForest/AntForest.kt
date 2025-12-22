@@ -3829,7 +3829,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "道具 $propName (类型: $propType), 是否可续用: $isRenewable, 当前持有数量: $holdsNum"
             )
             val propGroup = AntForestRpcCall.getPropGroup(propType)
-            if (isRenewable && holdsNum > 1) {
+            if (isRenewable) {
                 // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
                 val checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false)
                 val checkResponse = JSONObject(checkResponseStr)
