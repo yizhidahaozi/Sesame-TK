@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.hook
 
+import android.annotation.SuppressLint
 import com.zhenxi.Superappium.PageManager
 import com.zhenxi.Superappium.ViewImage
 import android.app.Activity
@@ -31,6 +32,7 @@ class CaptchaHandler : PageManager.ActivityFocusHandler {
     /**
      * 处理滑动验证码
      */
+    @SuppressLint("SuspiciousIndentation")
     private fun handleSlideCaptcha(root: ViewImage): Boolean {
         return try {
            Log.record("CaptchaHandler", "========== 开始处理滑动验证码 ==========")
