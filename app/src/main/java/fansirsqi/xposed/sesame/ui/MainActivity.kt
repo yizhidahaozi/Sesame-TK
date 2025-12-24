@@ -15,6 +15,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
@@ -79,7 +81,7 @@ class MainActivity : BaseActivity() {
             finish() // 如果权限未获取，终止当前 Activity
             return
         }
-        //clearLogsOnStart()
+        
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
@@ -88,8 +90,14 @@ class MainActivity : BaseActivity() {
             val customColorScheme = lightColorScheme(
                 primary = Color(0xFF3F51B5), onPrimary = Color.White, background = Color(0xFFF5F5F5), onBackground = Color.Black
             )
+            var deviceInfoData by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Map<String, String>?>(null) }
+            
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                deviceInfoData = DeviceInfoUtil.showInfo(verifyId, this@MainActivity)
+            }
+            
             MaterialTheme(colorScheme = customColorScheme) {
-                DeviceInfoCard(DeviceInfoUtil.showInfo(verifyId))
+                deviceInfoData?.let { DeviceInfoCard(it) }
             }
         }
         // 获取并设置一言句子
