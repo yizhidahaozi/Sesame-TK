@@ -55,7 +55,7 @@ android {
         }
 
         versionCode = gitCommitCount
-        versionName = "0.4.4"
+        versionName = "0.5.0"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
