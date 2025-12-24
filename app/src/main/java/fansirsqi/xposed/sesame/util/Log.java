@@ -95,10 +95,6 @@ public class Log {
         FARM_LOGGER.info("{}", msg);
     }
 
-    public static void farm(String TAG, String msg) {
-        farm("[" + TAG + "]: " + msg);
-    }
-
     public static void other(String msg) {
         record(msg);
         OTHER_LOGGER.info("{}", msg);
@@ -208,13 +204,6 @@ public class Log {
         if (shouldPrintError(e)) return;
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
-    }
-
-    /**
-     * 清除错误计数缓存（可在任务重新开始时调用）
-     */
-    public static void clearErrorCount() {
-        errorCountMap.clear();
     }
 
     public static void printStack(String TAG) {

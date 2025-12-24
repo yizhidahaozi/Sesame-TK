@@ -27,6 +27,7 @@ import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
+import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.ServiceManager
@@ -119,7 +120,7 @@ class MainActivity : BaseActivity() {
         }
 
         // 读取用户之前保存的设置
-        val prefs = getSharedPreferences("sesame_settings", MODE_PRIVATE)
+        val prefs = getSharedPreferences(preferencesKey, MODE_PRIVATE)
         // 默认为 false (不隐藏)
         val isHidden = prefs.getBoolean("is_icon_hidden", false)
         // 每次打开 App 都同步一次状态
@@ -326,26 +327,10 @@ class MainActivity : BaseActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> { // 隐藏应用图标
-//                val shouldHide = !item.isChecked
-//                item.isChecked = shouldHide
-//                val aliasComponent = ComponentName(this, General.MODULE_PACKAGE_UI_ICON)
-//                val newState = if (shouldHide) {
-//                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-//                } else {
-//                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-//                }
-//                packageManager.setComponentEnabledSetting(
-//                    aliasComponent,
-//                    newState,
-//                    PackageManager.DONT_KILL_APP
-//                )
-//                Toast.makeText(this, "设置已保存，可能需要重启桌面才能生效", Toast.LENGTH_SHORT).show()
-//                return true
-                // 这里是你的菜单点击事件逻辑
                 val shouldHide = !item.isChecked
                 item.isChecked = shouldHide
                 // 1. 保存用户的设置到 SP (建议操作，确保重启后状态正确)
-                val prefs = getSharedPreferences("sesame_settings", MODE_PRIVATE)
+                val prefs = getSharedPreferences(preferencesKey, MODE_PRIVATE)
                 prefs.edit { putBoolean("is_icon_hidden", shouldHide) }
                 // 2. 调用统一管理器应用更改
                 IconManager.syncIconState(this, shouldHide)
