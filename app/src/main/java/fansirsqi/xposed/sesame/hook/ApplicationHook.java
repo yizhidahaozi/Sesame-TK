@@ -549,23 +549,29 @@ public class ApplicationHook {
                         Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
 
-                    if (VersionHook.hasVersion() && "10.6.58.8000".equals(alipayVersion.getVersionString())) {
-                        // 启用SimplePageManager窗口监控
-                        SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
-
-
-                        // 初始化CaptchaHandler
-                        Log.runtime(TAG, "✅ 开始初始化Captcha1Handler");
-                        SimplePageManager.INSTANCE.addHandler(
-                                "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
-                                new Captcha1Handler());
-                        SimplePageManager.INSTANCE.addHandler(
-                                "com.eg.android.AlipayGphone.AlipayLogin",
-                                new Captcha2Handler());
-                    }else {
-                        Log.debug(TAG, "当前支付宝版本不是10.6.58.8000，不支自动滑块Hook");
-                    }
-
+if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
+    String version = alipayVersion.getVersionString();
+    
+    // 正则表达式匹配：
+    // 1. 主版本小于10的所有版本: [0-9]\.[0-9]+\.[0-9]+\.[0-9]+
+    // 2. 10.0.x.x 到 10.5.x.x: 10\.[0-5]\.[0-9]+\.[0-9]+
+    // 3. 10.6.0.x 到 10.6.58.x: 10\.6\.([0-9]|[0-4][0-9]|5[0-8])\.[0-9]+
+    if (version.matches("^([0-9]\\.[0-9]+\\.[0-9]+\\.[0-9]+|10\\.[0-5]\\.[0-9]+\\.[0-9]+|10\\.6\\.([0-9]|[0-4][0-9]|5[0-8])\\.[0-9]+)$")) {
+        // 启用SimplePageManager窗口监控
+        SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
+        
+        // 初始化CaptchaHandler
+        Log.runtime(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
+        SimplePageManager.INSTANCE.addHandler(
+                "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
+                new Captcha1Handler());
+        SimplePageManager.INSTANCE.addHandler(
+                "com.eg.android.AlipayGphone.AlipayLogin",
+                new Captcha2Handler());
+    } else {
+        Log.debug(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
+    }
+}
 
                     if (BuildConfig.DEBUG) {
                         try {
