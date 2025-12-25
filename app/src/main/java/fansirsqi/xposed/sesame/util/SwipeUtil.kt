@@ -193,8 +193,12 @@ object SwipeUtil {
 
             val command = "input swipe $startX $startY $endX $endY $duration"
             val result = execRootCommand(context, command)
+            
             if (result) {
-                Log.d(TAG, "滑动成功")
+                Log.d(TAG, "滑动命令执行成功，等待滑动完成...")
+                // 等待滑动操作完成（滑动持续时间 + 200ms 缓冲）
+                kotlinx.coroutines.delay(duration + 200)
+                Log.d(TAG, "滑动完成")
             } else {
                 Log.e(TAG, "滑动失败")
             }

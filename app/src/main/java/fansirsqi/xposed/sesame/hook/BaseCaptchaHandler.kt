@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.hook
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
@@ -78,13 +79,15 @@ abstract class BaseCaptchaHandler {
     private suspend fun handleSlideCaptcha(activity: Activity, root: SimpleViewImage): Boolean {
         return try {
             Log.captcha(TAG, "========== 开始处理滑动验证码 ==========")
-            val slideText = findSlideText(root) ?: run {
-                Log.captcha(TAG, "未找到任何滑动验证相关文字")
+            
+            val slideTextInDialog = findSlideTextInDialog()
+            if (slideTextInDialog == null) {
+                Log.captcha(TAG, "Dialog 中未找到滑动验证文字，跳过处理")
                 return false
             }
-            Log.captcha(TAG, "发现滑动验证文字: ${slideText.getText()}")
+            Log.captcha(TAG, "发现滑动验证文字: ${slideTextInDialog.getText()}")
             
-            val slideRect = getSlideRect(slideText) ?: run {
+            val slideRect = getSlideRect(slideTextInDialog) ?: run {
                 Log.captcha(TAG, "未找到父节点")
                 return false
             }
@@ -98,21 +101,11 @@ abstract class BaseCaptchaHandler {
             } else {
                 Log.captcha(TAG, "无 Root 权限，跳过保存滑动路径")
             }
-            saveSlidePathIfNeeded(slidePath)
             executeSlideWithRetry(activity, root, slidePath)
         } catch (_: Exception) {
           //  Log.captcha(TAG, "处理滑动验证码时发生异常: ${e.message}")
             false
         }
-    }
-
-    /**
-     * 查找滑动验证文本
-     * @param root 根视图
-     * @return 找到的滑动文本视图，未找到返回 null
-     */
-    private fun findSlideText(root: SimpleViewImage): SimpleViewImage? {
-        return root.xpath2One("//TextView[contains(@text,'向右滑动验证')]")
     }
 
     /**
@@ -203,30 +196,7 @@ abstract class BaseCaptchaHandler {
                     Log.captcha(TAG, "验证码文本已消失，滑动成功")
                     return true
                 } else {
-                    Log.captcha(TAG, "验证码文本仍然存在，准备读取已保存路径坐标进行滑动")
-                    val existingPath = DataStore.get(getSlidePathKey(), IntArray::class.java)
-                    if (existingPath != null && existingPath.size == 4) {
-                        val savedSlidePath = SlidePath(existingPath[0], existingPath[1], existingPath[2], existingPath[3])
-                        Log.captcha(TAG, "读取到已保存路径坐标: $savedSlidePath")
-                        val savedSwipeSuccess = SwipeUtil.swipe(
-                            activity,
-                            savedSlidePath.startX,
-                            savedSlidePath.startY,
-                            savedSlidePath.endX,
-                            savedSlidePath.endY,
-                            400L
-                        )
-                        if (savedSwipeSuccess) {
-                            Log.captcha(TAG, "使用已保存路径滑动成功，等待验证码文本消失...")
-                            sleepCompat(1500)
-                            if (checkCaptchaTextGone(root)) {
-                                Log.captcha(TAG, "验证码文本已消失，滑动成功")
-                                return true
-                            }
-                        }
-                    } else {
-                        Log.captcha(TAG, "未找到已保存的路径坐标")
-                    }
+                    Log.captcha(TAG, "验证码文本仍然存在，准备重试...")
                 }
             } else {
                 Log.captcha(TAG, "滑动操作执行失败，准备重试...")
@@ -247,12 +217,25 @@ abstract class BaseCaptchaHandler {
      * @return true 表示文本已消失，false 表示文本仍然存在
      */
     private fun checkCaptchaTextGone(root: SimpleViewImage): Boolean {
-        return if (findSlideText(root) == null) {
-            Log.captcha(TAG, "验证码文本已消失")
-            true
-        } else {
-            Log.captcha(TAG, "验证码文本仍然存在")
-            false
+        val slideTextInDialog = findSlideTextInDialog()
+        if (slideTextInDialog == null) {
+            Log.captcha(TAG, "验证码文本已消失（Dialog 中未找到）")
+            return true
+        }
+        Log.captcha(TAG, "验证码文本仍然存在（在 Dialog 中找到）")
+        return false
+    }
+
+    /**
+     * 在 Dialog 中查找滑动验证文本
+     * @return 找到的滑动文本视图，未找到返回 null
+     */
+    private fun findSlideTextInDialog(): SimpleViewImage? {
+        return try {
+            SimplePageManager.tryGetTopView("//TextView[contains(@text,'向右滑动验证')]")
+        } catch (e: Exception) {
+            Log.captcha(TAG, "在 Dialog 中查找验证码文本失败: ${e.message}")
+            null
         }
     }
 
