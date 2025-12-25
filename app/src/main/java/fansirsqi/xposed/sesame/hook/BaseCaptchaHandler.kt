@@ -43,7 +43,7 @@ abstract class BaseCaptchaHandler {
         // 滑动持续时间（毫秒）
         private const val SLIDE_DURATION = 500L
         // 最大滑动重试次数
-        private const val MAX_SLIDE_RETRIES = 3
+        private const val MAX_SLIDE_RETRIES = 4
         // 滑动重试间隔时间（毫秒）
         private const val SLIDE_RETRY_INTERVAL = 500L
 
@@ -203,7 +203,30 @@ abstract class BaseCaptchaHandler {
                     Log.captcha(TAG, "验证码文本已消失，滑动成功")
                     return true
                 } else {
-                    Log.captcha(TAG, "验证码文本仍然存在，准备重试...")
+                    Log.captcha(TAG, "验证码文本仍然存在，准备读取已保存路径坐标进行滑动")
+                    val existingPath = DataStore.get(getSlidePathKey(), IntArray::class.java)
+                    if (existingPath != null && existingPath.size == 4) {
+                        val savedSlidePath = SlidePath(existingPath[0], existingPath[1], existingPath[2], existingPath[3])
+                        Log.captcha(TAG, "读取到已保存路径坐标: $savedSlidePath")
+                        val savedSwipeSuccess = SwipeUtil.swipe(
+                            activity,
+                            savedSlidePath.startX,
+                            savedSlidePath.startY,
+                            savedSlidePath.endX,
+                            savedSlidePath.endY,
+                            400L
+                        )
+                        if (savedSwipeSuccess) {
+                            Log.captcha(TAG, "使用已保存路径滑动成功，等待验证码文本消失...")
+                            sleepCompat(1500)
+                            if (checkCaptchaTextGone(root)) {
+                                Log.captcha(TAG, "验证码文本已消失，滑动成功")
+                                return true
+                            }
+                        }
+                    } else {
+                        Log.captcha(TAG, "未找到已保存的路径坐标")
+                    }
                 }
             } else {
                 Log.captcha(TAG, "滑动操作执行失败，准备重试...")

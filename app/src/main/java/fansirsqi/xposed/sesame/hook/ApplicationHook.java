@@ -555,7 +555,7 @@ public class ApplicationHook {
 
 
                         // 初始化CaptchaHandler
-                        Log.runtime(TAG, "✅ 开始初始化Captcha1Handler" + BaseModel.Companion.getDebugMode().getValue());
+                        Log.runtime(TAG, "✅ 开始初始化Captcha1Handler");
                         SimplePageManager.INSTANCE.addHandler(
                                 "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
                                 new Captcha1Handler());
