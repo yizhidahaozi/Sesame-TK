@@ -515,6 +515,9 @@ public class ApplicationHook {
                     // SecurityBodyHelper初始化
                     SecurityBodyHelper.INSTANCE.init(classLoader);
 
+                    //LOG日志的初始化
+                    Log.init(appContext);
+
 
                     // ✅ 优先使用 Hook 捕获的版本号
                     if (VersionHook.hasVersion()) {
