@@ -1107,7 +1107,7 @@ public class ApplicationHook {
      * @param action   广播动作
      * @param errorMsg 错误日志消息
      */
-    private static void sendBroadcast(String action, String errorMsg) {
+    public static void sendBroadcast(String action, String errorMsg) {
         try {
             appContext.sendBroadcast(new Intent(action));
         } catch (Throwable th) {
@@ -1115,7 +1115,15 @@ public class ApplicationHook {
             Log.printStackTrace(TAG, th);
         }
     }
-
+    /**
+     * 发送广播到其他应用（显式广播）
+     * @param message 要发送的字符串消息
+     */
+    public static void sendBroadcastShell(String API,String message) {
+        Intent intent = new Intent("fansirsqi.xposed.sesame.SHELL");
+        intent.putExtra(API, message);
+        appContext.sendBroadcast(intent,null);
+    }
     /**
      * 通过广播发送重新登录的指令
      */
