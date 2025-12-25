@@ -100,6 +100,7 @@ abstract class BaseCaptchaHandler {
                     "input swipe " + slidePath.toIntArray().joinToString(" ")
                 )
                 saveSlidePathIfNeeded(slidePath)
+
             } else {
                 executeSlideWithRetry(activity, root, slidePath)
                 saveSlidePathIfNeeded(slidePath)
