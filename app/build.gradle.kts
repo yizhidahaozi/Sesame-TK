@@ -138,9 +138,10 @@ android {
 
 dependencies {
     // Shizuku 相关依赖 - 用于获取系统级权限
-    // implementation(libs.rikka.shizuku.api)        // Shizuku API
-    // implementation(libs.rikka.shizuku.provider)   // Shizuku 提供者
-    // implementation(libs.rikka.refine)             // Rikka 反射工具
+    implementation(libs.rikka.shizuku.api)        // Shizuku API
+    implementation(libs.rikka.shizuku.provider)   // Shizuku 提供者
+    implementation(libs.rikka.refine)             // Rikka 反射工具
+//    implementation(libs.rikka.hidden.stub)
     // implementation(libs.ui.tooling.preview.android)
 
 
