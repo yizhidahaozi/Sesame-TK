@@ -29,22 +29,18 @@ import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
 import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
-import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.ServiceManager
 import fansirsqi.xposed.sesame.data.UIConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
-import fansirsqi.xposed.sesame.entity.FriendWatch
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.model.SelectModelFieldFunc
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.IconManager
 import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
-import fansirsqi.xposed.sesame.ui.widget.ListDialog
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
@@ -54,6 +50,8 @@ import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.launch
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -71,6 +69,17 @@ class MainActivity : BaseActivity() {
 
     private lateinit var v: WatermarkView
 
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == 1234) {
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                ToastUtil.showToast(this, "Shizuku 授权成功！")
+            } else {
+                ToastUtil.showToast(this, "Shizuku 授权被拒绝")
+            }
+        }
+    }
+
+
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +89,24 @@ class MainActivity : BaseActivity() {
             finish() // 如果权限未获取，终止当前 Activity
             return
         }
+
+
+
+        if (Shizuku.pingBinder()) {
+            // 🔥 修改点：去掉中间的点，变成 ShizukuProvider
+            if (checkSelfPermission(ShizukuProvider.PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+                if (Shizuku.shouldShowRequestPermissionRationale()) {
+                    // 可以在这里弹个对话框解释为什么要权限
+                }
+                // 请求 Shizuku 权限
+                Shizuku.requestPermission(1234)
+            }
+        }
+
+        // 2. 注册监听器 (使用上面定义的变量)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+
+
 
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
@@ -169,6 +196,11 @@ class MainActivity : BaseActivity() {
     }
 
 
+    override fun onDestroy() {
+        super.onDestroy()
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) // 如果你把 listener 定义为变量的话
+    }
+
     // 比如在 Activity 的 onConfigurationChanged 中
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -189,21 +221,21 @@ class MainActivity : BaseActivity() {
     fun onClick(v: View) {
         when (v.id) {
             R.id.btn_forest_log -> {
-                newOpenLogFile(Files.getForestLogFile())
+                openLogFile(Files.getForestLogFile())
             }
 
             R.id.btn_farm_log -> {
-                newOpenLogFile(Files.getFarmLogFile())
+                openLogFile(Files.getFarmLogFile())
             }
 
             R.id.btn_view_error_log_file -> {
                 executeWithVerification {
-                    newOpenLogFile(Files.getErrorLogFile())
+                    openLogFile(Files.getErrorLogFile())
                 }
             }
 
             R.id.btn_view_all_log_file -> {
-                newOpenLogFile(Files.getRecordLogFile())
+                openLogFile(Files.getRecordLogFile())
             }
 
             R.id.btn_github -> {
@@ -220,31 +252,13 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    /**
-     * 打开日志文件查看器
-     *
-     * @param logFile 要打开的日志文件
-     *
-     * @details 使用HtmlViewerActivity打开指定的日志文件，
-     * 并启用清空功能和禁用自动换行
-     */
-    private fun openLogFile(logFile: File) {
-        val fileUri = "file://${logFile.absolutePath}".toUri()
-        val intent = Intent(this, HtmlViewerActivity::class.java).apply {
-            data = fileUri
-            putExtra("nextLine", false)
-            putExtra("canClear", true)
-        }
-        startActivity(intent)
-    }
-
 
     /**
      * 打开高性能日志文件查看器 (Compose版)
      *
      * @param logFile 要打开的日志文件
      */
-    private fun newOpenLogFile(logFile: File) {
+    private fun openLogFile(logFile: File) {
         // 检查文件是否存在
         if (!logFile.exists()) {
             ToastUtil.showToast(this, "日志文件不存在: ${logFile.name}")
@@ -295,22 +309,27 @@ class MainActivity : BaseActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         try {
-            val aliasComponent = ComponentName(this, General.MODULE_PACKAGE_UI_ICON)
-            val state = packageManager.getComponentEnabledSetting(aliasComponent)
-            val isEnabled = state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            menu.add(0, 1, 1, R.string.hide_the_application_icon)
-                .setCheckable(true).isChecked = !isEnabled
+            val pm = packageManager
+            // 1. 检查默认图标状态
+            val defaultComp = ComponentName(this, IconManager.COMPONENT_DEFAULT)
+            val defaultState = pm.getComponentEnabledSetting(defaultComp)
+            val isDefaultEnabled = defaultState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                    || defaultState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
 
-            menu.add(0, 2, 2, R.string.friend_watch)
-            menu.add(0, 3, 3, R.string.other_log)
-            menu.add(0, 4, 4, R.string.view_error_log_file)
-            menu.add(0, 5, 5, R.string.view_all_log_file)
-            menu.add(0, 6, 6, R.string.view_runtim_log_file)
-            menu.add(0, 7, 7, R.string.view_capture)
-            menu.add(0, 8, 8, R.string.extend)
-            menu.add(0, 9, 9, R.string.settings)
+            // 2. 检查圣诞图标状态
+            val christmasComp = ComponentName(this, IconManager.COMPONENT_CHRISTMAS)
+            val christmasState = pm.getComponentEnabledSetting(christmasComp)
+            val isChristmasEnabled = christmasState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+            // 3. 只要有一个是开启的，就说明应用图标是显示的
+            val isIconVisible = isDefaultEnabled || isChristmasEnabled
+
+            menu.add(0, 1, 1, R.string.hide_the_application_icon).setCheckable(true).isChecked = !isIconVisible
+
+            menu.add(0, 2, 2, R.string.view_capture)
+            menu.add(0, 3, 3, R.string.extend)
             if (BuildConfig.DEBUG) {
-                menu.add(0, 10, 10, "清除配置")
+                menu.add(0, 4, 4, "清除配置")
             }
         } catch (e: Exception) {
             Log.printStackTrace(e)
@@ -334,82 +353,17 @@ class MainActivity : BaseActivity() {
                 return true
             }
 
-            2 -> { // 好友关注列表
-                showSelectionDialog(
-                    "🤣 请选择有效账户[别选默认]",
-                    userNameArray,
-                    { index: Int -> this.goFriendWatch(index) },
-                    "😡 老子不选了，滚",
-                    {},
-                    false
-                )
-                return true
+            2 -> {
+                openLogFile(Files.getCaptureLogFile())
             }
 
-            3 -> { // 查看其他日志
-                val data = "file://" + Files.getOtherLogFile().absolutePath
-                val intent = Intent(this, HtmlViewerActivity::class.java)
-                intent.putExtra("nextLine", false)
-                intent.putExtra("canClear", true)
-                intent.data = data.toUri()
-                startActivity(intent)
-                return true
-            }
-
-            4 -> { // 查看错误日志文件（加密码验证）
-                showPasswordDialog {
-                    val errorData = "file://" + Files.getErrorLogFile().absolutePath
-                    val errorIt = Intent(this, HtmlViewerActivity::class.java)
-                    errorIt.putExtra("nextLine", false)
-                    errorIt.putExtra("canClear", true)
-                    errorIt.data = errorData.toUri()
-                    startActivity(errorIt)
-                }
-                return true
-            }
-
-
-            5 -> { // 查看全部日志文件
-                val recordData = "file://" + Files.getRecordLogFile().absolutePath
-                val otherIt = Intent(this, HtmlViewerActivity::class.java)
-                otherIt.putExtra("nextLine", false)
-                otherIt.putExtra("canClear", true)
-                otherIt.data = recordData.toUri()
-                startActivity(otherIt)
-                return true
-            }
-
-            6 -> { // 查看运行时日志文件
-                val runtimeData = "file://" + Files.getRuntimeLogFile().absolutePath
-                val allIt = Intent(this, HtmlViewerActivity::class.java)
-                allIt.putExtra("nextLine", false)
-                allIt.putExtra("canClear", true)
-                allIt.data = runtimeData.toUri()
-                startActivity(allIt)
-                return true
-            }
-
-            7 -> { // 查看截图
-                val captureData = "file://" + Files.getCaptureLogFile().absolutePath
-                val captureIt = Intent(this, HtmlViewerActivity::class.java)
-                captureIt.putExtra("nextLine", false)
-                captureIt.putExtra("canClear", true)
-                captureIt.data = captureData.toUri()
-                startActivity(captureIt)
-                return true
-            }
-
-            8 -> { // 扩展
+            3 -> { // 扩展
                 startActivity(Intent(this, ExtendActivity::class.java))
                 return true
             }
 
-            9 -> { // 设置
-                selectSettingUid()
-                return true
-            }
 
-            10 -> { // 清除配置
+            4 -> { // 清除配置
                 AlertDialog.Builder(this)
                     .setTitle("⚠️ 警告")
                     .setMessage("🤔 确认清除所有模块配置？")
@@ -489,19 +443,6 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun goFriendWatch(index: Int) {
-        val userEntity = userEntityArray[index]
-        if (userEntity != null) {
-            ListDialog.show(
-                this,
-                getString(R.string.friend_watch),
-                FriendWatch.getList(userEntity.userId),
-                SelectModelFieldFunc.newMapInstance(),
-                false,
-                ListDialog.ListType.SHOW
-            )
-        }
-    }
 
     private fun goSettingActivity(index: Int) {
         if (Detector.loadLibrary("checker")) {
