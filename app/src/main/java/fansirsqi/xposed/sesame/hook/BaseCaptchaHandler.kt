@@ -2,11 +2,14 @@ package fansirsqi.xposed.sesame.hook
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.SwipeUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 滑动路径数据类 - 封装滑动验证码的路径信息
@@ -70,12 +73,11 @@ abstract class BaseCaptchaHandler {
         return false
     }
 
+
     @SuppressLint("SuspiciousIndentation")
     private suspend fun handleSlideCaptcha(activity: Activity, root: SimpleViewImage): Boolean {
         return try {
             Log.captcha(TAG, "========== 开始处理滑动验证码 ==========")
-
-
             val slideText = findSlideText(root) ?: run {
                 Log.captcha(TAG, "未找到任何滑动验证相关文字")
                 return false
@@ -90,8 +92,13 @@ abstract class BaseCaptchaHandler {
             val slidePath = calculateSlidePath(activity, slideRect)
             logSlideInfo(activity, slideRect, slidePath)
             
+            val hasRootPermission = checkRootPermission(activity)
+            if (hasRootPermission) {
+                saveSlidePathIfNeeded(slidePath)
+            } else {
+                Log.captcha(TAG, "无 Root 权限，跳过保存滑动路径")
+            }
             saveSlidePathIfNeeded(slidePath)
-            
             executeSlideWithRetry(activity, root, slidePath)
         } catch (_: Exception) {
           //  Log.captcha(TAG, "处理滑动验证码时发生异常: ${e.message}")
@@ -226,5 +233,25 @@ abstract class BaseCaptchaHandler {
         }
     }
 
+    /**
+     * 检测 Root 权限
+     * @param context 上下文
+     * @return 是否有 Root 权限
+     */
+    private suspend fun checkRootPermission(context: Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val output = SwipeUtil.execRootCommandWithOutput(context, "id")
+            val hasRoot = output.contains("uid=0")
+            if (hasRoot) {
+                Log.captcha(TAG, "Root 权限检测成功")
+            } else {
+                Log.captcha(TAG, "Root 权限检测失败，输出: $output")
+            }
+            hasRoot
+        } catch (e: Exception) {
+            Log.captcha(TAG, "Root 权限检测异常: ${e.message}")
+            false
+        }
+    }
 
 }
