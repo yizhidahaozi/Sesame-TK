@@ -48,14 +48,8 @@ android {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
 
-        val buildTargetCode = try {
-            buildDate.replace("-", ".") + "." + buildTime.replace(":", ".")
-        } catch (_: Exception) {
-            "0000"
-        }
-
         versionCode = gitCommitCount
-        versionName = "0.5.0"
+        versionName = "0.6.0"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
