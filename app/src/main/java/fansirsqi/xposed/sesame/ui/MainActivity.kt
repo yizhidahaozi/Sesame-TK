@@ -27,6 +27,7 @@ import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
+import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
 import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
@@ -63,7 +64,6 @@ import java.util.concurrent.TimeUnit
 //   那我只能说你妈死了 就当开源项目给你妈烧纸钱了
 class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
-    private var hasPermissions = false
     private var userNameArray = arrayOf<String>()
 
     private var userEntityArray = arrayOf<UserEntity?>(null)
@@ -74,15 +74,13 @@ class MainActivity : BaseActivity() {
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ToastUtil.init(this) // 初始化全局 Context
-
         hasPermissions = PermissionUtil.checkOrRequestFilePermissions(this)
         if (!hasPermissions) {
             Toast.makeText(this, "未获取文件读写权限", Toast.LENGTH_LONG).show()
             finish() // 如果权限未获取，终止当前 Activity
             return
         }
-        
+
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
@@ -92,11 +90,11 @@ class MainActivity : BaseActivity() {
                 primary = Color(0xFF3F51B5), onPrimary = Color.White, background = Color(0xFFF5F5F5), onBackground = Color.Black
             )
             var deviceInfoData by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Map<String, String>?>(null) }
-            
+
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 deviceInfoData = DeviceInfoUtil.showInfo(verifyId, this@MainActivity)
             }
-            
+
             MaterialTheme(colorScheme = customColorScheme) {
                 deviceInfoData?.let { DeviceInfoCard(it) }
             }
@@ -241,7 +239,6 @@ class MainActivity : BaseActivity() {
     }
 
 
-
     /**
      * 打开高性能日志文件查看器 (Compose版)
      *
@@ -265,7 +262,6 @@ class MainActivity : BaseActivity() {
         }
         startActivity(intent)
     }
-
 
 
     /**
