@@ -1,100 +1,100 @@
 package fansirsqi.xposed.sesame.ui
 
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.appbar.MaterialToolbar
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.data.ServiceManager
 import fansirsqi.xposed.sesame.data.ViewAppInfo
-import fansirsqi.xposed.sesame.util.PermissionUtil
 
 open class BaseActivity : AppCompatActivity() {
-    companion object {
-        private const val REQUEST_EXTERNAL_STORAGE = 1
-    }
 
-    // Toolbar 懒加载
+    // 使用 lazy 委托，当第一次访问 toolbar 时会自动查找 ID
+    // 只有在 setContentView 之后访问它才是安全的
     protected val toolbar: MaterialToolbar by lazy { findViewById(R.id.x_toolbar) }
+
+    // 暂存标题和副标题
+    private var pendingTitle: CharSequence? = ViewAppInfo.appTitle
+    private var pendingSubtitle: CharSequence? = null
 
     // 基础标题
     open var baseTitle: String?
-        get() = ViewAppInfo.appTitle
+        get() = pendingTitle?.toString()
         set(value) {
-            toolbar.title = value
+            pendingTitle = value
+            // 只有当 Window 已经附加了布局，且 toolbar 确实存在时才设置
+            // 但简单的做法是：只要 setContentView 调用过，lazy 就能工作。
+            // 我们可以用一个简单的 try-catch 或者 flag 来保护，
+            // 或者更优雅地：只在 onContentChanged 之后更新 View。
+            updateToolbarText()
         }
 
     // 基础副标题
     open var baseSubtitle: String?
-        get() = null
+        get() = pendingSubtitle?.toString()
         set(value) {
-            toolbar.subtitle = value
+            pendingSubtitle = value
+            updateToolbarText()
         }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        if (PermissionUtil.checkFilePermissions(this)) {
-            initialize()
-        } else {
-            PermissionUtil.checkOrRequestFilePermissions(this)
-            ViewAppInfo.init(applicationContext)
-            ServiceManager.init()
-        }
-    }
-
-    private fun initialize() {
-        ViewAppInfo.init(applicationContext)
-        ServiceManager.init()
-        // Edge-to-Edge 支持
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        // 控制状态栏文字颜色
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_EXTERNAL_STORAGE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                initialize()
-            } else {
-                Toast.makeText(this, "未获取文件读写权限", Toast.LENGTH_LONG).show()
-                finish()
-            }
-        }
-    }
+    // 标记布局是否已加载
+    private var isContentLayoutSet = false
 
     override fun onContentChanged() {
         super.onContentChanged()
-        setSupportActionBar(toolbar)
+        // 系统回调：当 setContentView 完成后调用
+        isContentLayoutSet = true
 
-        // 文字居中显示，MaterialToolbar 会自动处理状态栏高度
+        setSupportActionBar(toolbar)
+        // 初始设置
         toolbar.setContentInsetsAbsolute(0, 0)
-        toolbar.title = baseTitle
-        toolbar.subtitle = baseSubtitle
+        updateToolbarText()
+    }
+
+    private fun updateToolbarText() {
+        if (isContentLayoutSet) {
+            // 这里可以直接访问 toolbar，因为布局已经加载了
+            toolbar.title = pendingTitle
+            toolbar.subtitle = pendingSubtitle
+        }
     }
 
     fun setBaseTitleTextColor(color: Int) {
         toolbar.setTitleTextColor(color)
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // 纯 UI 设置
+        setupWindow()
+    }
+
+    private fun setupWindow() {
+        // Edge-to-Edge 支持
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 控制状态栏文字颜色
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isNightMode()
+    }
+
+
+    private fun updateTitles() {
+        toolbar.title = baseTitle
+        toolbar.subtitle = baseSubtitle
+    }
+
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // 夜间模式变化时刷新 Activity
         if ((newConfig.diff(resources.configuration) and Configuration.UI_MODE_NIGHT_MASK) != 0) {
             recreate()
         } else {
-            toolbar.title = baseTitle
-            toolbar.subtitle = baseSubtitle
+            updateTitles()
         }
+    }
+
+    private fun isNightMode(): Boolean {
+        return (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     }
 }
