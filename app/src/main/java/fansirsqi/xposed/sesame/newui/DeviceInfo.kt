@@ -212,7 +212,8 @@ object DeviceInfoUtil {
         val permissionStatus = when {
             // 如果 id 命令返回 uid=0，说明正在使用 Root
             idOutput.contains("uid=0") -> {
-                if (shizukuAvailable) "Root + Shizuku ✔" else "Root ✔"
+                //ROOT与Shizuku二选一即可
+                if (shizukuAvailable) "Root or Shizuku ✔" else "Root ✔"
             }
             // 如果 id 命令返回 uid=2000 或 shell，说明正在使用 Shizuku
             idOutput.contains("uid=2000") || idOutput.contains("shell") -> "Shizuku (Shell) ✓"
