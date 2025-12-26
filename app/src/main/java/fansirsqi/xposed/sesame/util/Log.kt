@@ -1,225 +1,246 @@
-package fansirsqi.xposed.sesame.util;
+package fansirsqi.xposed.sesame.util
 
-import android.content.Context;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import fansirsqi.xposed.sesame.BuildConfig;
-import fansirsqi.xposed.sesame.model.BaseModel;
+import android.content.Context
+import fansirsqi.xposed.sesame.BuildConfig
+import fansirsqi.xposed.sesame.model.BaseModel
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 日志工具类，负责初始化和管理各种类型的日志记录器，并提供日志输出方法。
  */
-public class Log {
-    private static final String TAG = "";
-    private static final Logger RUNTIME_LOGGER;
-    private static final Logger SYSTEM_LOGGER;
-    private static final Logger RECORD_LOGGER;
-    private static final Logger DEBUG_LOGGER;
-    private static final Logger FOREST_LOGGER;
-    private static final Logger FARM_LOGGER;
-    private static final Logger OTHER_LOGGER;
-    private static final Logger ERROR_LOGGER;
-    private static final Logger CAPTURE_LOGGER;
-    private static final Logger CAPTCHA_LOGGER;
+object Log {
+    private const val DEFAULT_TAG = ""
+    private const val MAX_DUPLICATE_ERRORS = 3 // 最多打印3次相同错误
 
-    // 错误去重机制：记录错误特征和出现次数
-    private static final Map<String, AtomicInteger> errorCountMap = new ConcurrentHashMap<>();
-    private static final int MAX_DUPLICATE_ERRORS = 3; // 最多打印3次相同错误
+    // 错误去重机制
+    private val errorCountMap = ConcurrentHashMap<String, AtomicInteger>()
 
-    static {
-        RUNTIME_LOGGER = LoggerFactory.getLogger("runtime");
-        SYSTEM_LOGGER = LoggerFactory.getLogger("system");
-        RECORD_LOGGER = LoggerFactory.getLogger("record");
-        DEBUG_LOGGER = LoggerFactory.getLogger("debug");
-        FOREST_LOGGER = LoggerFactory.getLogger("forest");
-        FARM_LOGGER = LoggerFactory.getLogger("farm");
-        OTHER_LOGGER = LoggerFactory.getLogger("other");
-        ERROR_LOGGER = LoggerFactory.getLogger("error");
-        CAPTURE_LOGGER = LoggerFactory.getLogger("capture");
-        CAPTCHA_LOGGER = LoggerFactory.getLogger("captcha");
+    // Logger 实例
+    private val RUNTIME_LOGGER: Logger
+    private val SYSTEM_LOGGER: Logger
+    private val RECORD_LOGGER: Logger
+    private val DEBUG_LOGGER: Logger
+    private val FOREST_LOGGER: Logger
+    private val FARM_LOGGER: Logger
+    private val OTHER_LOGGER: Logger
+    private val ERROR_LOGGER: Logger
+    private val CAPTURE_LOGGER: Logger
+    private val CAPTCHA_LOGGER: Logger
+
+    init {
+        // 🔥 1. 立即初始化 Logcat，确保在任何 Context 到来之前控制台可用
+        Logback.initLogcatOnly()
+
+        // 2. 初始化 Logger 实例 (此时它们已经有了 Logcat 能力)
+        RUNTIME_LOGGER = LoggerFactory.getLogger("runtime")
+        SYSTEM_LOGGER = LoggerFactory.getLogger("system")
+        RECORD_LOGGER = LoggerFactory.getLogger("record")
+        DEBUG_LOGGER = LoggerFactory.getLogger("debug")
+        FOREST_LOGGER = LoggerFactory.getLogger("forest")
+        FARM_LOGGER = LoggerFactory.getLogger("farm")
+        OTHER_LOGGER = LoggerFactory.getLogger("other")
+        ERROR_LOGGER = LoggerFactory.getLogger("error")
+        CAPTURE_LOGGER = LoggerFactory.getLogger("capture")
+        CAPTCHA_LOGGER = LoggerFactory.getLogger("captcha")
     }
 
-    // 🔥 修改点 2：新增初始化方法
-    public static void init(Context context) {
+    /**
+     * 🔥 新增初始化方法
+     * 在这里传入 Context，追加文件日志功能
+     */
+    @JvmStatic
+    fun init(context: Context) {
         try {
-            // 在这里传入 context 进行配置
-            Logback.configureLogbackDirectly(context);
-        } catch (Exception e) {
-            android.util.Log.e("SesameLog", "Logback init failed", e);
+            Logback.initFileLogging(context)
+        } catch (e: Exception) {
+            android.util.Log.e("SesameLog", "Log init failed", e)
         }
     }
 
-    private static String truncateLogmsg(String msg) {
-        if (msg.length() > 16) {
-            return msg.substring(0, 16) + "...";
-        }
-        return msg;
+    // --- 日志方法 ---
+
+    @JvmStatic
+    fun system(msg: String) {
+        SYSTEM_LOGGER.info("$DEFAULT_TAG{}", msg)
     }
 
-    public static void system(String msg) {
-        SYSTEM_LOGGER.info(TAG + "{}", msg);
+    @JvmStatic
+    fun system(tag: String, msg: String) {
+        system("[$tag]: $msg")
     }
 
-    public static void system(String TAG, String msg) {
-        system("[" + TAG + "]: " + msg);
-    }
-
-    public static void runtime(String msg) {
-        system(msg);
-        if (BaseModel.Companion.getRuntimeLog().getValue() || BuildConfig.DEBUG) {
-            RUNTIME_LOGGER.info(TAG + "{}", msg);
-        }
-    }
-
-    public static void runtime(String TAG, String msg) {
-        runtime("[" + TAG + "]: " + msg);
-    }
-
-    public static void record(String msg) {
-        runtime(msg);
-        if (BaseModel.Companion.getRecordLog().getValue()) {
-            RECORD_LOGGER.info(TAG + "{}", msg);
+    @JvmStatic
+    fun runtime(msg: String) {
+        system(msg)
+        // 注意：这里需要确保 BaseModel 已经初始化，或者增加空安全检查
+        if (BaseModel.runtimeLog.value == true || BuildConfig.DEBUG) {
+            RUNTIME_LOGGER.info("$DEFAULT_TAG{}", msg)
         }
     }
 
-    public static void record(String TAG, String msg) {
-        record("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun runtime(tag: String, msg: String) {
+        runtime("[$tag]: $msg")
     }
 
-    public static void forest(String msg) {
-        record(msg);
-        FOREST_LOGGER.info("{}", msg);
+    @JvmStatic
+    fun record(msg: String) {
+        runtime(msg)
+        if (BaseModel.recordLog.value == true) {
+            RECORD_LOGGER.info("$DEFAULT_TAG{}", msg)
+        }
     }
 
-    public static void forest(String TAG, String msg) {
-        forest("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun record(tag: String, msg: String) {
+        record("[$tag]: $msg")
     }
 
-    public static void farm(String msg) {
-        record(msg);
-        FARM_LOGGER.info("{}", msg);
+    @JvmStatic
+    fun forest(msg: String) {
+        record(msg)
+        FOREST_LOGGER.info("{}", msg)
     }
 
-    public static void other(String msg) {
-        record(msg);
-        OTHER_LOGGER.info("{}", msg);
+    @JvmStatic
+    fun forest(tag: String, msg: String) {
+        forest("[$tag]: $msg")
     }
 
-    public static void other(String TAG, String msg) {
-        other("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun farm(msg: String) {
+        record(msg)
+        FARM_LOGGER.info("{}", msg)
     }
 
-    public static void debug(String msg) {
-        runtime(msg);
-        DEBUG_LOGGER.info("{}", msg);
+    @JvmStatic
+    fun other(msg: String) {
+        record(msg)
+        OTHER_LOGGER.info("{}", msg)
     }
 
-    public static void debug(String TAG, String msg) {
-        debug("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun other(tag: String, msg: String) {
+        other("[$tag]: $msg")
     }
 
-    public static void error(String msg) {
-        runtime(msg);
-        ERROR_LOGGER.error(TAG + "{}", msg);
+    @JvmStatic
+    fun debug(msg: String) {
+        runtime(msg)
+        DEBUG_LOGGER.info("{}", msg)
     }
 
-    public static void error(String TAG, String msg) {
-        error("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun debug(tag: String, msg: String) {
+        debug("[$tag]: $msg")
     }
 
-    public static void capture(String msg) {
-        CAPTURE_LOGGER.info(TAG + "{}", msg);
+    @JvmStatic
+    fun error(msg: String) {
+        runtime(msg)
+        ERROR_LOGGER.error("$DEFAULT_TAG{}", msg)
     }
 
-    public static void capture(String TAG, String msg) {
-        capture("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun error(tag: String, msg: String) {
+        error("[$tag]: $msg")
     }
 
-    public static void captcha(String msg) {
-        runtime(msg);
-        CAPTCHA_LOGGER.info("{}", msg);
+    @JvmStatic
+    fun capture(msg: String) {
+        CAPTURE_LOGGER.info("$DEFAULT_TAG{}", msg)
     }
 
-    public static void captcha(String TAG, String msg) {
-        captcha("[" + TAG + "]: " + msg);
+    @JvmStatic
+    fun capture(tag: String, msg: String) {
+        capture("[$tag]: $msg")
+    }
+
+    @JvmStatic
+    fun captcha(msg: String) {
+        runtime(msg)
+        CAPTCHA_LOGGER.info("{}", msg)
+    }
+
+    @JvmStatic
+    fun captcha(tag: String, msg: String) {
+        captcha("[$tag]: $msg")
     }
 
     /**
      * 检查是否应该打印此错误（去重机制）
-     *
-     * @param th 异常对象
-     * @return true=应该打印，false=已重复太多次
      */
-    private static boolean shouldPrintError(Throwable th) {
-        if (th == null) return false;
+    private fun shouldPrintError(th: Throwable?): Boolean {
+        if (th == null) return false
 
-        // 提取错误特征（类名+消息的前50个字符）
-        String errorSignature = th.getClass().getSimpleName() + ":" +
-                (th.getMessage() != null ? th.getMessage().substring(0, Math.min(50, th.getMessage().length())) : "null");
+        // 提取错误特征
+        var errorSignature = th.javaClass.simpleName + ":" +
+                (th.message?.take(50) ?: "null")
 
         // 特殊处理：JSON解析空字符串错误
-        if (th.getMessage() != null && th.getMessage().contains("End of input at character 0")) {
-            errorSignature = "JSONException:EmptyResponse";
+        if (th.message?.contains("End of input at character 0") == true) {
+            errorSignature = "JSONException:EmptyResponse"
         }
 
-        AtomicInteger count = errorCountMap.computeIfAbsent(errorSignature, k -> new AtomicInteger(0));
-        int currentCount = count.incrementAndGet();
+        val count = errorCountMap.computeIfAbsent(errorSignature) { AtomicInteger(0) }
+        val currentCount = count.incrementAndGet()
 
         // 如果是第3次，记录一个汇总信息
         if (currentCount == MAX_DUPLICATE_ERRORS) {
-            runtime("⚠️ 错误【" + errorSignature + "】已出现" + currentCount + "次，后续将不再打印详细堆栈");
-            return true;
+            runtime("⚠️ 错误【$errorSignature】已出现${currentCount}次，后续将不再打印详细堆栈")
+            return true
         }
 
         // 超过最大次数后不再打印
-        return currentCount > MAX_DUPLICATE_ERRORS;
+        return currentCount <= MAX_DUPLICATE_ERRORS
     }
 
-    public static void printStackTrace(Throwable th) {
-        if (shouldPrintError(th)) return;
-        String stackTrace = "error: " + android.util.Log.getStackTraceString(th);
-        error(stackTrace);
+    @JvmStatic
+
+    fun printStackTrace(th: Throwable) {
+        if (shouldPrintError(th)) return
+        val stackTrace = "error: " + android.util.Log.getStackTraceString(th)
+        error(stackTrace)
     }
 
-    public static void printStackTrace(String msg, Throwable th) {
-        if (shouldPrintError(th)) return;
-        String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(th);
-        error(msg, stackTrace);
+    @JvmStatic
+
+    fun printStackTrace(msg: String, th: Throwable) {
+        if (shouldPrintError(th)) return
+        val stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(th)
+        error(msg, stackTrace)
     }
 
-    public static void printStackTrace(String TAG, String msg, Throwable th) {
-        if (shouldPrintError(th)) return;
-        String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(th);
-        error(msg, stackTrace);
+    @JvmStatic
+    fun printStackTrace(tag: String, msg: String, th: Throwable) {
+        if (shouldPrintError(th)) return
+        val stackTrace = "[$tag] Throwable error: " + android.util.Log.getStackTraceString(th)
+        error(msg, stackTrace)
     }
 
-    public static void printStackTrace(Exception e) {
-        if (shouldPrintError(e)) return;
-        String stackTrace = "Exception error: " + android.util.Log.getStackTraceString(e);
-        error(stackTrace);
+    // 兼容 Exception 参数的重载 (Kotlin 中 Exception 是 Throwable 的子类，其实可以直接用上面的)
+    // 但为了保持原有 Java API 的签名习惯，这里保留
+    @JvmStatic
+    fun printStackTrace(e: Exception) {
+        printStackTrace(e as Throwable)
     }
 
-    public static void printStackTrace(String msg, Exception e) {
-        if (shouldPrintError(e)) return;
-        String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(e);
-        error(msg, stackTrace);
+    @JvmStatic
+    fun printStackTrace(msg: String, e: Exception) {
+        printStackTrace(msg, e as Throwable)
     }
 
-    public static void printStackTrace(String TAG, String msg, Exception e) {
-        if (shouldPrintError(e)) return;
-        String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(e);
-        error(msg, stackTrace);
+    @JvmStatic
+    fun printStackTrace(tag: String, msg: String, e: Exception) {
+        printStackTrace(tag, msg, e as Throwable)
     }
 
-    public static void printStack(String TAG) {
-        String stackTrace = "stack: " + android.util.Log.getStackTraceString(new Exception("获取当前堆栈" + TAG + ":"));
-        system(stackTrace);
+    @JvmStatic
+    fun printStack(tag: String) {
+        val stackTrace = "stack: " + android.util.Log.getStackTraceString(Exception("获取当前堆栈$tag:"))
+        system(stackTrace)
     }
-
 }
