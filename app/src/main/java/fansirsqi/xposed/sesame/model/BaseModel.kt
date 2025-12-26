@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.model
 
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.hook.CaptchaHook.updateHooks
+import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
@@ -10,6 +11,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField.ListJoinCommaT
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.BeachMap
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import lombok.Getter
@@ -35,6 +37,14 @@ class BaseModel : Model() {
     }
 
     override fun boot(classLoader: ClassLoader?) {
+        // 如果滑块验证开启，自动关闭VPN弹窗拦截
+        if (enableSlide.value) {
+            if (enableCaptchaUIHook.value) {
+                enableCaptchaUIHook.value = false
+                Log.record(TAG, "⚠️ 滑块验证已开启，请关闭VPN弹窗拦截")
+                Toast.show("⚠️ 滑块验证已开启，请关闭VPN弹窗拦截")
+            }
+        }
         // 配置已加载，更新验证码Hook状态
         try {
             updateHooks(
@@ -199,37 +209,13 @@ class BaseModel : Model() {
          * 验证码UI层拦截（阻止对话框显示）
          */
         @Getter
-        val enableCaptchaUIHook: BooleanModelField = BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false).apply {
-            setValueChangeListener {
-                try {
-                    updateHooks(it)
-                    Log.record(TAG, "✅ 验证码Hook配置已同步")
-                } catch (t: Throwable) {
-                    Log.printStackTrace(TAG, "❌ 验证码Hook配置同步失败", t)
-                }
-            }
-        }
+        val enableCaptchaUIHook: BooleanModelField = BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false)
 
         /**
          * 是否启用滑块验证（优先使用 Shizuku，无 Shizuku 时发送广播）
          */
         @Getter
-        val enableSlide: BooleanModelField = BooleanModelField("enableSlide", "支付宝10.6.58.8000 滑块验证(Shizuku/ShortX广播)", false).apply {
-            setValueChangeListener { newValue ->
-                if (newValue) {
-                    if (enableCaptchaUIHook.value) {
-                        enableCaptchaUIHook.value = false
-                        Log.record(TAG, "⚠️ 滑块验证已开启，自动关闭VPN弹窗拦截")
-                    }
-                }
-                try {
-                    updateHooks(enableCaptchaUIHook.value)
-                    Log.record(TAG, "✅ 验证码Hook配置已同步")
-                } catch (t: Throwable) {
-                    Log.printStackTrace(TAG, "❌ 验证码Hook配置同步失败", t)
-                }
-            }
-        }
+        val enableSlide: BooleanModelField = BooleanModelField("enableSlide", "支付宝10.6.58.8000 滑块验证(Shizuku/ShortX广播)", false)
 
         /**
          * 是否记录record日志
