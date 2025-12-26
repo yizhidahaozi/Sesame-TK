@@ -1,11 +1,9 @@
 package fansirsqi.xposed.sesame.model;
 
 import android.content.Context;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
@@ -89,15 +87,34 @@ public class ModelField<T> implements Serializable {
      * @param objectValue 要设置的值
      */
     public void setObjectValue(Object objectValue) {
+        T oldValue = value;
         if (objectValue == null) {
             reset(); // 如果传入值为 null，则重置为默认值
-            return;
+        } else {
+            if (valueType == Integer.class && objectValue instanceof Boolean) {
+                objectValue = (Boolean) objectValue ? 1 : 0;
+            }
+            value = JsonUtil.parseObject(objectValue, valueType); // 解析并设置当前值
         }
-        if (valueType == Integer.class && objectValue instanceof Boolean) {
-            objectValue = (Boolean) objectValue ? 1 : 0;
+        if (valueChangeListener != null && !Objects.equals(oldValue, value)) {
+            valueChangeListener.onValueChanged(value);
         }
-        value = JsonUtil.parseObject(objectValue, valueType); // 解析并设置当前值
     }
+
+    /**
+     * 值变化监听器接口
+     */
+    @FunctionalInterface
+    public interface ValueChangeListener<T> {
+        void onValueChanged(T newValue);
+    }
+
+    /**
+     * -- SETTER --
+     *  设置值变化监听器
+     */
+    @JsonIgnore
+    private ValueChangeListener<T> valueChangeListener;
 
     /**
      * 获取字段类型

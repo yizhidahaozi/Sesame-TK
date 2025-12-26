@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 滑动操作工具类
- * 通过 AIDL 调用 CommandService 执行 root/shizuku 命令
+ * 通过 AIDL 调用 CommandService 执行 Shizuku 命令
  */
 object SwipeUtil {
 
@@ -132,7 +132,7 @@ object SwipeUtil {
     /**
      * 执行命令并返回布尔值（成功/失败）
      */
-    private suspend fun execRootCommand(context: Context, command: String): Boolean {
+    private suspend fun execShizukuCommand(context: Context, command: String): Boolean {
         // 调用通用方法，稍微判断一下逻辑（这里简化处理，没报错就算成功）
         // 实际上 CommandService 的 callback.onSuccess 调用了就算成功
         val result = execCommand(context, command, false)
@@ -146,7 +146,7 @@ object SwipeUtil {
     // 其实你原来的写法也可以，只要加上上面的 bindService 修复即可。
     // 下面保留你原来的写法逻辑，只应用 bindService 的修复：
 
-    private suspend fun execRootCommandOriginal(context: Context, command: String): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun execShizukuCommandOriginal(context: Context, command: String): Boolean = withContext(Dispatchers.IO) {
         if (!bindService(context)) return@withContext false
         val service = commandService ?: return@withContext false
 
@@ -177,7 +177,7 @@ object SwipeUtil {
             val command = "input swipe $startX $startY $endX $endY $duration"
 
             // 使用修复后的绑定逻辑
-            val result = execRootCommandOriginal(context, command)
+            val result = execShizukuCommandOriginal(context, command)
 
             if (result) {
                 Log.d(TAG, "滑动命令发送成功")

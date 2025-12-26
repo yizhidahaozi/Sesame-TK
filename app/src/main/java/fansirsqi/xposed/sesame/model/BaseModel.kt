@@ -35,14 +35,6 @@ class BaseModel : Model() {
     }
 
     override fun boot(classLoader: ClassLoader?) {
-        // 如果Root滑块或发送滑动命令广播开启，自动关闭VPN弹窗拦截
-        if (enableRootSlide.value || enableSlideBroadcast.value) {
-            if (enableCaptchaUIHook.value) {
-                enableCaptchaUIHook.value = false
-                val reason = if (enableRootSlide.value) "Root滑块" else "发送滑动命令到ShortX广播"
-                Log.record(TAG, "⚠️ ${reason}已开启，自动关闭VPN弹窗拦截")
-            }
-        }
         // 配置已加载，更新验证码Hook状态
         try {
             updateHooks(
@@ -79,8 +71,7 @@ class BaseModel : Model() {
 
         modelFields.addField(batteryPerm) //是否申请支付宝的后台运行权限
         modelFields.addField(enableCaptchaUIHook) //验证码UI层拦截
-        modelFields.addField(enableRootSlide) //是否使用Root权限滑动验证码
-        modelFields.addField(enableSlideBroadcast) //支付宝10.6.58.8000 发送滑块命令到ShortX广播
+        modelFields.addField(enableSlide) //是否启用滑块验证
         modelFields.addField(recordLog) //是否记录record日志
         modelFields.addField(runtimeLog) //是否记录runtime日志
         modelFields.addField(showToast) //是否显示气泡提示
@@ -208,19 +199,37 @@ class BaseModel : Model() {
          * 验证码UI层拦截（阻止对话框显示）
          */
         @Getter
-        val enableCaptchaUIHook: BooleanModelField = BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false)
+        val enableCaptchaUIHook: BooleanModelField = BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false).apply {
+            setValueChangeListener {
+                try {
+                    updateHooks(it)
+                    Log.record(TAG, "✅ 验证码Hook配置已同步")
+                } catch (t: Throwable) {
+                    Log.printStackTrace(TAG, "❌ 验证码Hook配置同步失败", t)
+                }
+            }
+        }
 
         /**
-         * 是否使用Root权限滑动验证码
+         * 是否启用滑块验证（优先使用 Shizuku，无 Shizuku 时发送广播）
          */
         @Getter
-        val enableRootSlide: BooleanModelField = BooleanModelField("enableRootSlide", "支付宝10.6.58.8000 Root滑块验证", false)
-
-        /**
-         * 是否发送滑动命令广播通知
-         */
-        @Getter
-        val enableSlideBroadcast: BooleanModelField = BooleanModelField("enableSlideBroadcast", "支付宝10.6.58.8000 发送滑块命令到ShortX广播", false)
+        val enableSlide: BooleanModelField = BooleanModelField("enableSlide", "支付宝10.6.58.8000 滑块验证(Shizuku/ShortX广播)", false).apply {
+            setValueChangeListener { newValue ->
+                if (newValue) {
+                    if (enableCaptchaUIHook.value) {
+                        enableCaptchaUIHook.value = false
+                        Log.record(TAG, "⚠️ 滑块验证已开启，自动关闭VPN弹窗拦截")
+                    }
+                }
+                try {
+                    updateHooks(enableCaptchaUIHook.value)
+                    Log.record(TAG, "✅ 验证码Hook配置已同步")
+                } catch (t: Throwable) {
+                    Log.printStackTrace(TAG, "❌ 验证码Hook配置同步失败", t)
+                }
+            }
+        }
 
         /**
          * 是否记录record日志
