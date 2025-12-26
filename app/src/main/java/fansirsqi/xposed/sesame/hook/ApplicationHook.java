@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager;
+import fansirsqi.xposed.sesame.hook.call.LocationHelper;
 import kotlin.Unit;
 import lombok.Setter;
 
@@ -517,6 +518,9 @@ public class ApplicationHook {
 
                     // SecurityBodyHelper初始化
                     SecurityBodyHelper.INSTANCE.init(classLoader);
+
+                    // LocationHelper初始化
+                    LocationHelper.INSTANCE.init(classLoader);
 
 
                     // ✅ 优先使用 Hook 捕获的版本号

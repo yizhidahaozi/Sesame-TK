@@ -93,17 +93,15 @@ abstract class BaseCaptchaHandler {
 
 
             // logSlideInfo(activity, slideRect, slidePath)
+
             if (!BaseModel.enableSlide.value) {
                 Log.captcha(TAG, "Sesame-TK 滑块验证功能已关闭，使用ShortX广播方式滑动")
                 ApplicationHook.sendBroadcastShell(
                     getSlidePathKey(),
                     "input swipe " + slidePath.toIntArray().joinToString(" ")
                 )
-                saveSlidePathIfNeeded(slidePath)
-
             } else {
                 executeSlideWithRetry(activity, root, slidePath)
-                saveSlidePathIfNeeded(slidePath)
             }
 
             true
@@ -155,25 +153,25 @@ abstract class BaseCaptchaHandler {
         Log.captcha(TAG, "滑动路径: (${slidePath.startX}, ${slidePath.startY}) -> (${slidePath.endX}, ${slidePath.endY})")
     }
 
-    /**
-     * 保存滑动路径到 DataStore（仅在路径变化时保存）
-     * @param slidePath 要保存的滑动路径
-     */
-    private fun saveSlidePathIfNeeded(slidePath: SlidePath) {
-        try {
-            val slidePathArray = slidePath.toIntArray()
-            val slidePathKey = getSlidePathKey()
-            val existingPath = DataStore.get(slidePathKey, IntArray::class.java)
-
-            if (existingPath == null || !existingPath.contentEquals(slidePathArray)) {
-                DataStore.put(slidePathKey, slidePathArray)
-                Log.captcha(TAG, "滑动路径已保存到DataStore: [${slidePathArray.joinToString(", ")}]")
-            }
-            Log.captcha(TAG, "路径数据: [${slidePathArray.joinToString(", ")}]")
-        } catch (e: Exception) {
-            Log.captcha(TAG, "保存滑动路径到DataStore失败: ${e.message}")
-        }
-    }
+//    /**
+//     * 保存滑动路径到 DataStore（仅在路径变化时保存）
+//     * @param slidePath 要保存的滑动路径
+//     */
+//    private fun saveSlidePathIfNeeded(slidePath: SlidePath) {
+//        try {
+//            val slidePathArray = slidePath.toIntArray()
+//            val slidePathKey = getSlidePathKey()
+//            val existingPath = DataStore.get(slidePathKey, IntArray::class.java)
+//
+//            if (existingPath == null || !existingPath.contentEquals(slidePathArray)) {
+//                DataStore.put(slidePathKey, slidePathArray)
+//                Log.captcha(TAG, "滑动路径已保存到DataStore: [${slidePathArray.joinToString(", ")}]")
+//            }
+//            Log.captcha(TAG, "路径数据: [${slidePathArray.joinToString(", ")}]")
+//        } catch (e: Exception) {
+//            Log.captcha(TAG, "保存滑动路径到DataStore失败: ${e.message}")
+//        }
+//    }
 
     /**
      * 执行滑动操作并重试
@@ -183,6 +181,9 @@ abstract class BaseCaptchaHandler {
      * @return true 表示滑动成功，false 表示滑动失败
      */
     private suspend fun executeSlideWithRetry(activity: Activity, root: SimpleViewImage, slidePath: SlidePath): Boolean {
+        val api = getSlidePathKey()
+        val command = "input swipe ${slidePath.startX} ${slidePath.startY} ${slidePath.endX} ${slidePath.endY} $SLIDE_DURATION"
+        var broadcastSent = false
         repeat(MAX_SLIDE_RETRIES) { retry ->
             Log.captcha(TAG, "========== 第 ${retry + 1} 次尝试滑动 ==========")
             val swipeSuccess = SwipeUtil.swipe(
@@ -206,8 +207,13 @@ abstract class BaseCaptchaHandler {
                 }
             } else {
                 Log.captcha(TAG, "滑动操作执行失败，准备重试...")
+                if (!broadcastSent) {
+                    Log.captcha(TAG, "发送广播到 ShortX...")
+                    ApplicationHook.sendBroadcastShell(api, command)
+                    broadcastSent = true
+                }
             }
-            
+
             if (retry < MAX_SLIDE_RETRIES - 1) {
                 sleepCompat(SLIDE_RETRY_INTERVAL)
             }
