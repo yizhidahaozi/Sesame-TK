@@ -8,26 +8,59 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.appbar.MaterialToolbar
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.data.ViewAppInfo
+import fansirsqi.xposed.sesame.util.PermissionUtil
 
 open class BaseActivity : AppCompatActivity() {
 
-    // 使用 lazy 委托，当第一次访问 toolbar 时会自动查找 ID
-    // 只有在 setContentView 之后访问它才是安全的
-    protected val toolbar: MaterialToolbar by lazy { findViewById(R.id.x_toolbar) }
+    // 🔥 修复点 1: 改为可空类型，不要使用 lateinit 或直接 lazy 非空
+    // Compose 模式下，这个 Toolbar 可能根本不存在
+    protected val toolbar: MaterialToolbar? by lazy {
+        findViewById(R.id.x_toolbar)
+    }
 
-    // 暂存标题和副标题
+    // 暂存标题
     private var pendingTitle: CharSequence? = ViewAppInfo.appTitle
     private var pendingSubtitle: CharSequence? = null
+
+    // 标记是否使用 Compose (可选，或者直接判断 toolbar 是否为 null)
+    protected var isComposeMode = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // 权限检查逻辑保持不变...
+        if (PermissionUtil.checkOrRequestFilePermissions(this)) {
+            initialize()
+        } else {
+            // ...
+        }
+    }
+
+    private fun initialize() {
+        ViewAppInfo.init(applicationContext)
+        // Edge-to-Edge 支持
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 控制状态栏文字颜色
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isNightMode()
+    }
+
+    override fun onContentChanged() {
+        super.onContentChanged()
+
+        // 🔥 修复点 2: 安全访问 toolbar
+        // 如果是 Compose 模式，findViewById 会返回 null，我们直接忽略即可
+        toolbar?.let { tb ->
+            setSupportActionBar(tb)
+            tb.setContentInsetsAbsolute(0, 0)
+            updateToolbarText()
+        }
+    }
 
     // 基础标题
     open var baseTitle: String?
         get() = pendingTitle?.toString()
         set(value) {
             pendingTitle = value
-            // 只有当 Window 已经附加了布局，且 toolbar 确实存在时才设置
-            // 但简单的做法是：只要 setContentView 调用过，lazy 就能工作。
-            // 我们可以用一个简单的 try-catch 或者 flag 来保护，
-            // 或者更优雅地：只在 onContentChanged 之后更新 View。
             updateToolbarText()
         }
 
@@ -39,62 +72,30 @@ open class BaseActivity : AppCompatActivity() {
             updateToolbarText()
         }
 
-    // 标记布局是否已加载
-    private var isContentLayoutSet = false
-
-    override fun onContentChanged() {
-        super.onContentChanged()
-        // 系统回调：当 setContentView 完成后调用
-        isContentLayoutSet = true
-
-        setSupportActionBar(toolbar)
-        // 初始设置
-        toolbar.setContentInsetsAbsolute(0, 0)
-        updateToolbarText()
-    }
-
     private fun updateToolbarText() {
-        if (isContentLayoutSet) {
-            // 这里可以直接访问 toolbar，因为布局已经加载了
-            toolbar.title = pendingTitle
-            toolbar.subtitle = pendingSubtitle
+        // 🔥 修复点 3: 只有当 toolbar 存在时才更新
+        toolbar?.let {
+            it.title = pendingTitle
+            it.subtitle = pendingSubtitle
         }
     }
 
     fun setBaseTitleTextColor(color: Int) {
-        toolbar.setTitleTextColor(color)
+        // 🔥 修复点 4: 安全调用
+        toolbar?.setTitleTextColor(color)
     }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // 纯 UI 设置
-        setupWindow()
-    }
-
-    private fun setupWindow() {
-        // Edge-to-Edge 支持
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        // 控制状态栏文字颜色
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isNightMode()
-    }
-
-
-    private fun updateTitles() {
-        toolbar.title = baseTitle
-        toolbar.subtitle = baseSubtitle
-    }
-
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if ((newConfig.diff(resources.configuration) and Configuration.UI_MODE_NIGHT_MASK) != 0) {
             recreate()
         } else {
-            updateTitles()
+            updateToolbarText()
         }
     }
 
     private fun isNightMode(): Boolean {
         return (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     }
+
 }
