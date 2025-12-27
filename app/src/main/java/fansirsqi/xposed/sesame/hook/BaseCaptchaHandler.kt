@@ -9,6 +9,7 @@ import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.SwipeUtil
+import fansirsqi.xposed.sesame.util.SwipeUtil.execShizukuCommandOriginal
 
 /**
  * 滑动路径数据类 - 封装滑动验证码的路径信息
@@ -65,7 +66,7 @@ abstract class BaseCaptchaHandler {
      */
     open suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean {
         try {
-
+            execShizukuCommandOriginal(activity, "input swipe 205 1587 1172 1587 500")
             if (handleSlideCaptcha(activity, root)) {
                 return true
             }
