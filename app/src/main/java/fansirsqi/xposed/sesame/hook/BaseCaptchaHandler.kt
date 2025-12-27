@@ -66,7 +66,7 @@ abstract class BaseCaptchaHandler {
      */
     open suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean {
         try {
-            execShizukuCommandOriginal(activity, "input swipe 205 1587 1172 1587 500")
+          //  execShizukuCommandOriginal(activity, "input swipe 205 1587 1172 1587 500")
             if (handleSlideCaptcha(activity, root)) {
                 return true
             }
