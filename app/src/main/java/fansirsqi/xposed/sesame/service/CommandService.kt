@@ -1,13 +1,8 @@
 package fansirsqi.xposed.sesame.service
 
 import android.annotation.SuppressLint
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
+import android.app.*
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -15,15 +10,9 @@ import fansirsqi.xposed.sesame.ICallback
 import fansirsqi.xposed.sesame.ICommandService
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.ui.MainActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 
 /**
  * 命令执行服务（前台服务）
@@ -75,7 +64,7 @@ class CommandService : Service() {
                             callback?.onError("退出码: ${result.exitCode}, 错误: ${result.stderr}")
                         }
 
-                    } catch (e: TimeoutCancellationException) {
+                    } catch (_: TimeoutCancellationException) {
                         Log.e(TAG, "命令执行超时 (${COMMAND_TIMEOUT_MS}ms): $command")
                         callback?.onError("命令执行超时")
                     } catch (e: Exception) {
