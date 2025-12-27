@@ -82,10 +82,10 @@ class CommandService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder {
-        Log.d(TAG, "CommandService 绑定")
+        Log.d(TAG, "CommandService onBind 被调用")
         // 初始化 ShellManager 实例
         shellManager = ShellManager(applicationContext)
-        Log.i(TAG, "ShellManager 已初始化")
+        Log.i(TAG, "ShellManager 已初始化, 当前 Shell: ${shellManager?.selectedName}")
         return binder
     }
 
