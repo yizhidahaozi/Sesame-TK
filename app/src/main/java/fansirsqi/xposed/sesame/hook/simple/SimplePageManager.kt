@@ -316,7 +316,7 @@ object SimplePageManager {
             } catch (throwable: Throwable) {
                 Log.e(TAG, "处理 Activity 出错: ${activity.javaClass.name}", throwable)
             }
-            if (triggerCount > 1) {
+            if (triggerCount > 10) {
                 Log.w(TAG, "Activity 事件触发失败次数过多: ${activityFocusHandler.javaClass}")
                 return@launch
             }

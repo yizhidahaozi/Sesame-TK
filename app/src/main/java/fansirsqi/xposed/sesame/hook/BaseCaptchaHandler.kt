@@ -2,29 +2,13 @@ package fansirsqi.xposed.sesame.hook
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import fansirsqi.xposed.sesame.hook.simple.MotionEventSimulator
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.SwipeUtil
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
-
-/**
- * 滑动验证码路径信息的数据类。
- * @property startX 滑动的起始 X 坐标。
- * @property startY 滑动的起始 Y 坐标。
- * @property endX 滑动的结束 X 坐标。
- * @property endY 滑动的结束 Y 坐标。
- */
-data class SlidePath(
-    val startX: Int,
-    val startY: Int,
-    val endX: Int,
-    val endY: Int
-) {
-    fun toIntArray(): IntArray = intArrayOf(startX, startY, endX, endY)
-}
 
 /**
  * 验证码处理程序的基类，提供处理滑动验证码的通用逻辑。
@@ -36,9 +20,9 @@ abstract class BaseCaptchaHandler {
         private const val TAG = "CaptchaHandler"
 
         // 滑动位置偏移量和持续时间
-        private const val SLIDE_START_OFFSET = 50
-        private const val SLIDE_END_MARGIN = 100
-        private const val SLIDE_DURATION = 300L
+        private const val SLIDE_START_OFFSET = 25 // Offset from the left edge of the slider
+        private const val SLIDE_END_MARGIN = 50   // Margin from the right edge of the screen
+        private const val SLIDE_DURATION = 500L
 
         // 滑动后延迟检查是否成功
         private const val POST_SLIDE_CHECK_DELAY_MS = 2000L
@@ -56,12 +40,11 @@ abstract class BaseCaptchaHandler {
      */
     protected abstract fun getSlidePathKey(): String
 
-
     /**
-     * 处理当前 Activity 中的验证码
-     * @param activity 当前 Activity 实例
-     * @param root 根视图图像
-     * @return 如果验证码处理成功返回 true，否则返回 false
+     * 处理当前 Activity 中的验证码。
+     * @param activity 当前 Activity 实例。
+     * @param root 根视图图像。
+     * @return 如果验证码处理成功返回 true，否则返回 false。
      */
     open suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean {
         return try {
@@ -72,41 +55,27 @@ abstract class BaseCaptchaHandler {
         }
     }
 
-
     @SuppressLint("SuspiciousIndentation")
     private suspend fun handleSlideCaptcha(activity: Activity, root: SimpleViewImage): Boolean {
         if (!captchaProcessingMutex.tryLock()) {
             Log.captcha(TAG, "验证码正在处理中，跳过本次调用")
             return true // 返回 true 告知上层已处理，避免重试
         }
-
         try {
             Log.captcha(TAG, "========== 开始处理滑动验证码 ==========")
 
-            Log.captcha(TAG, "正在查找滑动验证文本...")
-            val slideTextInDialog = findSlideTextInDialog()
-            if (slideTextInDialog == null) {
+            val slideTextInDialog = findSlideTextInDialog() ?: run {
                 Log.captcha(TAG, "未找到滑动验证文本，跳过处理")
                 return false // 未找到关键视图，返回 false 让其他处理器尝试
             }
 
             Log.captcha(TAG, "发现滑动验证文本: ${slideTextInDialog.getText()}")
-            val slideRect = getSlideRect(slideTextInDialog) ?: run {
-                Log.captcha(TAG, "未找到滑动文本的父节点")
-                return false // 结构不符，返回 false
-            }
-
-            val slidePath = calculateSlidePath(activity, slideRect)
-            logSlideInfo(activity, slideRect, slidePath)
 
             if (!BaseModel.enableSlide.value) {
-                Log.captcha(TAG, "Sesame-TK 滑动验证功能已禁用，使用 ShortX 广播方式")
-                ApplicationHook.sendBroadcastShell(
-                    getSlidePathKey(),
-                    "input swipe " + slidePath.toIntArray().joinToString(" ")
-                )
+                Log.captcha(TAG, "通过 MotionEvent 模拟滑动的功能已禁用，不执行任何操作。")
+                // 如果需要，可以在此处添加回退到旧版广播的逻辑
             } else {
-                performSlideAndVerify(activity, slidePath)
+                performSlideAndVerify(activity, slideTextInDialog)
             }
             return true // 已决定处理，返回 true 阻止 SimplePageManager 重试
         } catch (e: Exception) {
@@ -119,87 +88,50 @@ abstract class BaseCaptchaHandler {
     }
 
     /**
-     * 获取滑动区域的位置信息。
-     * @param slideText 滑动文本的视图图像。
-     * @return 表示滑动区域位置的 IntArray，如果无法确定则返回 null。
-     */
-    private fun getSlideRect(slideText: SimpleViewImage): IntArray? {
-        val slideTextParent = slideText.parentNode(1) ?: return null
-        return slideTextParent.locationOnScreen()
-    }
-
-    /**
-     * 根据滑动区域计算滑动路径。
+     * 执行滑动操作并验证结果。
      * @param activity 当前的 Activity。
-     * @param slideRect 滑动区域的位置。
-     * @return 计算出的 SlidePath。
-     */
-    private fun calculateSlidePath(activity: Activity, slideRect: IntArray): SlidePath {
-        val displayMetrics = activity.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-
-        val startX = slideRect[0] + SLIDE_START_OFFSET
-        val centerY = slideRect[1] + SLIDE_START_OFFSET
-        val endX = screenWidth - SLIDE_END_MARGIN
-
-        return SlidePath(startX, centerY, endX, centerY)
-    }
-
-    /**
-     * 记录滑动操作的详细信息。
-     * @param activity 当前的 Activity。
-     * @param slideRect 滑动区域的位置。
-     * @param slidePath 计算出的滑动路径。
-     */
-    private fun logSlideInfo(activity: Activity, slideRect: IntArray, slidePath: SlidePath) {
-        val displayMetrics = activity.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-        Log.captcha(TAG, "滑动区域位置: ${slideRect.contentToString()}")
-        Log.captcha(TAG, "屏幕尺寸: ${screenWidth}x$screenHeight")
-        Log.captcha(
-            TAG,
-            "滑动路径: (${slidePath.startX}, ${slidePath.startY}) -> (${slidePath.endX}, ${slidePath.endY})"
-        )
-    }
-
-    /**
-     * 执行滑动操作并验证结果。如果主要的滑动失败，
-     * 它会回退到发送广播命令。
-     * @param activity 当前的 Activity。
-     * @param slidePath 要滑动的路径。
+     * @param slideTextView “向右滑动验证”文本的视图图像，作为查找滑块的锚点。
      * @return 如果验证码成功解除返回 true，否则返回 false。
      */
-    private suspend fun performSlideAndVerify(activity: Activity, slidePath: SlidePath): Boolean {
-        Log.captcha(TAG, "========== 执行滑动操作 ==========")
+    private suspend fun performSlideAndVerify(activity: Activity, slideTextView: SimpleViewImage): Boolean {
+        Log.captcha(TAG, "========== 正在查找真实滑块并执行滑动 ==========")
 
-        val swipeSuccess = SwipeUtil.swipe(
-            activity,
-            slidePath.startX,
-            slidePath.startY,
-            slidePath.endX,
-            slidePath.endY,
-            SLIDE_DURATION
+        val sliderView = ViewHierarchyAnalyzer.findActualSliderView(slideTextView) ?: run {
+            Log.captcha(TAG, "未能找到可操作的滑块视图，滑动无法执行。")
+            return false
+        }
+        // 计算滑动的绝对坐标
+        val location = IntArray(2)
+        sliderView.getLocationOnScreen(location)
+        val viewX = location[0]
+        val viewY = location[1]
+        val startX = viewX + SLIDE_START_OFFSET.toFloat()
+        val startY = viewY + sliderView.height / 2f
+
+        val screenWidth = activity.resources.displayMetrics.widthPixels
+        val endX = screenWidth - SLIDE_END_MARGIN.toFloat()
+
+        Log.captcha(TAG, "计算出的滑动路径: ($startX, $startY) -> ($endX, $startY) on view: ${sliderView.javaClass.name}")
+
+        // 执行滑动
+        MotionEventSimulator.simulateSwipe(
+            view = sliderView,
+            startX = startX,
+            startY = startY,
+            endX = endX,
+            endY = startY, // 水平滑动
+            duration = SLIDE_DURATION
         )
 
-        if (swipeSuccess) {
-            Log.captcha(TAG, "滑动操作完成，检查验证码文本是否消失...")
-            delay(POST_SLIDE_CHECK_DELAY_MS)
-            return if (checkCaptchaTextGone()) {
-                Log.captcha(TAG, "验证码文本已消失，滑动成功。")
-                true
-            } else {
-                Log.captcha(TAG, "验证码文本仍然存在，滑动可能失败。")
-                // 如果验证码仍然存在，返回 false 让上层处理。
-                false
-            }
+        Log.captcha(TAG, "滑动模拟已发送，延迟检查结果...")
+        delay(POST_SLIDE_CHECK_DELAY_MS)
+
+        return if (checkCaptchaTextGone()) {
+            Log.captcha(TAG, "验证码文本已消失，滑动成功。")
+            true
         } else {
-            Log.captcha(TAG, "滑动操作失败，回退到发送广播给 ShortX...")
-            val api = getSlidePathKey()
-            val command =
-                "input swipe ${slidePath.startX} ${slidePath.startY} ${slidePath.endX} ${slidePath.endY} $SLIDE_DURATION"
-            ApplicationHook.sendBroadcastShell(api, command)
-            return false // 主要方法失败。
+            Log.captcha(TAG, "验证码文本仍然存在，滑动可能失败。")
+            false
         }
     }
 
