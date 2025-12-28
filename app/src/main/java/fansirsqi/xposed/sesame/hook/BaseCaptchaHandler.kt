@@ -5,9 +5,9 @@ import android.app.Activity
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
 import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.util.SwipeUtil
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.SwipeUtil
 
 /**
  * 滑动路径数据类 - 封装滑动验证码的路径信息
@@ -39,13 +39,12 @@ abstract class BaseCaptchaHandler {
         // 滑动结束位置距离屏幕右侧的边距（像素）
         private const val SLIDE_END_MARGIN = 100
         // 滑动持续时间（毫秒）
-        private const val SLIDE_DURATION = 500L
-        // 最大滑动重试次数
-        private const val MAX_SLIDE_RETRIES = 2
-        // 滑动重试间隔时间（毫秒）
-        private const val SLIDE_RETRY_INTERVAL = 500L
-        // 最大广播发送次数
-        private const val MAX_BROADCAST_COUNT = 1
+        private const val SLIDE_DURATION = 300L
+        
+        // 并发控制：记录正在处理的验证码
+        private var isProcessingCaptcha = false
+        private var lastProcessedTime = 0L
+        private const val PROCESSING_TIMEOUT = 10000L // 10秒超时
 
     }
 
@@ -80,6 +79,17 @@ abstract class BaseCaptchaHandler {
         return try {
             Log.captcha(TAG, "========== 开始处理滑动验证码 ==========")
 
+            // 并发控制：检查是否正在处理验证码
+            synchronized(BaseCaptchaHandler::class.java) {
+                val currentTime = System.currentTimeMillis()
+                if (isProcessingCaptcha && (currentTime - lastProcessedTime) < PROCESSING_TIMEOUT) {
+                    Log.captcha(TAG, "验证码正在处理中，跳过本次调用")
+                    return false
+                }
+                isProcessingCaptcha = true
+                lastProcessedTime = currentTime
+            }
+
             val slideTextInDialog = findSlideTextInDialog()
             if (slideTextInDialog == null) {
                 Log.captcha(TAG, "Dialog 中未找到滑动验证文字，跳过处理")
@@ -95,20 +105,26 @@ abstract class BaseCaptchaHandler {
 
             // logSlideInfo(activity, slideRect, slidePath)
 
-            if (!BaseModel.enableSlide.value) {
+            val result = if (!BaseModel.enableSlide.value) {
                 Log.captcha(TAG, "Sesame-TK 滑块验证功能已关闭，使用ShortX广播方式滑动")
                 ApplicationHook.sendBroadcastShell(
                     getSlidePathKey(),
                     "input swipe " + slidePath.toIntArray().joinToString(" ")
                 )
+                true
             } else {
-                executeSlideWithRetry(activity, root, slidePath)
+                executeSlideWithRetry(activity, slidePath)
             }
 
-            true
+            result
         } catch (_: Exception) {
           //  Log.captcha(TAG, "处理滑动验证码时发生异常: ${e.message}")
             false
+        } finally {
+            // 释放并发控制锁
+            synchronized(BaseCaptchaHandler::class.java) {
+                isProcessingCaptcha = false
+            }
         }
     }
 
@@ -177,14 +193,14 @@ abstract class BaseCaptchaHandler {
     /**
      * 执行滑动操作并重试
      * @param activity 当前 Activity
-     * @param root 根视图
      * @param slidePath 滑动路径
      * @return true 表示滑动成功，false 表示滑动失败
      */
-    private suspend fun executeSlideWithRetry(activity: Activity, root: SimpleViewImage, slidePath: SlidePath): Boolean {
+    private suspend fun executeSlideWithRetry(activity: Activity, slidePath: SlidePath): Boolean {
         val api = getSlidePathKey()
         val command = "input swipe ${slidePath.startX} ${slidePath.startY} ${slidePath.endX} ${slidePath.endY} $SLIDE_DURATION"
         Log.captcha(TAG, "========== 开始执行滑动 ==========")
+        
         val swipeSuccess = SwipeUtil.swipe(
             activity,
             slidePath.startX,
@@ -193,22 +209,23 @@ abstract class BaseCaptchaHandler {
             slidePath.endY,
             SLIDE_DURATION
         )
-        sleepCompat(3000L)
+        
         if (swipeSuccess) {
             Log.captcha(TAG, "开始检测验证码文本...")
+            sleepCompat(2000L) // 减少等待时间到2秒
             if (checkCaptchaTextGone()) {
                 Log.captcha(TAG, "验证码文本已消失，滑动成功")
                 return true
             } else {
                 Log.captcha(TAG, "验证码文本仍然存在")
+                // 如果验证码仍然存在，返回false让上层处理
+                return false
             }
         } else {
-            Log.captcha(TAG, "滑动操作执行失败")
-            Log.captcha(TAG, "发送广播到 ShortX...")
+            Log.captcha(TAG, "滑动操作执行失败,发送广播到 ShortX...")
             ApplicationHook.sendBroadcastShell(api, command)
+            return false
         }
-        Log.captcha(TAG, "滑动执行完成")
-        return true
     }
 
     /**

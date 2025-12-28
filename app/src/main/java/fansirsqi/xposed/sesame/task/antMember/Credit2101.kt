@@ -734,12 +734,9 @@ object Credit2101 {
         }
     }
 
-    /**
-     * 使用外部 IP 接口 + qqsuu IP 查询获取 cityCode / 经纬度
-     */
     private fun resolveLocation(accountCityCode: String?): LocationInfo? {
         return runCatching {
-            var cityCode: String? = null
+            var cityCode = accountCityCode
             var lat: Double
             var lng: Double
 
@@ -748,16 +745,15 @@ object Credit2101 {
                 if (locationJson != null) {
                     val status = locationJson.optString("status", "")
                     if (status.isNotEmpty()) {
-                        Log.error(TAG, "信用2101📍[LocationHelper] $status，尝试使用 API 备用")
+                        Log.error(TAG, "信用2101📍[LocationHelper] $status，尝试使用 API 备用$locationJson")
                         throw Exception("LocationHelper 定位失败: $status")
                     }
 
                     lat = locationJson.optDouble("latitude", Double.NaN)
                     lng = locationJson.optDouble("longitude", Double.NaN)
-                    cityCode = locationJson.optString("cityCode", accountCityCode.toString())
 
-                    if (cityCode.isNullOrEmpty() || lat.isNaN() || lng.isNaN()) {
-                        Log.error(TAG, "信用2101📍[LocationHelper失败] cityCode/lat/lng 缺失 cityCode=$cityCode lat=$lat lng=$lng，尝试使用 API 备用")
+                    if (lat.isNaN() || lng.isNaN()) {
+                        Log.error(TAG, "信用2101📍[LocationHelper失败] lat/lng 缺失 lat=$lat lng=$lng，尝试使用 API 备用")
                         throw Exception("LocationHelper 定位数据不完整")
                     }
 
@@ -781,7 +777,7 @@ object Credit2101 {
                     val qqJson = httpGetJson("https://api.qqsuu.cn/api/dm-ipquery?ip=$ip")
                     if (qqJson != null && qqJson.optInt("code", -1) == 200) {
                         val data = qqJson.optJSONObject("data")
-                        cityCode = data?.optString("areacode", "")
+                        cityCode = data?.optString("areacode", accountCityCode.toString())
 
                         val latStr = data?.optString("latitude", "")
                         val lngStr = data?.optString("longitude", "")
@@ -807,7 +803,7 @@ object Credit2101 {
                 Log.record(TAG, "信用2101📍[API定位] 使用 API 定位成功")
             }
 
-            LocationInfo(cityCode!!, lat, lng)
+            LocationInfo(cityCode.toString(), lat, lng)
         }.getOrElse {
             Log.printStackTrace(TAG, it)
             null
