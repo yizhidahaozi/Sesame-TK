@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.hook.simple
 
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
@@ -19,12 +17,11 @@ import kotlin.random.Random
 object MotionEventSimulator {
 
     private const val TAG = "MotionEventSimulator"
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
      * 异步模拟一个从起点到终点的滑动操作.
      *
-     * @param view 要在其上执行滑动操作的视图 (通常是滑块本身).
+     * @param view 要在其上执行滑动操作的视图 (通常很滑块本身).
      * @param startX 滑动的屏幕绝对 X 坐标起点.
      * @param startY 滑动的屏幕绝对 Y 坐标起点.
      * @param endX 滑动的屏幕绝对 X 坐标终点.

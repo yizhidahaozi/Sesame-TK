@@ -39,7 +39,7 @@ object SimplePageManager {
     private var disable = false
 
     private val dialogs = ArrayList<WeakReference<android.app.Dialog>>()
-    private var windowMonitorEnabled = true
+    private var windowMonitorEnabled = false
 
     interface ActivityFocusHandler {
         suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean

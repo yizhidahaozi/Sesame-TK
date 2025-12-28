@@ -2,6 +2,9 @@ package fansirsqi.xposed.sesame.hook
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.graphics.Point
+import android.util.DisplayMetrics
+import android.view.Display
 import fansirsqi.xposed.sesame.hook.simple.MotionEventSimulator
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
@@ -9,6 +12,7 @@ import fansirsqi.xposed.sesame.hook.simple.ViewHierarchyAnalyzer
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
+import kotlin.random.Random
 
 /**
  * 滑动坐标四元组，用于封装滑动起点和终点坐标。
@@ -31,8 +35,9 @@ abstract class BaseCaptchaHandler {
 
         // 滑动位置偏移量和持续时间
         private const val SLIDE_START_OFFSET = 25 // Offset from the left edge of the slider
-        private const val SLIDE_END_MARGIN = 50   // Margin from the right edge of the screen
-        private const val SLIDE_DURATION = 500L
+        private const val SLIDE_END_MARGIN = 20   // Margin from the right edge of the screen
+        private const val SLIDE_DURATION_MIN = 400L // 最小滑动持续时间
+        private const val SLIDE_DURATION_MAX = 800L // 最大滑动持续时间
 
         // 滑动后延迟检查是否成功
         private const val POST_SLIDE_CHECK_DELAY_MS = 2000L
@@ -101,11 +106,16 @@ abstract class BaseCaptchaHandler {
             return false
         }
         // 计算滑动坐标
-        val (startX, startY, endX, endY) = calculateSlideCoordinates(sliderView) ?: run {
+        val (startX, startY, endX, endY) = calculateSlideCoordinates(activity ,sliderView) ?: run {
             Log.captcha(TAG, "计算滑动坐标失败，滑动无法执行。")
             return false
         }
         Log.captcha(TAG, "计算出的滑动路径: ($startX, $startY) -> ($endX, $endY)")
+        
+        // 随机化滑动持续时间，模拟更自然的行为
+        val slideDuration = Random.nextLong(SLIDE_DURATION_MIN, SLIDE_DURATION_MAX + 1)
+        Log.captcha(TAG, "使用滑动持续时间: ${slideDuration}ms")
+        
         // 执行滑动
         MotionEventSimulator.simulateSwipe(
             view = sliderView,
@@ -113,7 +123,7 @@ abstract class BaseCaptchaHandler {
             startY = startY,
             endX = endX,
             endY = endY,
-            duration = SLIDE_DURATION
+            duration = slideDuration
         )
 
         delay(POST_SLIDE_CHECK_DELAY_MS)
@@ -129,15 +139,22 @@ abstract class BaseCaptchaHandler {
     /**
      * 计算滑动验证码的坐标参数。
      * 
+     * @param activity 当前Activity，用于获取屏幕信息
      * @param sliderView 滑块视图
      * @return 包含(startX, startY, endX, endY)的四元组，如果计算失败返回null
      */
-    private fun calculateSlideCoordinates(sliderView: android.view.View): SlideCoordinates? {
+    private fun calculateSlideCoordinates(activity: Activity, sliderView: android.view.View): SlideCoordinates? {
         // 获取滑动区域的整体容器（滑块的父容器）
         val slideContainer = sliderView.parent as? android.view.ViewGroup ?: run {
             Log.captcha(TAG, "未能找到滑块容器")
             return null
         }
+        
+        // 获取屏幕尺寸信息 - 使用更简洁的方式
+        val displayMetrics = activity.resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+        
         // 计算滑动区域的边界
         val containerLocation = IntArray(2)
         slideContainer.getLocationOnScreen(containerLocation)
@@ -145,22 +162,49 @@ abstract class BaseCaptchaHandler {
         val containerY = containerLocation[1]
         val containerWidth = slideContainer.width
         val containerHeight = slideContainer.height
-        
+
         // 计算滑块位置
         val sliderLocation = IntArray(2)
         sliderView.getLocationOnScreen(sliderLocation)
         val sliderX = sliderLocation[0]
         val sliderY = sliderLocation[1]
-        
-        // 计算滑动起点（滑块中心稍微偏右，模拟手指按住滑块）
-        val startX = sliderX + sliderView.width / 2f + SLIDE_START_OFFSET.toFloat()
-        val startY = sliderY + sliderView.height / 2f
+        val sliderWidth = sliderView.width
+        val sliderHeight = sliderView.height
 
-        // 计算滑动终点（滑动容器的右端，减去一些边距）
-        val endX = containerX + containerWidth - SLIDE_END_MARGIN.toFloat()
+        // 计算滑动起点（滑块中心稍微偏右，模拟手指按住滑块）
+        val startX = sliderX + sliderWidth / 2f + SLIDE_START_OFFSET.toFloat() + Random.nextInt(-3, 4) // 添加随机偏移
+        val startY = sliderY + sliderHeight / 2f + Random.nextInt(-2, 3)
+
+        // 计算滑动终点
+        // 使用容器右边界作为参考，但确保不超过屏幕边界
+        val containerRightEdge = containerX + containerWidth
+        val maxEndX = screenWidth - 50f // 距离屏幕右边缘50像素
+        
+        // 计算理想的滑动终点（容器右端减去较小边距）
+        var endX = containerRightEdge - SLIDE_END_MARGIN.toFloat() + Random.nextInt(-5, 6) // 添加随机偏移
+        
+        // 确保滑动终点不超过屏幕边界
+        if (endX > maxEndX) {
+            endX = maxEndX
+            Log.captcha(TAG, "调整滑动终点以适配屏幕边界")
+        }
+        
+        // 确保滑动距离足够（至少滑块宽度的1.5倍）
+        val minSlideDistance = sliderWidth * 1.5f
+        val actualSlideDistance = endX - startX
+        if (actualSlideDistance < minSlideDistance) {
+            endX = startX + minSlideDistance + Random.nextInt(-3, 4) // 添加随机偏移
+            Log.captcha(TAG, "调整滑动距离至最小要求: ${minSlideDistance}px")
+        }
+        
         val endY = startY // 保持水平滑动
+        
+        // 输出详细的调试信息
+        Log.captcha(TAG, "屏幕信息: 尺寸=${screenWidth}x$screenHeight")
         Log.captcha(TAG, "滑动区域信息: 容器位置=[$containerX,$containerY], 尺寸=${containerWidth}x$containerHeight")
-        Log.captcha(TAG, "滑块信息: 位置=[$sliderX,$sliderY], 尺寸=${sliderView.width}x${sliderView.height}")
+        Log.captcha(TAG, "滑块信息: 位置=[$sliderX,$sliderY], 尺寸=${sliderWidth}x${sliderHeight}")
+        Log.captcha(TAG, "计算结果: 起点=[$startX,$startY], 终点=[$endX,$endY], 滑动距离=${endX-startX}px")
+        
         return SlideCoordinates(startX, startY, endX, endY)
     }
 
