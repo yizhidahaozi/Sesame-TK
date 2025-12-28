@@ -208,7 +208,7 @@ abstract class BaseCaptchaHandler {
             ApplicationHook.sendBroadcastShell(api, command)
         }
         Log.captcha(TAG, "滑动执行完成")
-        return false
+        return true
     }
 
     /**

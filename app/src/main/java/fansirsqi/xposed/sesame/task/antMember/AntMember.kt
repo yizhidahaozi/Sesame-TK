@@ -10,7 +10,8 @@ import fansirsqi.xposed.sesame.data.Status.Companion.memberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.setFlagToday
 import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.MemberBenefit.Companion.getList
-import fansirsqi.xposed.sesame.hook.SecurityBodyHelper.getSecurityBodyData
+import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
+import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.energyTime
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.modelSleepTime
 import fansirsqi.xposed.sesame.model.ModelFields
