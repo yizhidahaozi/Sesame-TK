@@ -5,10 +5,20 @@ import android.app.Activity
 import fansirsqi.xposed.sesame.hook.simple.MotionEventSimulator
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
-import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.hook.simple.ViewHierarchyAnalyzer
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
+
+/**
+ * 滑动坐标四元组，用于封装滑动起点和终点坐标。
+ */
+data class SlideCoordinates(
+    val startX: Float,
+    val startY: Float,
+    val endX: Float,
+    val endY: Float
+)
 
 /**
  * 验证码处理程序的基类，提供处理滑动验证码的通用逻辑。
@@ -48,7 +58,7 @@ abstract class BaseCaptchaHandler {
      */
     open suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean {
         return try {
-            handleSlideCaptcha(activity, root)
+            handleSlideCaptcha(activity)
         } catch (e: Exception) {
             Log.error(TAG, "处理验证码页面时发生异常: ${e.stackTraceToString()}")
             false
@@ -56,33 +66,23 @@ abstract class BaseCaptchaHandler {
     }
 
     @SuppressLint("SuspiciousIndentation")
-    private suspend fun handleSlideCaptcha(activity: Activity, root: SimpleViewImage): Boolean {
+    private suspend fun handleSlideCaptcha(activity: Activity): Boolean {
         if (!captchaProcessingMutex.tryLock()) {
-            Log.captcha(TAG, "验证码正在处理中，跳过本次调用")
             return true // 返回 true 告知上层已处理，避免重试
         }
         try {
-            Log.captcha(TAG, "========== 开始处理滑动验证码 ==========")
 
             val slideTextInDialog = findSlideTextInDialog() ?: run {
                 Log.captcha(TAG, "未找到滑动验证文本，跳过处理")
                 return false // 未找到关键视图，返回 false 让其他处理器尝试
             }
-
             Log.captcha(TAG, "发现滑动验证文本: ${slideTextInDialog.getText()}")
-
-            if (!BaseModel.enableSlide.value) {
-                Log.captcha(TAG, "通过 MotionEvent 模拟滑动的功能已禁用，不执行任何操作。")
-                // 如果需要，可以在此处添加回退到旧版广播的逻辑
-            } else {
-                performSlideAndVerify(activity, slideTextInDialog)
-            }
+            performSlideAndVerify(activity, slideTextInDialog)
             return true // 已决定处理，返回 true 阻止 SimplePageManager 重试
         } catch (e: Exception) {
             Log.captcha(TAG, "处理滑动验证码时发生错误: ${e.stackTraceToString()}")
             return false
         } finally {
-            Log.captcha(TAG, "========== 结束处理滑动验证码 ==========")
             captchaProcessingMutex.unlock()
         }
     }
@@ -100,32 +100,23 @@ abstract class BaseCaptchaHandler {
             Log.captcha(TAG, "未能找到可操作的滑块视图，滑动无法执行。")
             return false
         }
-        // 计算滑动的绝对坐标
-        val location = IntArray(2)
-        sliderView.getLocationOnScreen(location)
-        val viewX = location[0]
-        val viewY = location[1]
-        val startX = viewX + SLIDE_START_OFFSET.toFloat()
-        val startY = viewY + sliderView.height / 2f
-
-        val screenWidth = activity.resources.displayMetrics.widthPixels
-        val endX = screenWidth - SLIDE_END_MARGIN.toFloat()
-
-        Log.captcha(TAG, "计算出的滑动路径: ($startX, $startY) -> ($endX, $startY) on view: ${sliderView.javaClass.name}")
-
+        // 计算滑动坐标
+        val (startX, startY, endX, endY) = calculateSlideCoordinates(sliderView) ?: run {
+            Log.captcha(TAG, "计算滑动坐标失败，滑动无法执行。")
+            return false
+        }
+        Log.captcha(TAG, "计算出的滑动路径: ($startX, $startY) -> ($endX, $endY)")
         // 执行滑动
         MotionEventSimulator.simulateSwipe(
             view = sliderView,
             startX = startX,
             startY = startY,
             endX = endX,
-            endY = startY, // 水平滑动
+            endY = endY,
             duration = SLIDE_DURATION
         )
 
-        Log.captcha(TAG, "滑动模拟已发送，延迟检查结果...")
         delay(POST_SLIDE_CHECK_DELAY_MS)
-
         return if (checkCaptchaTextGone()) {
             Log.captcha(TAG, "验证码文本已消失，滑动成功。")
             true
@@ -133,6 +124,44 @@ abstract class BaseCaptchaHandler {
             Log.captcha(TAG, "验证码文本仍然存在，滑动可能失败。")
             false
         }
+    }
+
+    /**
+     * 计算滑动验证码的坐标参数。
+     * 
+     * @param sliderView 滑块视图
+     * @return 包含(startX, startY, endX, endY)的四元组，如果计算失败返回null
+     */
+    private fun calculateSlideCoordinates(sliderView: android.view.View): SlideCoordinates? {
+        // 获取滑动区域的整体容器（滑块的父容器）
+        val slideContainer = sliderView.parent as? android.view.ViewGroup ?: run {
+            Log.captcha(TAG, "未能找到滑块容器")
+            return null
+        }
+        // 计算滑动区域的边界
+        val containerLocation = IntArray(2)
+        slideContainer.getLocationOnScreen(containerLocation)
+        val containerX = containerLocation[0]
+        val containerY = containerLocation[1]
+        val containerWidth = slideContainer.width
+        val containerHeight = slideContainer.height
+        
+        // 计算滑块位置
+        val sliderLocation = IntArray(2)
+        sliderView.getLocationOnScreen(sliderLocation)
+        val sliderX = sliderLocation[0]
+        val sliderY = sliderLocation[1]
+        
+        // 计算滑动起点（滑块中心稍微偏右，模拟手指按住滑块）
+        val startX = sliderX + sliderView.width / 2f + SLIDE_START_OFFSET.toFloat()
+        val startY = sliderY + sliderView.height / 2f
+
+        // 计算滑动终点（滑动容器的右端，减去一些边距）
+        val endX = containerX + containerWidth - SLIDE_END_MARGIN.toFloat()
+        val endY = startY // 保持水平滑动
+        Log.captcha(TAG, "滑动区域信息: 容器位置=[$containerX,$containerY], 尺寸=${containerWidth}x$containerHeight")
+        Log.captcha(TAG, "滑块信息: 位置=[$sliderX,$sliderY], 尺寸=${sliderView.width}x${sliderView.height}")
+        return SlideCoordinates(startX, startY, endX, endY)
     }
 
     /**
@@ -150,6 +179,7 @@ abstract class BaseCaptchaHandler {
         }
     }
 
+
     /**
      * 在对话框视图中查找滑动验证文本。
      * @return 如果找到则返回文本视图的 SimpleViewImage，否则返回 null。
@@ -157,13 +187,7 @@ abstract class BaseCaptchaHandler {
     private fun findSlideTextInDialog(): SimpleViewImage? {
         return try {
             Log.captcha(TAG, "尝试通过 XPath 查找滑动验证文本: $SLIDE_VERIFY_TEXT_XPATH")
-            val result = SimplePageManager.tryGetTopView(SLIDE_VERIFY_TEXT_XPATH)
-            if (result != null) {
-                Log.captcha(TAG, "成功找到滑动验证文本。")
-            } else {
-                Log.captcha(TAG, "未找到滑动验证文本。")
-            }
-            result
+             return SimplePageManager.tryGetTopView(SLIDE_VERIFY_TEXT_XPATH)
         } catch (e: Exception) {
             Log.captcha(TAG, "由于异常导致查找验证码文本失败: ${e.stackTraceToString()}")
             null

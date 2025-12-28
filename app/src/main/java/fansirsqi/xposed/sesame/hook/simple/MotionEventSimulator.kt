@@ -43,25 +43,20 @@ object MotionEventSimulator {
         CoroutineScope(Dispatchers.Main).launch {
             Log.i(TAG, "准备在视图 ${view.javaClass.simpleName} 上模拟滑动")
             Log.d(TAG, "从 ($startX, $startY) -> ($endX, $endY)，持续时间: ${duration}ms")
-
             if (!view.isShown || !view.isEnabled) {
                 Log.e(TAG, "滑动失败: 目标视图不可见或未启用.")
                 return@launch
             }
-
             val downTime = SystemClock.uptimeMillis()
-
             try {
                 // 1. 发送 ACTION_DOWN 事件，标志着手指按下
                 dispatchTouchEvent(view, MotionEvent.ACTION_DOWN, startX, startY, downTime, downTime)
                 delay(Random.nextLong(30, 80)) // 按下后短暂延迟，更像人
-
                 // 2. 模拟 ACTION_MOVE 事件序列，构造滑动轨迹
                 val steps = 20 // 将滑动轨迹分为 20 步
                 val stepDuration = (duration - 100) / steps
                 val xStep = (endX - startX) / steps
                 val yStep = (endY - startY) / steps
-
                 for (i in 1..steps) {
                     val currentX = startX + xStep * i + Random.nextInt(-3, 4) // 增加微小随机抖动
                     val currentY = startY + yStep * i + Random.nextInt(-2, 3)
@@ -69,13 +64,10 @@ object MotionEventSimulator {
                     dispatchTouchEvent(view, MotionEvent.ACTION_MOVE, currentX, currentY, downTime, eventTime)
                     delay(stepDuration)
                 }
-
                 // 3. 发送 ACTION_UP 事件，标志着手指抬起
                 val upTime = downTime + duration
                 dispatchTouchEvent(view, MotionEvent.ACTION_UP, endX, endY, downTime, upTime)
-
                 Log.i(TAG, "模拟滑动事件序列发送完毕.")
-
             } catch (e: Throwable) {
                 Log.e(TAG, "派发触摸事件时发生异常", e)
             }
@@ -97,13 +89,13 @@ object MotionEventSimulator {
             id = 0
             toolType = MotionEvent.TOOL_TYPE_FINGER
         })
-        val coords = arrayOf(MotionEvent.PointerCoords().apply {
+        val cords = arrayOf(MotionEvent.PointerCoords().apply {
             this.x = x
             this.y = y
             pressure = 1f
             size = 1f
         })
-        val event = MotionEvent.obtain(downTime, eventTime, action, 1, properties, coords, 0, 0, 1f, 1f, 0, 0, 0, 0)
+        val event = MotionEvent.obtain(downTime, eventTime, action, 1, properties, cords, 0, 0, 1f, 1f, 0, 0, 0, 0)
         view.dispatchTouchEvent(event)
         event.recycle()
     }
