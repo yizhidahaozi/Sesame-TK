@@ -136,7 +136,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                                 } else {
                                     // 超过单行最大长度，截断并标记
                                     if (buffer.size >= maxLines) buffer.removeFirst()
-                                    buffer.addLast(lineBuilder.toString() + "... [TRUNCATED]")
+                                    buffer.addLast("$lineBuilder... [TRUNCATED]")
                                     lineBuilder.clear()
                                     skippingLongLine = true
                                 }
