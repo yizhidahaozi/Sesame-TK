@@ -231,7 +231,7 @@ object DeviceInfoUtil {
             "Android Version" to "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
             "Verify ID" to vid,
             "Captcha Permission" to permissionStatus,
-            "Module Version" to "v${BuildConfig.VERSION_NAME}",
+            "Module Version" to "v${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
             "Module Build" to "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME}"
         )
     }
