@@ -146,7 +146,7 @@ abstract class BaseCaptchaHandler {
     private fun calculateSlideCoordinates(activity: Activity, sliderView: android.view.View): SlideCoordinates? {
         // 获取滑动区域的整体容器（滑块的父容器）
         val slideContainer = sliderView.parent as? android.view.ViewGroup ?: run {
-            Log.captcha(TAG, "未能找到滑块容器")
+          //  Log.captcha(TAG, "未能找到滑块容器")
             return null
         }
         
@@ -232,7 +232,7 @@ abstract class BaseCaptchaHandler {
      */
     private fun findSlideTextInDialog(): SimpleViewImage? {
         return try {
-            Log.captcha(TAG, "尝试通过 XPath 查找滑动验证文本: $SLIDE_VERIFY_TEXT_XPATH")
+          //  Log.captcha(TAG, "尝试通过 XPath 查找滑动验证文本: $SLIDE_VERIFY_TEXT_XPATH")
             SimplePageManager.tryGetTopView(SLIDE_VERIFY_TEXT_XPATH)
         } catch (e: Exception) {
             Log.captcha(TAG, "由于异常导致查找验证码文本失败: ${e.stackTraceToString()}")
