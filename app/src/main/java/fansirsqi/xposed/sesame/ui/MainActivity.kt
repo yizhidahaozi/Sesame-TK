@@ -493,7 +493,7 @@ fun MainScreen(
                             // 状态 B: 显示文本
                             Text(
                                 text = oneWord,
-                                fontSize = 16.sp,
+                                fontSize = 14.sp,
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
