@@ -455,7 +455,7 @@ fun MainScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         // 🔥 核心防抖：设置最小高度 (例如 60dp)，保证即使内容变化，占据的空间也不会忽大忽小
-                        .heightIn(min = 100.dp)
+                        .heightIn(min = 130.dp)
                         .padding(8.dp)
                         .clip(RoundedCornerShape(8.dp)) // 点击水波纹圆角
                         .clickable(
