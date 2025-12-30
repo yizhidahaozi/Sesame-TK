@@ -642,7 +642,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         // 只收能量时间段，启用循环查找能量功能
                         Log.record(TAG, "👥 开始执行查找能量...")
                         try {
-                            collectEnergyByTakeLook() // 查找能量（协程）
+                            quickcollectEnergyByTakeLook() // 查找能量（协程）
                         } catch (e: CancellationException) {
                             Log.runtime(TAG, "查找能量被取消，退出循环")
                             break
@@ -1999,6 +1999,111 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 nextTakeLookTime = 0
             }
             val msg = "找能量结束，本次收取: $foundCount 个"
+            Log.record(TAG, msg)
+            tc.countDebug(msg)
+        }
+    }
+
+    /**
+     * 7点-7点30分快速收取能量，跳过道具判断
+     */
+    private fun quickcollectEnergyByTakeLook() {
+        // 1. 冷却检查
+        val currentTime = System.currentTimeMillis()
+        if (currentTime < nextTakeLookTime) {
+            val remaining = (nextTakeLookTime - currentTime) / 1000
+            Log.record(TAG, "找能量冷却中，等待 ${remaining / 60}分${remaining % 60}秒")
+            return
+        }
+
+        val tc = TimeCounter(TAG)
+        var foundCount = 0
+        val maxAttempts = 10
+        var consecutiveEmpty = 0
+        var shouldCooldown = false
+
+        // 本地去重集合：只防止单次运行中死循环刷同一个人，不跨运行记忆
+        val visitedInSession = mutableSetOf<String>()
+        val emptyParam = JSONObject()
+
+        Log.record(TAG, "开始找能量 (无视黑名单与道具)")
+
+        try {
+            loop@ for (attempt in 1..maxAttempts) {
+                // A. 调用接口
+                val takeLookResult = try {
+                    val resStr = AntForestRpcCall.takeLook(emptyParam)
+                    JSONObject(resStr)
+                } catch (e: Exception) {
+                    Log.printStackTrace(TAG, "找能量接口异常", e)
+                    shouldCooldown = true
+                    break@loop
+                }
+
+                // B. 检查接口返回是否成功
+                if (!ResChecker.checkRes("$TAG 接口业务失败:", takeLookResult)) {
+                    break@loop
+                }
+
+                // C. 获取 friendId
+                val friendId = takeLookResult.optString("friendId")
+
+                // 如果 friendId 为空，说明服务器无目标推荐
+                if (friendId.isNullOrBlank()) {
+                    consecutiveEmpty++
+                    Log.record(TAG, "第$attempt 次未发现有能量的好友")
+
+                    if (consecutiveEmpty >= 2) {
+                        Log.record(TAG, "系统无可偷取目标，结束")
+                        break@loop
+                    }
+                    GlobalThreadPools.sleepCompat(500L)
+                    continue@loop
+                }
+
+                // D. 排除自己
+                if (friendId == selfId) {
+                    Log.record(TAG, "发现自己，跳过")
+                    consecutiveEmpty++
+                    continue@loop
+                }
+
+                // E. 本地会话去重 (防止服务器一直返回同一个ID造成本次死循环)
+                if (visitedInSession.contains(friendId)) {
+                    Log.record(TAG, "本次已检查过用户($friendId)，跳过")
+                    consecutiveEmpty++
+                    if (consecutiveEmpty >= 3) break@loop
+                    continue@loop
+                }
+
+                // 标记已访问
+                visitedInSession.add(friendId)
+
+                // G. 查询主页详情 (获取能量球ID必须步骤)
+                val friendHomeObj = queryFriendHome(friendId, "TAKE_LOOK")
+                if (friendHomeObj == null) {
+                    continue@loop
+                }
+
+                // I. 直接收取能量
+                // 即使有保护罩（收0g）或炸弹（可能扣能量），也执行收取动作
+                collectEnergy(friendId, friendHomeObj, "takeLook")
+
+                foundCount++
+                consecutiveEmpty = 0 // 重置空计数
+
+                // 模拟操作延迟
+                GlobalThreadPools.sleepCompat(500L)
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "找能量流程异常", e)
+        } finally {
+            if (shouldCooldown) {
+                nextTakeLookTime = System.currentTimeMillis() + TAKE_LOOK_COOLDOWN_MS
+            } else {
+                nextTakeLookTime = 0
+            }
+            val msg = "找能量结束，本次尝试收取: $foundCount 个"
             Log.record(TAG, msg)
             tc.countDebug(msg)
         }
