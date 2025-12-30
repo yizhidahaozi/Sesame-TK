@@ -77,7 +77,7 @@ abstract class BaseCaptchaHandler {
         }
         try {
             val slideTextInDialog = findSlideTextInDialog() ?: run {
-                Log.captcha(TAG, "未找到滑动验证文本，跳过处理")
+               // Log.captcha(TAG, "未找到滑动验证文本，跳过处理")
                 return false // 未找到关键视图，返回 false 让其他处理器尝试
             }
             Log.captcha(TAG, "发现滑动验证文本: ${slideTextInDialog.getText()}")
