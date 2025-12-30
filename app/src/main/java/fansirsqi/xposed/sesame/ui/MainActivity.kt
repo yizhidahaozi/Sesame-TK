@@ -351,6 +351,7 @@ fun MainScreen(
     }
 
     Scaffold(
+        // 标题栏
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -447,7 +448,7 @@ fun MainScreen(
                     CircularProgressIndicator()
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 Box(
                     contentAlignment = Alignment.Center,
