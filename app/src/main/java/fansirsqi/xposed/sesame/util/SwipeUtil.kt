@@ -30,25 +30,45 @@ object SwipeUtil {
                     launchSuccess = true
                 } else {
                     Log.d(TAG, "不带用户ID启动失败，尝试带用户ID的启动命令")
-                    // 如果不带用户ID的命令失败，尝试带用户ID的备用命令（999）
-                    val userId = "999" // 支付宝多开用户ID
+                    val userId = "999"
                     val fallbackCommand = "am start --user $userId com.eg.android.AlipayGphone/com.eg.android.AlipayGphone.AlipayLogin"
                     val fallbackResult = CommandUtil.executeCommand(context, fallbackCommand)
                     if (fallbackResult != null) {
                         launchSuccess = true
                     } else {
-                        Log.d(TAG, "带用户ID启动失败，回退到scheme启动方式")
+                        Log.d(TAG, "带用户ID启动失败，尝试Intent启动")
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "执行支付宝启动命令失败: ${e.message}")
             }
-            // 如果shell命令启动失败，回退到scheme启动方式
             if (!launchSuccess) {
-                Log.d(TAG, "shell命令启动失败，回退到scheme启动方式")
+                Log.d(TAG, "shell命令启动失败，尝试Intent启动")
+                launchSuccess = startByIntent(context)
+            }
+            if (!launchSuccess) {
+                Log.d(TAG, "Intent启动失败，回退到scheme启动方式")
                 return@runBlocking startBySchemeSync(context)
             }
             true
+        }
+    }
+
+    @JvmStatic
+    fun startByIntent(context: Context): Boolean {
+        return try {
+            val intent = Intent()
+            intent.component = android.content.ComponentName(
+                "com.eg.android.AlipayGphone",
+                "com.eg.android.AlipayGphone.AlipayLogin"
+            )
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            Log.d(TAG, "Intent 启动成功")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Intent 启动失败: ${e.message}")
+            false
         }
     }
 
