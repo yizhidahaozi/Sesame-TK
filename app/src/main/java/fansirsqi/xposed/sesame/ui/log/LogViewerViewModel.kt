@@ -161,11 +161,12 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             // 刷新列表
             refreshList()
 
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
             val errorMsg = "读取失败: ${e.message} (可能无权限)"
             Log.error(tag, errorMsg)
-
             withContext(Dispatchers.Main) {
                 // 停止 Loading，显示错误信息
                 _uiState.update { it.copy(isLoading = false) }
