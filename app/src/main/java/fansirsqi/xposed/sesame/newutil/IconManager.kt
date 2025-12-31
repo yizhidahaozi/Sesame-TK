@@ -41,8 +41,6 @@ object IconManager {
             // 平时：启用默认版，禁用圣诞版
             enableComponent(context, pm, COMPONENT_DEFAULT)
             disableComponent(context, pm, COMPONENT_CHRISTMAS)
-
-            ToastUtil.showToast(context, "欢迎回来!")
         }
         if (inDateRange(1, 1, 1)) {
             ToastUtil.showToast(context, "Happy New Year!")
