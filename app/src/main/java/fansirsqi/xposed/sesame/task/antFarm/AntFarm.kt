@@ -218,6 +218,7 @@ class AntFarm : ModelTask() {
     private var chickenDiary: BooleanModelField? = null
     private var diaryTietie: BooleanModelField? = null
     private var collectChickenDiary: ChoiceModelField? = null
+    private lateinit var remainingTime: IntegerModelField
     private var enableChouchoule: BooleanModelField? = null
     private var enableChouchouleTime: StringModelField? = null // 抽抽乐执行时间
     private var listOrnaments: BooleanModelField? = null
@@ -416,6 +417,9 @@ class AntFarm : ModelTask() {
                 false
             ).also { useAccelerateToolContinue = it })
         modelFields.addField(
+            IntegerModelField("remainingTime", "饲料剩余时间大于多少时直接使用加速（分钟）（-1关闭）", 50).also { remainingTime = it }
+        )
+        modelFields.addField(
             BooleanModelField(
                 "useAccelerateToolWhenMaxEmotion",
                 "加速卡 | 仅在满状态时使用",
@@ -605,6 +609,24 @@ class AntFarm : ModelTask() {
             if (hireAnimal!!.value) {
                 hireAnimal()
             }
+
+            /* 为保证单次运行程序可以完成全部任务，而加速卡用完会消耗最多360g饲料，如果差360g满饲料，那肯定不能执行
+                游戏改分了，需要先把饲料任务完成，方便在连续用加速卡逻辑中领取饲料。
+             */
+            if (doFarmTask!!.value) {
+                // 这里设置判断，如果当日完成过一次饲料任务了，就不会在这个位置再进行饲料任务了。
+                if(!Status.hasFlagToday("farm::farmTaskFinished")) {
+                    // 检查是否到达执行时间
+                    if (TaskTimeChecker.isTimeReached(doFarmTaskTime?.value, "0830")) {
+                        doFarmTasks()
+                        tc.countDebug("饲料任务")
+                        Status.setFlagToday("farm::farmTaskFinished")
+                    } else {
+                        Log.record(TAG, "饲料任务未到执行时间，跳过")
+                    }
+                }
+            }
+
             handleAutoFeedAnimal()
             tc.countDebug("喂食")
 
@@ -624,14 +646,42 @@ class AntFarm : ModelTask() {
                 tc.countDebug("收取道具奖励")
             }
             if (recordFarmGame!!.value) {
-                for (time in farmGameTime!!.value) {
-                    if (TimeUtil.checkNowInTimeRange(time)) {
-                        recordFarmGame(GameType.starGame)
-                        recordFarmGame(GameType.jumpGame)
-                        recordFarmGame(GameType.flyGame)
-                        recordFarmGame(GameType.hitGame)
-                        break
+                if (!Status.hasFlagToday("farm::farmGameFinished")) {
+                    // 判断如果加速卡已经使用完毕，则进行游戏改分。
+                    if (Status.hasFlagToday("farm::accelerateLimit") || !Status.canUseAccelerateTool()) {
+                        syncAnimalStatus(ownerFarmId)
+                        /* 飞行赛两局可以得到至少180g饲料，但是揍小鸡不获得饲料，因此只要差180g以内到饲料上限，都可以
+                         通过飞行赛补满。因此调整先飞行赛，把饲料补满，再进行其他游戏。可以保证其他游戏只会获得加速卡
+                         避免加速卡损失，或先进行拍球和登山赛获得了饲料使饲料满了，飞行赛只会获得0g饲料，造成浪费
+                         */
+                        if (foodStock >= foodStockLimit - 180) {
+                            recordFarmGame(GameType.flyGame)
+                            recordFarmGame(GameType.hitGame)
+                            recordFarmGame(GameType.starGame)
+                            recordFarmGame(GameType.jumpGame)
+                            // 设置游戏已完成标记
+                            Status.setFlagToday("farm::farmGameFinished")
+                        } else {
+                            Log.farm("加速卡已使用达上限;饲料小于上限超过了180g，暂不执行游戏改分")
+                        }
+                    } else {
+                        Log.farm("加速卡未使用到达上限，暂不执行游戏改分")
                     }
+                    // 如果用户没有启用使用加速卡逻辑，则按原有逻辑执行游戏改分
+                    if (!useAccelerateTool!!.value) {
+                        for (time in farmGameTime!!.value) {
+                            if (TimeUtil.checkNowInTimeRange(time)) {
+                                recordFarmGame(GameType.flyGame)
+                                recordFarmGame(GameType.hitGame)
+                                recordFarmGame(GameType.starGame)
+                                recordFarmGame(GameType.jumpGame)
+                                Status.setFlagToday("farm::farmGameFinished")
+                                break
+                            }
+                        }
+                    }
+                } else {
+                    Log.farm("今日庄园游戏改分已完成")
                 }
                 tc.countDebug("游戏改分(星星球、登山赛、飞行赛、揍小鸡)")
             }
@@ -665,6 +715,7 @@ class AntFarm : ModelTask() {
             if (donation!!.value && Status.canDonationEgg(userId) && harvestBenevolenceScore >= 1) {
                 handleDonation(donationCount!!.value)
                 tc.countDebug("每日捐蛋")
+                Log.farm("今日捐蛋完成")
             }
 
 
@@ -674,6 +725,7 @@ class AntFarm : ModelTask() {
                 if (TaskTimeChecker.isTimeReached(doFarmTaskTime?.value, "0830")) {
                     doFarmTasks()
                     tc.countDebug("饲料任务")
+                    Status.setFlagToday("farm::farmTaskFinished")
                 } else {
                     Log.record(TAG, "饲料任务未到执行时间，跳过")
                 }
@@ -704,14 +756,30 @@ class AntFarm : ModelTask() {
 
             // 抽抽乐
             if (enableChouchoule!!.value) {
-                // 检查是否到达执行时间
-                if (TaskTimeChecker.isTimeReached(enableChouchouleTime?.value, "0900")) {
-                    val ccl = ChouChouLe()
-                    ccl.chouchoule()
-                    tc.countDebug("抽抽乐")
+                if (!Status.hasFlagToday("farm::chouChouLeFinished")) {
+                    // 判断如果游戏改分已完成再进行抽抽乐；或者用户没开启游戏改分，则直接进行抽抽乐
+                    if (Status.hasFlagToday("farm::farmGameFinished")) {
+                        val ccl = ChouChouLe()
+                        ccl.chouchoule()
+                        tc.countDebug("抽抽乐")
+                        Status.setFlagToday("farm::chouChouLeFinished")
+                    } else {
+                    Log.farm("游戏改分还没有执行，暂不执行抽抽乐")
+                    }
+
+                    // 如果没用开启游戏改分，则按原来的逻辑进行抽抽乐
+                    if (!recordFarmGame!!.value && (TaskTimeChecker.isTimeReached(enableChouchouleTime?.value, "0900"))) {
+                        val ccl = ChouChouLe()
+                        ccl.chouchoule()
+                        tc.countDebug("抽抽乐")
+                        Status.setFlagToday("farm::chouChouLeFinished")
+                    } else {
+                        Log.record(TAG, "抽抽乐未到执行时间，跳过")
+                    }
                 } else {
-                    Log.record(TAG, "抽抽乐未到执行时间，跳过")
+                    Log.farm("今日抽抽乐已完成")
                 }
+
             }
 
             if (getFeed!!.value) {
@@ -738,6 +806,16 @@ class AntFarm : ModelTask() {
             //小鸡睡觉&起床
             animalSleepAndWake()
             tc.countDebug("小鸡睡觉&起床")
+
+            /* 小鸡睡觉后领取饲料，先同步小鸡状态，更新小鸡为SLEEPY状态，然后领取饲料。避免小鸡睡觉后软件异常，引起
+                喂小鸡睡觉的饲料没有领取，而造成缺口
+             */
+            syncAnimalStatus(ownerFarmId)
+            if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                Log.record(TAG, "小鸡正在睡觉，领取饲料")
+                receiveFarmAwards()
+            }
+
             tc.stop()
         } catch (e: CancellationException) {
             // 协程取消是正常现象，不记录为错误
@@ -1148,6 +1226,11 @@ class AntFarm : ModelTask() {
         // 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
         if (AnimalFeedStatus.SLEEPY.name != ownerAnimal.animalFeedStatus) {
             try {
+                /* 创建蹲点任务时间点前先同步countdown，因为可能因为好友小鸡在两次执行间隔间偷吃而引起蹲点时间变动。
+                    比如投喂后程序第一次计算了剩余时间是4小时40分钟，那中间有小鸡偷吃，时间就少于4：40分钟了。再用原来
+                    的时间显然有误,除非其他逻辑同步了小鸡状态才会修正，这里直接同步+修正
+                 */
+                syncAnimalStatus(ownerFarmId)
                 // 直接使用服务器计算的权威倒计时（单位：秒）
                 val remainingSec = countdown?.toDouble()?.coerceAtLeast(0.0)
                 // 如果倒计时为0，跳过任务创建
@@ -1188,11 +1271,7 @@ class AntFarm : ModelTask() {
                                 execTime = nextFeedTime
                             )
                         )
-                        Log.record(
-                            TAG,
-                            "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" +
-                                    TimeUtil.getCommonDate(nextFeedTime) + "]执行"
-                        )
+                        Log.farm(UserMap.getCurrentMaskName() + "小鸡的蹲点投喂时间[" + TimeUtil.getCommonDate(nextFeedTime)+"]")
                     } else {
                         Log.record(TAG, "蹲点投喂🥣[倒计时为0，开始投喂]")
                         if (feedAnimal(ownerFarmId)) {
@@ -1833,7 +1912,7 @@ class AntFarm : ModelTask() {
                 // 检查任务标题和业务键是否在黑名单中
                 val titleInBlacklist = TaskBlacklist.isTaskInBlacklist(title)
                 val bizKeyInBlacklist = TaskBlacklist.isTaskInBlacklist(bizKey)
-                    Log.debug(TAG, "庄园任务检查 - 标题: $title, 业务键: $bizKey, 标题在黑名单: $titleInBlacklist, 业务键在黑名单: $bizKeyInBlacklist")
+                Log.debug(TAG, "庄园任务检查 - 标题: $title, 业务键: $bizKey, 标题在黑名单: $titleInBlacklist, 业务键在黑名单: $bizKeyInBlacklist")
                 if (titleInBlacklist || bizKeyInBlacklist) {
                     Log.debug(TAG, "跳过黑名单任务: $title ($bizKey)")
                     continue
@@ -1950,23 +2029,48 @@ class AntFarm : ModelTask() {
                             // 领取前先同步一次食槽状态，避免边界误差
                             syncAnimalStatus(ownerFarmId)
 
+                            val foodStockAfter = foodStock + awardCount
                             if ("ALLPURPOSE" == task.optString("awardType")) {
-                                // 使用 ">=" 防止刚好到上限时仍然领取导致 331
-                                if (awardCount + foodStock >= foodStockLimit) {
+                                /* 领取饲料前，当现有饲料>=上限时（实时只可能等于，不需要用大于等于的判断），或者在晚上20点前领取饲料后使饲料超过上限，则不领取饲料，
+                                    直接break方法。但是如果时间在20点后，这时饲料没满，比如差80g满，这时候领取90g的任务奖励虽然会超过饲料上限，但还是依然领取
+                                    饲料，这样能保证饲料第二天是满的开局。如果需要赠送饲料或厨房等会使饲料不是以90/180g减少的操作，应该不会有人在20点后还没有
+                                    完成吧？同时也避免了原逻辑的饲料差90g以内后总是领不满的问题。
+                                 */
+                                if ((foodStock >= foodStockLimit) || ((awardCount + foodStock > foodStockLimit) && !TimeUtil.isNowAfterOrCompareTimeStr("2000")) ) {
                                     unreceiveTaskAward++
-                                    Log.record(
-                                        TAG,
-                                        taskTitle + "领取" + awardCount + "g饲料后将达到/超过[" + foodStockLimit + "g]上限!终止领取"
-                                    )
-                                    isFeedFull = true
-                                    break
+                                    if (foodStock == foodStockLimit){
+                                        Log.record(TAG, "饲料[已满],暂不领取")
+                                        break
+                                    } else {
+                                            Log.record(
+                                                TAG,
+                                                "领取任务：${ taskTitle } 的 ${awardCount}g饲料后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g"
+                                            )
+                                            isFeedFull = true
+                                            break
+                                    }
                                 }
+                            }
+                            // 针对连续使用加速卡时的领取饲料逻辑，留180g以内（含180g）的空间。如果游戏改分未完成，比如饲料正好是1620g时（上限1800g），不领取饲料。(同时确认开启游戏改分)
+                            if ((!Status.hasFlagToday("farm::farmGameFinished")) && (foodStock >= foodStockLimit - 180) && recordFarmGame!!.value){
+                                Log.farm("当日游戏改分未完成，预留180g饲料空间，现有饲料${foodStock}g")
+                                break
                             }
                             val receiveTaskAwardjo =
                                 JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId))
                             if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount)
-                                Log.farm("庄园奖励[" + taskTitle + "]#" + awardCount + "g")
+                                Log.farm("收取庄园任务奖励[" + taskTitle + "]#" + awardCount + "g")
+                                if(foodStock == foodStockLimit){
+                                    // 领满就直接跳出循环，避免再提交一次领取请求
+                                    Log.farm("领取饲料[等于]饲料上限" + foodStockLimit + "g，停止后续领取")
+                                    break
+                                }
+                                if(foodStockAfter > foodStockLimit){
+                                    // 20点后满足条件的领取的log，也是跳出避免再次提交请求
+                                    Log.farm("时间超过20点，即使领取后将[超过]饲料上限仍将领取饲料奖励。饲料已到上限${foodStockLimit}g，停止后续领取")
+                                    break
+                                }
                                 doubleCheck = true
                                 if (unreceiveTaskAward > 0) unreceiveTaskAward--
                             }
@@ -2121,46 +2225,139 @@ class AntFarm : ModelTask() {
         }
         // 4) 同步最新状态，确保消耗速度、已吃量、食槽上限为最新
         syncAnimalStatus(ownerFarmId)
-        var totalConsumeSpeed = 0.0
+
+        // 当前小鸡剩余多长时间吃完饲料
+        val currentCountdown = countdown?.toDouble() ?: 0.0
+        if (currentCountdown <= 0) return false
+
         var totalFoodHaveEatten = 0.0
-        val nowTime = System.currentTimeMillis() / 1000
-        // 5) 计算“总已吃量（含时间增量）”与“总消耗速度”
+        var totalConsumeSpeed = 0.0
+        /* 小鸡自己已经吃的食物参数是foodHaveStolen，而不是foodHaveEatten,这是非常关键的问题！
+            实际情况是使用加速卡后所吃的饲料才算在foodHaveEatten里，foodHaveEatten即使不使用加速卡也会有个随机？的1以内的值，通常0.1左右，也就是非0
+            startEatTime通常是投喂小鸡饲料的时间，但
+            小鸡起床后startEatTime（含日期参数的时间）会重新变更为起床的时间，比如6：00起床，而喂食时间实际是昨晚的20：00,startEatTime=20：00,然后小鸡睡觉
+            6：00起床，再获取startEatTime则为6：00
+            因此剩余饲料量应该使用countdown来进行计算，这是准确的。
+         */
         for (animal in animals!!) {
+            totalFoodHaveEatten += animal.foodHaveStolen!!
             totalFoodHaveEatten += animal.foodHaveEatten!!
-            totalFoodHaveEatten += animal.consumeSpeed!! * (nowTime - animal.startEatTime!!.toDouble() / 1000)
             totalConsumeSpeed += animal.consumeSpeed!!
         }
+        // 自己的小鸡每小时消耗的饲料g数
+        val  foodConsumePerHour = ownerAnimal.consumeSpeed!! * 60 * 60
         Log.record(
             TAG,
             "加速卡内部计算⏩[totalConsumeSpeed=$totalConsumeSpeed, totalFoodHaveEatten=$totalFoodHaveEatten, limit=$foodInTroughLimitCurrent]"
         )
-        // 6) 判定条件：至少还能吃满 1 小时（3600 秒）的量才使用一次加速卡
-        //    单位换算：consumeSpeed 单位为 g/s，因此 1 小时的消耗 = totalConsumeSpeed * 3600
+        if (totalConsumeSpeed <= 0) return false
+        /* 修改为剩余时间大于自定义remainingTime分钟则使用加速卡，也就是说，当你界面上看到的多久之后吃完。目前的逻辑是小于60分钟则不使用加速卡
+            这可以避免损失部分时间，但是不利于一次性完成所有任务，因此可以自定义剩余时间，比如设置剩余时间为40（分钟）时，在饲料吃完剩余时间在40
+            分钟以上时，比如剩余41分钟，则直接使用加速卡，并进行后续逻辑（把加速卡用完、在游戏改分、再抽抽乐）；但是如果剩余时间是39分钟，则不使用
+            加速卡，需等待饲料吃完再次投喂后进入加速卡判断模块继续使用加速卡。
+            剩余时间的设置在软件设置里；值为1-59,设置其他值则默认是原逻辑，即60分钟内的不加速。
+         */
         var isUseAccelerateTool = false
-        while (foodInTroughLimitCurrent - totalFoodHaveEatten >= totalConsumeSpeed * 3600) {
+        var remainingTimeValue = remainingTime.value
+        if (remainingTimeValue !in 1..<60){
+            remainingTimeValue = 60
+            Log.farm("连续使用加速卡加速的剩余时间设置有误，正确值1-59,现不加速剩余时间为1个小时内的饲料")
+        }
+        // 剩余饲料量应该根据当前吃饲料的总速度 * 剩余时间原计算逻辑是错误的，总速度就是自己的鸡+偷吃的鸡
+        var remainingFood = currentCountdown * totalConsumeSpeed
+        /* 加速卡逻辑应该是消耗自己小鸡1个小时的食物消耗量，这个量只取决于自己小鸡的食物消耗速度，大约38g左右；
+            计算：foodConsumeSpeed（g/s） * 3600 (g)
+            因此对于不足一个小时/指定大于剩余时间的加速应该理解为剩余饲料大于这个指定时间的自己小鸡的食物消耗量，
+            这种情况下即使有多只偷吃小鸡时也可以按照设置的剩余时间（remainingTime）正确的把加速卡连续使用光。
+            也就是说，即使有多只鸡在偷吃/工作，界面上显示还有remainingTime分钟吃完，那使用加速卡也可以加速掉
+            剩余食物，然后再次投喂
+         */
+        /* 1. 定义一个用于记录退出原因的变量，是为了在exitReason == "CONDITION_NOT_MET"，在小鸡饲料剩余时间不足设置
+            的remainingTime时进行日志打印，如设置的是40分钟，但是饲料剩余只有30分钟，那打印一下为什么没有把加速卡用完。
+         */
+
+        var exitReason = "CONDITION_NOT_MET"
+        while (remainingFood >= remainingTimeValue / 60.0 * foodConsumePerHour ) {
             // 检查本地计数器上限，防止无限使用
             if (!Status.canUseAccelerateTool()) {
                 Log.record(TAG, "加速卡内部⏩已达到本地使用上限(8次)，停止使用")
+                Status.setFlagToday("farm::accelerateLimit")
+                exitReason = "REACHED_LIMIT"
                 break
             }
             // 可选条件：若勾选“仅心情满值时加速”，且当前心情不为 100，则跳出
             if ((useAccelerateToolWhenMaxEmotion!!.value && finalScore != 100.0)) {
+                exitReason = "EMOTION_NOT_MAX"
                 break
             }
             if (useFarmTool(ownerFarmId, ToolType.ACCELERATETOOL)) {
-                // 使用成功后，等效地“吃掉”未来 1 小时的饲料
-                totalFoodHaveEatten += totalConsumeSpeed * 3600
+                // 用了一张加速卡，那剩余饲料减少自己小鸡1个小时的饲料消耗量，如前述38g左右
+                remainingFood -= foodConsumePerHour
                 isUseAccelerateTool = true
                 Status.useAccelerateTool()
-                delay(1000)
+                val timeLeft = remainingFood / totalConsumeSpeed
+                if (timeLeft >= 0.0){
+                    Log.farm("使用了1张加速卡⏩ 预估剩余时间: ${(timeLeft/60).toInt()} 分钟")
+                    // 打印用了几张加速卡
+                    Log.farm("今日已使用${Status.INSTANCE.useAccelerateToolCount}张加速卡")
+                    delay(1000)
+                } else{
+                    /* timeLeft也就是饲料剩余时间，小于0则说明饲料吃完了，直接进行投喂，这样可以在一次任务里完成加速
+                        卡的使用。如果加速后吃完了，尝试补喂并刷新倒计时。等待8秒是为了防止计算结果的细微差异引起投喂失败
+                     */
+                    Log.farm("使用加速卡后小鸡饲料吃完，等待8秒后尝试喂鸡")
+                    delay(8000)
+                    // 等8秒刷新一下小鸡状态，确认是真的处于饥饿状态
+                    syncAnimalStatus(ownerFarmId)
+                    if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
+                        if (feedAnimal(ownerFarmId)) {
+                            // 这里似乎不用在刷新了
+                            syncAnimalStatus(ownerFarmId)
+                            // 投喂成功后剩余食物变成了180g
+                            remainingFood = 180.0
+                            Log.farm("加速卡后投喂小鸡成功！")
+                            /* 使用加速卡后尝试领取饲料，因为连续使用加速卡会导致饲料缺口，连续使用8张加速卡，最多可
+                                能投喂两次，饲料减少360g,这显然会导致游戏改分的判断条件失败，这样就不能在一次软件运行
+                                过程中完成所有任务，所以需要根据条件领取饲料。领取逻辑是，游戏改分飞行赛2次可以通常
+                                得到180g饲料，我测试没有低于180g的时候，因此可以留180g不领，用飞行赛填补。打小鸡
+                                没有饲料奖励
+                             */
+                            // 判断游戏改分还没完成。按照我的设计，其实这里不用判断，因为任务顺序就是先加速->游戏改分
+                            if (!Status.hasFlagToday("farm::farmGameFinished")){
+                                // 饲料量比上限少超过了180g则领取饲料，在180g内则不领，留给飞行赛填补
+                                if (foodStock < foodStockLimit - 180) {
+                                    Log.farm("加速后已喂食，领取饲料奖励")
+                                    receiveFarmAwards()
+                                } else {
+                                    Log.farm("今天游戏改分还没有完成，预留180g的饲料剩余空间，目前饲料${foodStock}g，还差${foodStockLimit - foodStock}g满饲料")
+                                }
+                            } else {
+                                Log.farm("加速后已喂食，领取饲料奖励")
+                                receiveFarmAwards()
+                            }
+                        } else {
+                            remainingFood = (countdown?.toDouble() ?: 0.0) * totalConsumeSpeed
+                            Log.farm("使用加速卡使饲料吃完，投喂小鸡失败！")
+                        }
+                    } else {
+                        // 如果再次同步发现小鸡不是饥饿状态，重新开始计算remainingFood
+                        remainingFood = (countdown?.toDouble() ?: 0.0) * totalConsumeSpeed
+                    }
+                }
             } else {
                 Log.record(TAG, "加速卡内部⏩useFarmTool 返回失败，终止循环")
+                exitReason = "TOOL_USE_FAILED"
                 break
             }
             // 若未开启“连续使用”，只使用 1 次后退出
             if (!useAccelerateToolContinue!!.value) {
+                exitReason = "SINGLE_USE_MODE"
                 break
             }
+        }
+        // 这里打印没有连续使用8张加速卡的原因
+        if (exitReason == "CONDITION_NOT_MET") {
+            Log.farm("剩余可加速的时间少于设置的${remainingTimeValue}分钟，将在下次喂食后再次使用加速卡")
         }
         Log.record(TAG, "加速卡内部⏩最终 isUseAccelerateTool=$isUseAccelerateTool")
         return isUseAccelerateTool
@@ -3568,6 +3765,9 @@ class AntFarm : ModelTask() {
 
         @JsonProperty("foodHaveEatten")
         var foodHaveEatten: Double? = null
+
+        @JsonProperty("foodHaveStolen")
+        var foodHaveStolen: Double? = null
 
         @JsonProperty("animalStatusVO")
         fun unmarshalAnimalStatusVO(map: MutableMap<String?, Any?>?) {
