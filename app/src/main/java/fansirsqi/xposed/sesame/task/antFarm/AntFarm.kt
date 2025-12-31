@@ -646,44 +646,8 @@ class AntFarm : ModelTask() {
                 tc.countDebug("收取道具奖励")
             }
             if (recordFarmGame!!.value) {
-                if (!Status.hasFlagToday("farm::farmGameFinished")) {
-                    // 判断如果加速卡已经使用完毕，则进行游戏改分。
-                    if (Status.hasFlagToday("farm::accelerateLimit") || !Status.canUseAccelerateTool()) {
-                        syncAnimalStatus(ownerFarmId)
-                        /* 飞行赛两局可以得到至少180g饲料，但是揍小鸡不获得饲料，因此只要差180g以内到饲料上限，都可以
-                         通过飞行赛补满。因此调整先飞行赛，把饲料补满，再进行其他游戏。可以保证其他游戏只会获得加速卡
-                         避免加速卡损失，或先进行拍球和登山赛获得了饲料使饲料满了，飞行赛只会获得0g饲料，造成浪费
-                         */
-                        if (foodStock >= foodStockLimit - 180) {
-                            recordFarmGame(GameType.flyGame)
-                            recordFarmGame(GameType.hitGame)
-                            recordFarmGame(GameType.starGame)
-                            recordFarmGame(GameType.jumpGame)
-                            // 设置游戏已完成标记
-                            Status.setFlagToday("farm::farmGameFinished")
-                        } else {
-                            Log.farm("加速卡已使用达上限;饲料小于上限超过了180g，暂不执行游戏改分")
-                        }
-                    } else {
-                        Log.farm("加速卡未使用到达上限，暂不执行游戏改分")
-                    }
-                    // 如果用户没有启用使用加速卡逻辑，则按原有逻辑执行游戏改分
-                    if (!useAccelerateTool!!.value) {
-                        for (time in farmGameTime!!.value) {
-                            if (TimeUtil.checkNowInTimeRange(time)) {
-                                recordFarmGame(GameType.flyGame)
-                                recordFarmGame(GameType.hitGame)
-                                recordFarmGame(GameType.starGame)
-                                recordFarmGame(GameType.jumpGame)
-                                Status.setFlagToday("farm::farmGameFinished")
-                                break
-                            }
-                        }
-                    }
-                } else {
-                    Log.farm("今日庄园游戏改分已完成")
-                }
                 tc.countDebug("游戏改分(星星球、登山赛、飞行赛、揍小鸡)")
+                handleFarmGameLogic()
             }
             if (kitchen!!.value) {
                 // 检查小鸡是否在睡觉，如果在睡觉则跳过厨房功能
@@ -756,30 +720,8 @@ class AntFarm : ModelTask() {
 
             // 抽抽乐
             if (enableChouchoule!!.value) {
-                if (!Status.hasFlagToday("farm::chouChouLeFinished")) {
-                    // 判断如果游戏改分已完成再进行抽抽乐；或者用户没开启游戏改分，则直接进行抽抽乐
-                    if (Status.hasFlagToday("farm::farmGameFinished")) {
-                        val ccl = ChouChouLe()
-                        ccl.chouchoule()
-                        tc.countDebug("抽抽乐")
-                        Status.setFlagToday("farm::chouChouLeFinished")
-                    } else {
-                    Log.farm("游戏改分还没有执行，暂不执行抽抽乐")
-                    }
-
-                    // 如果没用开启游戏改分，则按原来的逻辑进行抽抽乐
-                    if (!recordFarmGame!!.value && (TaskTimeChecker.isTimeReached(enableChouchouleTime?.value, "0900"))) {
-                        val ccl = ChouChouLe()
-                        ccl.chouchoule()
-                        tc.countDebug("抽抽乐")
-                        Status.setFlagToday("farm::chouChouLeFinished")
-                    } else {
-                        Log.record(TAG, "抽抽乐未到执行时间，跳过")
-                    }
-                } else {
-                    Log.farm("今日抽抽乐已完成")
-                }
-
+                tc.countDebug("抽抽乐")
+                handleChouChouLeLogic()
             }
 
             if (getFeed!!.value) {
@@ -1888,6 +1830,85 @@ class AntFarm : ModelTask() {
         }
     }
 
+    // 庄园游戏
+    private suspend fun playAllFarmGames() {
+        recordFarmGame(GameType.flyGame)
+        recordFarmGame(GameType.hitGame)
+        recordFarmGame(GameType.starGame)
+        recordFarmGame(GameType.jumpGame)
+        Status.setFlagToday("farm::farmGameFinished")
+    }
+    private suspend fun handleFarmGameLogic() {
+        // 1. 检查游戏改分是否已完成
+        if (Status.hasFlagToday("farm::farmGameFinished")) {
+            Log.farm("今日庄园游戏改分已完成")
+            return
+        }
+        val isAccelEnabled = useAccelerateTool!!.value
+        val isAccelLimitReached = Status.hasFlagToday("farm::accelerateLimit") || !Status.canUseAccelerateTool()
+        val isInsideTimeRange = farmGameTime!!.value.any { TimeUtil.checkNowInTimeRange(it) }
+        when {
+            // 开启了使用加速卡，且加速卡已达上限
+            isAccelEnabled && isAccelLimitReached -> {
+                syncAnimalStatus(ownerFarmId)
+                // 饲料缺口在180g以上时先领饲料
+                if (foodStock < foodStockLimit - 180) {
+                    receiveFarmAwards()
+                }
+                // 满足 180g 预留空间则执行
+                if (foodStock >= foodStockLimit - 180) {
+                    playAllFarmGames()
+                } else {
+                    Log.farm("加速卡已达上限，但饲料缺口仍超过180g，暂不改分以防浪费")
+                }
+            }
+
+            // 未启用加速卡，且处于用户设定的时间段内（原逻辑）
+            !isAccelEnabled && isInsideTimeRange -> {
+                playAllFarmGames()
+            }
+
+            // 加速卡还没用完，等待加速卡用完
+            isAccelEnabled && !isAccelLimitReached -> {
+                Log.farm("加速卡尚未达到今日上限，等待加速完成后再改分")
+            }
+        }
+    }
+
+    // 抽抽乐执行
+    private suspend fun playChouChouLe() {
+        val ccl = ChouChouLe()
+        ccl.chouchoule()
+        Status.setFlagToday("farm::chouChouLeFinished")
+    }
+    private suspend fun handleChouChouLeLogic() {
+        // 1. 检查抽抽乐是否已完成
+        if (Status.hasFlagToday("farm::chouChouLeFinished")) {
+            Log.farm("今日抽抽乐已完成")
+            return
+        }
+        val isGameFinished = Status.hasFlagToday("farm::farmGameFinished")
+        val isGameEnabled = recordFarmGame!!.value
+        val isTimeReached = TaskTimeChecker.isTimeReached(enableChouchouleTime?.value, "0900")
+        when {
+            // 游戏改分已完成直接执行抽抽乐
+            isGameFinished -> {
+                playChouChouLe()
+            }
+            // 未开启游戏改分，且到达了设定的时间（原逻辑）
+            !isGameEnabled && isTimeReached -> {
+                playChouChouLe()
+            }
+            !isGameEnabled && !isTimeReached -> {
+                Log.record(TAG, "未开启游戏改分且抽抽乐未到设置的执行时间(${enableChouchouleTime?.value ?: "0900"})，跳过")
+            }
+            // 游戏改分任务尚未完成
+            isGameEnabled && !isGameFinished -> {
+                Log.farm("游戏改分还没有完成，暂不执行抽抽乐")
+            }
+        }
+    }
+
     /**
      * 庄园任务，目前支持i
      * 视频，杂货铺，抽抽乐，家庭，618会场，芭芭农场，小鸡厨房
@@ -1905,8 +1926,8 @@ class AntFarm : ModelTask() {
                 val taskStatus = task.getString("taskStatus")
                 val bizKey = task.getString("bizKey")
 
-              //  val taskMode = task.optString("taskMode")
-              //  if(taskMode=="TRIGGER")     continue                 //跳过事件任务
+                //  val taskMode = task.optString("taskMode")
+                //  if(taskMode=="TRIGGER")     continue                 //跳过事件任务
 
                 // 1. 预检查：黑名单与每日上限
                 // 检查任务标题和业务键是否在黑名单中
@@ -2042,12 +2063,12 @@ class AntFarm : ModelTask() {
                                         Log.record(TAG, "饲料[已满],暂不领取")
                                         break
                                     } else {
-                                            Log.record(
-                                                TAG,
-                                                "领取任务：${ taskTitle } 的 ${awardCount}g饲料后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g"
-                                            )
-                                            isFeedFull = true
-                                            break
+                                        Log.record(
+                                            TAG,
+                                            "领取任务：${ taskTitle } 的 ${awardCount}g饲料后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g"
+                                        )
+                                        isFeedFull = true
+                                        break
                                     }
                                 }
                             }
@@ -2061,14 +2082,14 @@ class AntFarm : ModelTask() {
                             if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount)
                                 Log.farm("收取庄园任务奖励[" + taskTitle + "]#" + awardCount + "g")
-                                if(foodStock == foodStockLimit){
-                                    // 领满就直接跳出循环，避免再提交一次领取请求
-                                    Log.farm("领取饲料[等于]饲料上限" + foodStockLimit + "g，停止后续领取")
+                                if(foodStockAfter > foodStockLimit){
+                                    // 20点后满足条件的领取的log
+                                    Log.farm("时间超过20点，即使领取后将[超过]饲料上限仍将领取饲料奖励。饲料已到上限${foodStockLimit}g")
                                     break
                                 }
-                                if(foodStockAfter > foodStockLimit){
-                                    // 20点后满足条件的领取的log，也是跳出避免再次提交请求
-                                    Log.farm("时间超过20点，即使领取后将[超过]饲料上限仍将领取饲料奖励。饲料已到上限${foodStockLimit}g，停止后续领取")
+                                if(foodStock == foodStockLimit){
+                                    // 领满就直接跳出循环，避免再提交一次领取请求
+                                    Log.farm("领取饲料后饲料[已满]" + foodStockLimit + "g，停止后续领取")
                                     break
                                 }
                                 doubleCheck = true
@@ -2253,7 +2274,7 @@ class AntFarm : ModelTask() {
         if (totalConsumeSpeed <= 0) return false
         /* 修改为剩余时间大于自定义remainingTime分钟则使用加速卡，也就是说，当你界面上看到的多久之后吃完。目前的逻辑是小于60分钟则不使用加速卡
             这可以避免损失部分时间，但是不利于一次性完成所有任务，因此可以自定义剩余时间，比如设置剩余时间为40（分钟）时，在饲料吃完剩余时间在40
-            分钟以上时，比如剩余41分钟，则直接使用加速卡，并进行后续逻辑（把加速卡用完、在游戏改分、再抽抽乐）；但是如果剩余时间是39分钟，则不使用
+            分钟以上时，比如剩余41分钟，则直接使用加速卡，并进行后续逻辑（把加速卡用完、再游戏改分、再抽抽乐）；但是如果剩余时间是39分钟，则不使用
             加速卡，需等待饲料吃完再次投喂后进入加速卡判断模块继续使用加速卡。
             剩余时间的设置在软件设置里；值为1-59,设置其他值则默认是原逻辑，即60分钟内的不加速。
          */
