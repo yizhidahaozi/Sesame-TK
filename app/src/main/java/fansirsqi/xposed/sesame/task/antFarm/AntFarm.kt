@@ -24,7 +24,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.newutil.DataStore
-import fansirsqi.xposed.sesame.newutil.DataStore.getOrCreate
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
@@ -769,7 +768,7 @@ class AntFarm : ModelTask() {
                     val manureCount = joRecallAnimal.getInt("manureCount")
                     Log.farm("召回小鸡📣[收获:肥料" + manureCount + "g]")
                 } else {
-                    Log.runtime(TAG, "DEBUG:$ownerAnimal")
+                    Log.record(TAG, "DEBUG:$ownerAnimal")
 
                     syncAnimalStatus(ownerFarmId)
                     var guest = false
@@ -931,7 +930,7 @@ class AntFarm : ModelTask() {
         try {
             val sleepTimeStr = sleepTime!!.value
             if ("-1" == sleepTimeStr) {
-                Log.runtime(TAG, "当前已关闭小鸡睡觉")
+                Log.record(TAG, "当前已关闭小鸡睡觉")
                 return
             }
             val now = TimeUtil.getNow()
@@ -1323,7 +1322,7 @@ class AntFarm : ModelTask() {
         try {
             val s = AntFarmRpcCall.enterFarm(userId, friendUserId)
             var jo = JSONObject(s)
-            Log.runtime(TAG, "DEBUG$jo")
+            Log.record(TAG, "DEBUG$jo")
             jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO")
             val jaAnimals = jo.getJSONArray("animals")
             for (i in 0..<jaAnimals.length()) {
@@ -1365,7 +1364,7 @@ class AntFarm : ModelTask() {
                         )
                     } else {
                         Log.record(memo)
-                        Log.runtime(s)
+                        Log.record(s)
                     }
                 }
                 rewardList = null
@@ -1392,7 +1391,7 @@ class AntFarm : ModelTask() {
                 // add2FoodStock((int)foodHaveStolen);
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "recallAnimal err:",t)
@@ -1439,7 +1438,7 @@ class AntFarm : ModelTask() {
                         Log.farm(s)
                     } else {
                         Log.record(memo)
-                        Log.runtime(s)
+                        Log.record(s)
                     }
                 }
             }
@@ -1487,13 +1486,13 @@ class AntFarm : ModelTask() {
                         } else {
                             memo = memo.replace("道具", toolType.nickName().toString())
                             Log.record(memo)
-                            Log.runtime(s)
+                            Log.record(s)
                         }
                     }
                 }
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveToolTaskReward err:",t)
@@ -1511,7 +1510,7 @@ class AntFarm : ModelTask() {
                 Log.farm("收取鸡蛋🥚[" + harvest + "颗]#剩余" + harvestBenevolenceScore + "颗")
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "harvestProduce err:",t)
@@ -1551,7 +1550,7 @@ class AntFarm : ModelTask() {
                 }
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "donation err:",t)
@@ -1570,7 +1569,7 @@ class AntFarm : ModelTask() {
                 return true
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(t)
@@ -1673,7 +1672,7 @@ class AntFarm : ModelTask() {
      */
     private fun updateTomorrowAnswerCache(operationConfigList: JSONArray, date: String?) {
         try {
-            Log.runtime(TAG, "updateTomorrowAnswerCache 开始更新缓存")
+            Log.record(TAG, "updateTomorrowAnswerCache 开始更新缓存")
             val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY)
             for (j in 0..<operationConfigList.length()) {
                 val operationConfig = operationConfigList.getJSONObject(j)
@@ -1692,7 +1691,7 @@ class AntFarm : ModelTask() {
                 }
             }
             DataStore.put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
-            Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
+            Log.record(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e)
         }
@@ -1704,7 +1703,7 @@ class AntFarm : ModelTask() {
      */
     private fun cleanOldAnswers(farmAnswerCache: MutableMap<String, String>?, today: String?) {
         try {
-            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
+            Log.record(TAG, "cleanOldAnswers 开始清理缓存")
             if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return
             // 将今天日期转为数字格式：20250405
             val todayInt = convertDateToInt(today) // 如 "2025-04-05" → 20250405
@@ -1721,13 +1720,13 @@ class AntFarm : ModelTask() {
                         if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
                             cleanedMap[entry.key] = entry.value //保存7天内的答案
-                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
+                            Log.record(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
                         }
                     }
                 }
             }
             DataStore.put(FARM_ANSWER_CACHE_KEY, cleanedMap)
-            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
+            Log.record(TAG, "cleanOldAnswers 清理缓存完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "cleanOldAnswers error:", e)
         }
@@ -1741,7 +1740,7 @@ class AntFarm : ModelTask() {
      * @return 日期数字格式，如 "2025-04-05" → 20250405
      */
     private fun convertDateToInt(dateStr: String?): Int {
-        Log.runtime(TAG, "convertDateToInt 开始转换日期：$dateStr")
+        Log.record(TAG, "convertDateToInt 开始转换日期：$dateStr")
         if (dateStr == null || dateStr.length != 10 || dateStr[4] != '-' || dateStr[7] != '-') {
             Log.error("日期格式错误：$dateStr")
             return -1 // 格式错误
@@ -1791,10 +1790,10 @@ class AntFarm : ModelTask() {
                                 continue
                             }
                         } else {
-                            Log.runtime(TAG, "庄园游戏$jo")
+                            Log.record(TAG, "庄园游戏$jo")
                         }
                     } else {
-                        Log.runtime(TAG, "进入庄园游戏失败$jo")
+                        Log.record(TAG, "进入庄园游戏失败$jo")
                     }
                     break
                 } finally {
@@ -1930,7 +1929,7 @@ class AntFarm : ModelTask() {
                 val response = AntFarmRpcCall.listFarmTask()
                 // 检查空响应
                 if (response.isNullOrEmpty()) {
-                    Log.runtime(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
+                    Log.record(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
                     return
                 }
                 val jo = JSONObject(response)
@@ -2067,7 +2066,7 @@ class AntFarm : ModelTask() {
                     if ("311" == resultCode) {
                         Log.record(TAG, "投喂小鸡🥣[$memo]")
                     } else {
-                        Log.runtime(TAG, "投喂小鸡失败: $jo")
+                        Log.record(TAG, "投喂小鸡失败: $jo")
                     }
                 }
             }
@@ -2195,14 +2194,14 @@ class AntFarm : ModelTask() {
                                 }
                                 Log.record(memo)
                             }
-                            Log.runtime(s)
+                            Log.record(s)
                         }
                         break
                     }
                 }
             } else {
                 Log.record(memo)
-                Log.runtime(s)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "useFarmTool err:",t)
@@ -2312,7 +2311,7 @@ class AntFarm : ModelTask() {
                 s = AntFarmRpcCall.rankingList(pageStartSum)
                 // 检查空响应
                 if (s.isNullOrEmpty()) {
-                    Log.runtime(TAG, "notifyFriend.rankingList: 收到空响应，终止通知")
+                    Log.record(TAG, "notifyFriend.rankingList: 收到空响应，终止通知")
                     break // 跳出do-while循环
                 }
                 jo = JSONObject(s)
@@ -2360,13 +2359,13 @@ class AntFarm : ModelTask() {
                                 }
                             } else {
                                 Log.record(memo)
-                                Log.runtime(s)
+                                Log.record(s)
                             }
                         }
                     }
                 } else {
                     Log.record(memo)
-                    Log.runtime(s)
+                    Log.record(s)
                 }
             } while (hasNext)
             Log.record(TAG, "饲料剩余[" + foodStock + "g]")
@@ -2449,7 +2448,7 @@ class AntFarm : ModelTask() {
                             val collectManurePotNum = joManurePot.getInt("collectManurePotNum")
                             Log.farm("打扫鸡屎🧹[" + collectManurePotNum + "g]" + i + 1 + "次")
                         } else {
-                            Log.runtime(TAG, "打扫鸡屎失败: 第" + i + 1 + "次" + joManurePot)
+                            Log.record(TAG, "打扫鸡屎失败: 第" + i + 1 + "次" + joManurePot)
                         }
                     }
                 }
@@ -2576,7 +2575,7 @@ class AntFarm : ModelTask() {
         try {
             val userId = UserMap.currentUid
             var jo = JSONObject(AntFarmRpcCall.enterKitchen(userId))
-            Log.runtime(TAG, "cook userid :$userId")
+            Log.record(TAG, "cook userid :$userId")
             if (ResChecker.checkRes(TAG, jo)) {
                 val cookTimesAllowed = jo.getInt("cookTimesAllowed")
                 if (cookTimesAllowed > 0) {
@@ -2586,7 +2585,7 @@ class AntFarm : ModelTask() {
                             val cuisineVO = jo.getJSONObject("cuisineVO")
                             Log.farm("小鸡厨房👨🏻‍🍳[" + cuisineVO.getString("name") + "]制作成功")
                         } else {
-                            Log.runtime(TAG, "小鸡厨房制作$jo")
+                            Log.record(TAG, "小鸡厨房制作$jo")
                         }
                         delay(RandomUtil.delay().toLong())
                     }
@@ -2761,8 +2760,8 @@ class AntFarm : ModelTask() {
                             val prizeNum = jo.optInt("prizeNum", 0)
                             Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                         } else {
-                            Log.runtime(TAG, "贴贴小鸡失败:")
-                            Log.runtime(jo.getString("memo"), jo.toString())
+                            Log.record(TAG, "贴贴小鸡失败:")
+                            Log.record(jo.getString("memo"), jo.toString())
                         }
                         if (!chickenDiary.has("statisticsList")) return
                         val statisticsList = chickenDiary.getJSONArray("statisticsList")
@@ -2781,16 +2780,16 @@ class AntFarm : ModelTask() {
                                     val prizeNum = jo.optInt("prizeNum", 0)
                                     Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                                 } else {
-                                    Log.runtime(TAG, "贴贴小鸡失败:")
-                                    Log.runtime(jo.getString("memo"), jo.toString())
+                                    Log.record(TAG, "贴贴小鸡失败:")
+                                    Log.record(jo.getString("memo"), jo.toString())
                                 }
                             }
                         }
                     }
                 }
             } else {
-                Log.runtime(TAG, "贴贴小鸡-获取小鸡日记详情 err:")
-                Log.runtime(jo.getString("resultDesc"), jo.toString())
+                Log.record(TAG, "贴贴小鸡-获取小鸡日记详情 err:")
+                Log.record(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryChickenDiary err:",t)
@@ -2818,8 +2817,8 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.runtime(TAG, "日记点赞-获取小鸡日记详情 err:")
-                Log.runtime(jo.getString("resultDesc"), jo.toString())
+                Log.record(TAG, "日记点赞-获取小鸡日记详情 err:")
+                Log.record(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryChickenDiary err:",t)
@@ -2856,7 +2855,7 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.runtime(jo.getString("resultDesc"), jo.toString())
+                Log.record(jo.getString("resultDesc"), jo.toString())
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
@@ -2920,7 +2919,7 @@ class AntFarm : ModelTask() {
         try {
             val response = AntFarmRpcCall.visitAnimal()
             if (response.isNullOrEmpty()) {
-                Log.runtime(TAG, "visitAnimal: 收到空响应")
+                Log.record(TAG, "visitAnimal: 收到空响应")
                 return
             }
             var jo = JSONObject(response)
@@ -2933,7 +2932,7 @@ class AntFarm : ModelTask() {
 
                 val response2 = AntFarmRpcCall.feedFriendAnimalVisit(farmId)
                 if (response2.isNullOrEmpty()) {
-                    Log.runtime(TAG, "feedFriendAnimalVisit: 收到空响应")
+                    Log.record(TAG, "feedFriendAnimalVisit: 收到空响应")
                     return
                 }
                 jo = JSONObject(response2)
@@ -2950,14 +2949,14 @@ class AntFarm : ModelTask() {
                             val prizeName = jo.getString("prizeName")
                             Log.farm("小鸡到访💞[$prizeName]")
                         } else {
-                            Log.runtime(jo.getString("memo"), jo.toString())
+                            Log.record(jo.getString("memo"), jo.toString())
                         }
                     }
                 } else {
-                    Log.runtime(jo.getString("memo"), jo.toString())
+                    Log.record(jo.getString("memo"), jo.toString())
                 }
             } else {
-                Log.runtime(jo.getString("resultDesc"), jo.toString())
+                Log.record(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "visitAnimal err:",t)
@@ -3088,7 +3087,7 @@ class AntFarm : ModelTask() {
                     }
                 } else {
                     Log.record(memo)
-                    Log.runtime(s)
+                    Log.record(s)
                     break
                 }
             } while (hasNext && animalCount < 3)
@@ -3176,7 +3175,7 @@ class AntFarm : ModelTask() {
                                 return false
                             }
                             Log.record(memo)
-                            Log.runtime(s)
+                            Log.record(s)
                         }
                         return false
                     }
@@ -3219,7 +3218,7 @@ class AntFarm : ModelTask() {
                                 ) + "]"
                             )
                         } else {
-                            Log.runtime(TAG, "drawGameCenterAward falsed result: $jo")
+                            Log.record(TAG, "drawGameCenterAward falsed result: $jo")
                         }
                     } catch (e: CancellationException) {
                         // 协程取消异常必须重新抛出，不能吞掉
@@ -3229,7 +3228,7 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.runtime(TAG, "queryGameList falsed result: $jo")
+                Log.record(TAG, "queryGameList falsed result: $jo")
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
@@ -3314,7 +3313,7 @@ class AntFarm : ModelTask() {
                         Log.farm("庄园小鸡💞[换装:$wholeSetName]")
                         Status.setOrnamentToday()
                     } else {
-                        Log.runtime(TAG, "保存时装失败，错误码： $saveResultJson")
+                        Log.record(TAG, "保存时装失败，错误码： $saveResultJson")
                     }
                 }
             }
@@ -4030,7 +4029,7 @@ class AntFarm : ModelTask() {
                         continue
                     }
                     if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                        Log.runtime("今日喂鸡次数已达上限🥣")
+                        Log.record("今日喂鸡次数已达上限🥣")
                         return
                     }
                     val jo = JSONObject(AntFarmRpcCall.feedFriendAnimal(farmId, groupId))

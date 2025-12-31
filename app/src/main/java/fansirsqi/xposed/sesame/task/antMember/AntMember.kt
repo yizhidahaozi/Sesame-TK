@@ -10,7 +10,6 @@ import fansirsqi.xposed.sesame.data.Status.Companion.memberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.setFlagToday
 import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.MemberBenefit.Companion.getList
-import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.energyTime
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.modelSleepTime
@@ -19,7 +18,6 @@ import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist.autoAddToBlacklist
-import fansirsqi.xposed.sesame.newutil.TaskBlacklist.isTaskInBlacklist
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall.orchardSpreadManure
@@ -1007,7 +1005,7 @@ class AntMember : ModelTask() {
                     memberSignInToday(UserMap.currentUid)
                 } else {
                     Log.record(jo.getString("resultDesc"))
-                    Log.runtime(s)
+                    Log.record(s)
                 }
             }
             queryPointCert(1, 8)
@@ -1749,7 +1747,7 @@ class AntMember : ModelTask() {
 
                 var jo = JSONObject(signInProcessStr)
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.runtime(jo.toString())
+                    Log.record(jo.toString())
                     return
                 }
 
@@ -1763,7 +1761,7 @@ class AntMember : ModelTask() {
                                 .getString("prizeName")
                         Log.record(TAG, "安心豆🫘[$prizeName]")
                     } else {
-                        Log.runtime(jo.toString())
+                        Log.record(jo.toString())
                     }
                 }
             } catch (e: NullPointerException) {
@@ -1782,7 +1780,7 @@ class AntMember : ModelTask() {
 
                 var jo = JSONObject(accountInfo)
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.runtime(jo.toString())
+                    Log.record(jo.toString())
                     return
                 }
 
@@ -1793,7 +1791,7 @@ class AntMember : ModelTask() {
 
                 jo = JSONObject(exchangeDetailStr)
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.runtime(jo.toString())
+                    Log.record(jo.toString())
                     return
                 }
 
@@ -1814,7 +1812,7 @@ class AntMember : ModelTask() {
                 if (ResChecker.checkRes(TAG, jo)) {
                     Log.record(TAG, "安心豆🫘[兑换:$itemName]")
                 } else {
-                    Log.runtime(jo.toString())
+                    Log.record(jo.toString())
                 }
             } catch (e: NullPointerException) {
                 Log.printStackTrace(TAG, "安心豆🫘[RPC桥接失败]#可能是RpcBridge未初始化", e)
@@ -2583,7 +2581,7 @@ class AntMember : ModelTask() {
                             Log.other("会员积分🎖️[领取" + bizTitle + "]#" + pointAmount + "积分")
                         } else {
                             Log.record(jo.getString("resultDesc"))
-                            Log.runtime(s)
+                            Log.record(s)
                         }
                     }
                     if (hasNextPage) {
@@ -2591,7 +2589,7 @@ class AntMember : ModelTask() {
                     }
                 } else {
                     Log.record(jo.getString("resultDesc"))
-                    Log.runtime(s)
+                    Log.record(s)
                 }
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "queryPointCert err:", t)
@@ -2761,7 +2759,7 @@ class AntMember : ModelTask() {
                             Log.other( "商家服务🏬[开门打卡签到成功]")
                         } else {
                             Log.record(TAG, joSignIn.getString("errorMsg"))
-                            Log.runtime(TAG, joSignIn.toString())
+                            Log.record(TAG, joSignIn.toString())
                         }
                     }
                 } else {
@@ -2797,12 +2795,12 @@ class AntMember : ModelTask() {
                                 return@run
                             } else {
                                 Log.record(TAG, joSignUp.getString("errorMsg"))
-                                Log.runtime(TAG, joSignUp.toString())
+                                Log.record(TAG, joSignUp.toString())
                             }
                         }
                     } else {
                         Log.record(TAG, "queryActivity")
-                        Log.runtime(TAG, jo.toString())
+                        Log.record(TAG, jo.toString())
                     }
                     delay(500)
                 }
@@ -2819,7 +2817,7 @@ class AntMember : ModelTask() {
                 val s = AntMemberRpcCall.merchantSign()
                 var jo = JSONObject(s)
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.runtime(TAG, "doMerchantSign err:$s")
+                    Log.record(TAG, "doMerchantSign err:$s")
                     return@run
                 }
                 jo = jo.getJSONObject("data")
@@ -2829,7 +2827,7 @@ class AntMember : ModelTask() {
                     Log.other( "商家服务🏬[每日签到]#获得积分$reward")
                 } else {
                     Log.record(TAG, s)
-                    Log.runtime(TAG, s)
+                    Log.record(TAG, s)
                 }
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "kmdkSignIn err:", t)
@@ -2908,7 +2906,7 @@ class AntMember : ModelTask() {
                         doMerchantMoreTask()
                     }
                 } else {
-                    Log.runtime(TAG, "taskListQuery err: $s")
+                    Log.record(TAG, "taskListQuery err: $s")
                 }
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "taskListQuery err:", t)
