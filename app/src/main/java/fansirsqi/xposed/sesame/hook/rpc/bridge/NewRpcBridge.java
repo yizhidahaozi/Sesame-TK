@@ -363,8 +363,8 @@ public class NewRpcBridge implements RpcBridge {
             logNullResponse(rpcEntity, "重试次数耗尽", tryCount);
             return null;
         } finally {
-            Log.record(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n" + "\n" + "堆栈:" + new Exception().getStackTrace()[1].toString());
-            Log.printStack(TAG);
+         //   Log.record(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n" + "\n" + "堆栈:" + new Exception().getStackTrace()[1].toString());
+         //   Log.printStack(TAG);
 
         }
     }
