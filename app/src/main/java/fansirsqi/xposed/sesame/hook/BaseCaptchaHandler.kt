@@ -33,7 +33,7 @@ abstract class BaseCaptchaHandler {
         // 滑动参数配置
         private const val SLIDE_START_OFFSET = 25 // 滑动起始位置偏移量（像素）
         private const val SLIDE_END_MARGIN = 20   // 滑动结束位置距离右侧的边距（像素）
-        private const val SLIDE_DURATION_MIN = 400L // 最小滑动持续时间
+        private const val SLIDE_DURATION_MIN = 500L // 最小滑动持续时间
         private const val SLIDE_DURATION_MAX = 600L // 最大滑动持续时间
 
         // 滑动后延迟检查是否成功
