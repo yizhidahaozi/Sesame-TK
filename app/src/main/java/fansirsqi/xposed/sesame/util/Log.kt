@@ -58,7 +58,6 @@ object Log {
 
     @JvmStatic
     fun record(msg: String) {
-       // record(msg)
         if (BaseModel.recordLog.value == true) {
             RECORD_LOGGER.debug("$DEFAULT_TAG{}", msg)
         }
