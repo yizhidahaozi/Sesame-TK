@@ -4133,7 +4133,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     
                     // 调试日志：打印所有保护罩信息
                     if (shieldTypes.contains(propType)) {
-                        Log.record(TAG, "发现保护罩: $propName | 类型: $propType | 过期时间: ${if (expireTime > 0) TimeFormatter.format(expireTime) else "无"}")
+                        Log.record(TAG, "发现保护罩: $propName | 类型: $propType | 过期时间: ${if (expireTime > 0) formatTimeDifference(expireTime) else "无"}")
                         availableShields.add(prop)
                     }
                 }
@@ -4189,7 +4189,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val shield = availableShields[i]
                     val propName = shield.optJSONObject("propConfigVO")?.optString("propName") ?: ""
                     val expireTime = shield.optLong("recentExpireTime", Long.MAX_VALUE)
-                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) TimeFormatter.format(expireTime) else "无"}")
+                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) formatTimeDifference(expireTime) else "无"}")
                 }
                 
                 Collections.sort(
@@ -4204,7 +4204,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val shield = availableShields[i]
                     val propName = shield.optJSONObject("propConfigVO")?.optString("propName") ?: ""
                     val expireTime = shield.optLong("recentExpireTime", Long.MAX_VALUE)
-                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) TimeFormatter.format(expireTime) else "无"}")
+                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) formatTimeDifference(expireTime) else "无"}")
                 }
 
                 // 步骤4: 逐个尝试使用保护罩
