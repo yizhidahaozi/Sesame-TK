@@ -1976,7 +1976,7 @@ class AntFarm : ModelTask() {
                         }
                     }
                 }else{
-                    Log.debug(TAG, "跳过非TODO任务: $title ($bizKey) 状态: $taskStatus")
+                    Log.record(TAG, "跳过非TODO任务: $title ($bizKey) 状态: $taskStatus")
                 }
                 // 3. 额外处理某些即便不是 TODO 状态也可能需要检查的任务（如答题补漏）
                 if ("ANSWER" == bizKey && !Status.hasFlagToday(CACHED_FLAG)) {
