@@ -4095,6 +4095,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         usePropTemplate(bagObject, config, stealthCardConstant!!.value)
     }
 
+
     /**
      * 使用保护罩道具
      * 功能：保护自己的能量不被好友偷取，防止能量被收走。
@@ -4128,12 +4129,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 for (i in 0..<forestPropVOList.length()) {
                     val prop = forestPropVOList.optJSONObject(i) ?: continue
                     val propType = prop.optJSONObject("propConfigVO")?.optString("propType") ?: ""
-                    val propName = prop.optJSONObject("propConfigVO")?.optString("propName") ?: ""
-                    val expireTime = prop.optLong("recentExpireTime", 0)
                     
-                    // 调试日志：打印所有保护罩信息
                     if (shieldTypes.contains(propType)) {
-                        Log.record(TAG, "发现保护罩: $propName | 类型: $propType | 过期时间: ${if (expireTime > 0) formatTimeDifference(expireTime) else "无"}")
                         availableShields.add(prop)
                     }
                 }
@@ -4183,15 +4180,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             // 步骤3: 按过期时间升序排序，优先使用即将过期的保护罩
             if (availableShields.isNotEmpty()) {
-                // 排序前的调试信息
-                Log.record(TAG, "排序前保护罩列表:")
-                for (i in availableShields.indices) {
-                    val shield = availableShields[i]
-                    val propName = shield.optJSONObject("propConfigVO")?.optString("propName") ?: ""
-                    val expireTime = shield.optLong("recentExpireTime", Long.MAX_VALUE)
-                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) formatTimeDifference(expireTime) else "无"}")
-                }
-                
                 Collections.sort(
                     availableShields,
                     Comparator { p1: JSONObject?, p2: JSONObject? ->
@@ -4199,13 +4187,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         val expireTime2 = p2!!.optLong("recentExpireTime", Long.MAX_VALUE)
                         expireTime1.compareTo(expireTime2)
                     })
-
-                for (i in availableShields.indices) {
-                    val shield = availableShields[i]
-                    val propName = shield.optJSONObject("propConfigVO")?.optString("propName") ?: ""
-                    val expireTime = shield.optLong("recentExpireTime", Long.MAX_VALUE)
-                    Log.record(TAG, "  $i. $propName | 过期时间: ${if (expireTime != Long.MAX_VALUE) formatTimeDifference(expireTime) else "无"}")
-                }
 
                 // 步骤4: 逐个尝试使用保护罩
                 for (shieldObj in availableShields) {
