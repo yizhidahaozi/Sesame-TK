@@ -1862,18 +1862,42 @@ class AntFarm : ModelTask() {
         val isAccelLimitReached = Status.hasFlagToday("farm::accelerateLimit") || !Status.canUseAccelerateTool()
         val isInsideTimeRange = farmGameTime!!.value.any { TimeUtil.checkNowInTimeRange(it) }
         when {
-            // 开启了使用加速卡，且加速卡已达上限
+            // 开启了使用加速卡，且加速卡已达上限或没有加速卡
             isAccelEnabled && (isAccelLimitReached || accelerateToolCount <= 0) -> {
                 syncAnimalStatus(ownerFarmId)
                 // 饲料缺口在180g以上时先领饲料
-                if (foodStock < foodStockLimit - 180) {
+                val foodStockThreshold = foodStockLimit - GAME_REWARD_MAX
+                if (foodStock < foodStockThreshold) {
                     receiveFarmAwards()
                 }
-                playAllFarmGames()
+                val isSatisfied = foodStock >= foodStockThreshold
+                val isTaskEnabled = doFarmTask?.value == true
+                val isTaskFinished = Status.hasFlagToday("farm::farmTaskFinished")
+
+                when {
+                    isSatisfied -> playAllFarmGames()
+
+                    !isTaskEnabled -> {
+                        Log.farm("未开启饲料任务，虽然尝试领取了奖励，但饲料缺口仍超过${GAME_REWARD_MAX}g，直接执行游戏")
+                        playAllFarmGames()
+                    }
+
+                    isTaskFinished -> {
+                        Log.farm("已开启饲料任务且今日已完成，但领取奖励后缺口仍超过${GAME_REWARD_MAX}g，暂不执行游戏改分。" +
+                                "请确认饲料奖励完成情况，可以关闭设置里的“做饲料任务”选项直接进行游戏改分")
+                    }
+
+                    else -> {
+                        Log.farm("已开启饲料任务但尚未完成，现有饲料缺口超过${GAME_REWARD_MAX}g，等待任务完成后再执行")
+                    }
+                }
             }
 
-            // 未启用加速卡，且处于用户设定的时间段内（原逻辑）
+            // 未启用加速卡，且处于用户设定的时间段内
             !isAccelEnabled && isInsideTimeRange -> {
+                if (Status.hasFlagToday("farm::farmTaskFinished")){
+                    receiveFarmAwards()
+                }
                 playAllFarmGames()
             }
 
@@ -2062,45 +2086,50 @@ class AntFarm : ModelTask() {
                             syncAnimalStatus(ownerFarmId)
 
                             val foodStockAfter = foodStock + awardCount
+                            val isNight = TimeUtil.isNowAfterOrCompareTimeStr("2000")
+                            val foodStockLeft = foodStockLimit - foodStock
                             if ("ALLPURPOSE" == task.optString("awardType")) {
                                 /* 领取饲料前，当现有饲料>=上限时（实时只可能等于，不需要用大于等于的判断），或者在晚上20点前领取饲料后使饲料超过上限，则不领取饲料，
                                     直接break方法。但是如果时间在20点后，这时饲料没满，比如差80g满，这时候领取90g的任务奖励虽然会超过饲料上限，但还是依然领取
                                     饲料，这样能保证饲料第二天是满的开局。如果需要赠送饲料或厨房等会使饲料不是以90/180g减少的操作，应该不会有人在20点后还没有
                                     完成吧？同时也避免了原逻辑的饲料差90g以内后总是领不满的问题。
                                  */
-                                if ((foodStock >= foodStockLimit) || ((awardCount + foodStock > foodStockLimit) && !TimeUtil.isNowAfterOrCompareTimeStr("2000")) ) {
+                                if (foodStock >= foodStockLimit) {
+                                    Log.record(TAG, "饲料[已满],暂不领取")
                                     unreceiveTaskAward++
-                                    if (foodStock == foodStockLimit){
-                                        Log.record(TAG, "饲料[已满],暂不领取")
-                                        break
-                                    } else {
-                                        Log.record(
-                                            TAG,
-                                            "领取任务：${ taskTitle } 的 ${awardCount}g饲料后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g"
-                                        )
+                                    isFeedFull = true
+                                    break
+                                }
+                                // 针对连续使用加速卡时的领取饲料逻辑，留180g以内（含180g）的空间。如果游戏改分未完成，比如饲料正好是1620g时（上限1800g），不领取饲料。(同时确认开启游戏改分)
+                                if ((!Status.hasFlagToday("farm::farmGameFinished")) && (foodStock >= foodStockLimit - GAME_REWARD_MAX) && recordFarmGame!!.value) {
+                                    unreceiveTaskAward++
+                                    Log.farm("当日游戏改分未完成，预留${GAME_REWARD_MAX}饲料空间，现有饲料${foodStock}g")
+                                    isFeedFull = true
+                                    break
+                                }
+                                if (awardCount > foodStockLeft) {
+                                    if (!isNight) {
+                                        // 20点前，为了不浪费，跳过当前奖励。
+                                        if (awardCount > 90 && foodStockLeft >= 90) {
+                                            continue
+                                        }
+                                        Log.record(TAG, "领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g")
+                                        unreceiveTaskAward++
                                         isFeedFull = true
                                         break
+                                    } else {
+                                        Log.record("20点后领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后饲料上限也将继续领取饲料，现有饲料${foodStock}g")
                                     }
                                 }
-                            }
-                            // 针对连续使用加速卡时的领取饲料逻辑，留180g以内（含180g）的空间。如果游戏改分未完成，比如饲料正好是1620g时（上限1800g），不领取饲料。(同时确认开启游戏改分)
-                            if ((!Status.hasFlagToday("farm::farmGameFinished")) && (foodStock >= foodStockLimit - 180) && recordFarmGame!!.value){
-                                Log.farm("当日游戏改分未完成，预留180g饲料空间，现有饲料${foodStock}g")
-                                break
                             }
                             val receiveTaskAwardjo =
                                 JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId))
                             if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
                                 add2FoodStock(awardCount)
-                                Log.farm("收取庄园任务奖励[" + taskTitle + "]#" + awardCount + "g")
-                                if(foodStockAfter > foodStockLimit){
-                                    // 20点后满足条件的领取的log
-                                    Log.farm("时间超过20点，即使领取后将[超过]饲料上限仍将领取饲料奖励。饲料已到上限${foodStockLimit}g")
-                                    break
-                                }
-                                if(foodStock == foodStockLimit){
-                                    // 领满就直接跳出循环，避免再提交一次领取请求
+                                Log.farm("收取庄园任务奖励[$taskTitle] # ${awardCount}g (剩余容量: ${foodStockLimit - foodStock}g)")
+                                if(foodStockAfter >= foodStockLimit){
                                     Log.farm("领取饲料后饲料[已满]" + foodStockLimit + "g，停止后续领取")
+                                    isFeedFull = true
                                     break
                                 }
                                 doubleCheck = true
@@ -2188,12 +2217,8 @@ class AntFarm : ModelTask() {
                 val jo = JSONObject(AntFarmRpcCall.feedAnimal(farmId))
                 if (ResChecker.checkRes(TAG, jo)) {
                     // 安全获取foodStock字段，如果不存在则显示未知
-                    val remainingFood = jo.optInt("foodStock", -1)
-                    if (remainingFood >= 0) {
-                        Log.farm("投喂小鸡🥣[180g]#剩余" + remainingFood + "g")
-                    } else {
-                        Log.farm("投喂小鸡🥣[180g]#投喂成功")
-                    }
+                    val remainingFood = jo.optInt("foodStock", 0).coerceAtLeast(0)
+                    Log.farm("${UserMap.getCurrentMaskName()}投喂小鸡🥣[180g]#剩余饲料${remainingFood}g")
                     return true
                 } else {
                     // 检查特定的错误码
@@ -4374,5 +4399,6 @@ class AntFarm : ModelTask() {
         private const val FARM_ANSWER_CACHE_KEY = "farmAnswerQuestionCache"
         private const val ANSWERED_FLAG = "farmQuestion::answered" // 今日是否已答题
         private const val CACHED_FLAG = "farmQuestion::cache" // 是否已缓存明日答案
+        private const val GAME_REWARD_MAX = 180 // 游戏改分预计产出的最大饲料量
     }
 }
