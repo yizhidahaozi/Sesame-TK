@@ -339,8 +339,8 @@ class AntCooperate : ModelTask() {
             if (!isTeam(homeJo)) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(true)
-                val UserConfigJo = JSONObject(updateUserConfigStr)
-                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                val userConfigJo = JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, userConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return
                 }
@@ -396,8 +396,8 @@ class AntCooperate : ModelTask() {
             if (needReturn) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(false)
-                val UserConfigJo = JSONObject(updateUserConfigStr)
-                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                val userConfigJo = JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, userConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return
                 }
