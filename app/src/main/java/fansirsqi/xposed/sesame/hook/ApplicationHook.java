@@ -511,10 +511,7 @@ public class ApplicationHook {
                     // LocationHelper初始化
                     LocationHelper.INSTANCE.init(classLoader);
 
-                    // 异步获取位置信息
-                    LocationHelper.requestLocation(locationJson -> {
-                         Log.record(TAG, "📍 获取到位置信息: " + locationJson);
-                    });
+
 
                     // ✅ 优先使用 Hook 捕获的版本号
                     if (VersionHook.hasVersion()) {
