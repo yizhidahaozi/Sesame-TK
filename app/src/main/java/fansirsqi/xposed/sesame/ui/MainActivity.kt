@@ -103,7 +103,6 @@ import java.io.File
 class MainActivity : BaseActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-//    private lateinit var watermarkView: WatermarkView
 
     // Shizuku 监听器
     private val shizukuListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
