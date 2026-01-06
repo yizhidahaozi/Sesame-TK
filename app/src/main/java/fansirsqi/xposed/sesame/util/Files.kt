@@ -163,14 +163,9 @@ object Files {
 
         if (!targetFile.exists()) {
             try {
-                if (targetFile.createNewFile()) {
-                    Log.record(TAG, "File created successfully: ${targetFile.absolutePath}")
-                } else {
-                    Log.record(TAG, "File creation failed: ${targetFile.absolutePath}")
-                }
+                targetFile.createNewFile()
             } catch (e: IOException) {
-                Log.error(TAG, "Failed to create file: ${targetFile.absolutePath}")
-                Log.printStackTrace(TAG, e)
+                Log.printStackTrace(TAG, "Failed to create file: ${targetFile.absolutePath}",e)
             }
         } else {
             val canRead = targetFile.canRead()
