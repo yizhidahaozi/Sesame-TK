@@ -87,7 +87,6 @@ import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkLayer
 import fansirsqi.xposed.sesame.newutil.IconManager
-import fansirsqi.xposed.sesame.ui.MainViewModel.Companion.verifyId
 import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.util.Detector
@@ -432,11 +431,11 @@ fun MainScreen(
 
     // 异步加载设备信息，启动后自动更新3次
     val deviceInfoMap by produceState<Map<String, String>?>(initialValue = null) {
-        value = DeviceInfoUtil.showInfo(verifyId, context)
+        value = DeviceInfoUtil.showInfo(context)
 
         repeat(1) {
             delay(200)
-            value = DeviceInfoUtil.showInfo(verifyId, context)
+            value = DeviceInfoUtil.showInfo(context)
         }
     }
 
