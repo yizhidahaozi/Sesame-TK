@@ -300,7 +300,10 @@ public class AntSports extends ModelTask {
                     if (taskType.equals("SETTLEMENT")) {
                         continue;
                     }
-
+                    // 检查任务是否在黑名单中
+                    if (TaskBlacklist.INSTANCE.isTaskInBlacklist(taskId) || TaskBlacklist.INSTANCE.isTaskInBlacklist(taskName)) {
+                        continue;
+                    }
                     totalTasks++;
 
                     // 处理不同任务状态
@@ -413,6 +416,11 @@ public class AntSports extends ModelTask {
                 } else {
                     String errorMsg = result.optString("errorMsg", "未知错误");
                     Log.error(TAG, "做任务得能量🎈[任务失败：" + taskName + "，错误：" + errorMsg + "]#(" + (i + 1) + "/" + remainingNum + ")");
+                    String errorCode = result.optString("errorCode", "");
+                    // 自动将失败的任务加入黑名单
+                    if (!errorCode.isEmpty()) {
+                        TaskBlacklist.INSTANCE.autoAddToBlacklist(taskId, taskName, errorCode);
+                    }
                     break;
                 }
 
