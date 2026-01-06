@@ -107,7 +107,7 @@ object CustomSettings {
             data[onlyOnceDailyList.code] = onlyOnceDailyList.value
             data[autoHandleOnceDaily.code] = autoHandleOnceDaily.value
             val json = JsonUtil.formatJson(data)
-            if (json != null) Files.write2File(json, file)
+            if (json != null) Files.write2File(json, file!!)
         } catch (e: Throwable) {
             Log.printStackTrace(TAG, "Failed to save custom settings", e)
         }
@@ -118,7 +118,7 @@ object CustomSettings {
         if (userId.isEmpty()) return
         try {
             val file = Files.getCustomSetFile(userId)
-            if (!file.exists()) {
+            if (!file!!.exists()) {
                 resetToDefault()
                 return
             }
