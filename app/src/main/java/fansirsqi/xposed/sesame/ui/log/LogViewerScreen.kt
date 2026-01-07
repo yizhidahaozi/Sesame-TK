@@ -172,10 +172,10 @@ fun LogViewerScreen(
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
                     // ✅ 统一使用 Surface (背景) 和 OnSurface (前景)
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.background,
+//                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+//                    actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+//                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 navigationIcon = {
                     TooltipBox(
