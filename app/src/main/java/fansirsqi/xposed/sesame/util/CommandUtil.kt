@@ -70,6 +70,7 @@ object CommandUtil {
 
     /**
      * 绑定服务 (线程安全)
+     * 支持跨进程绑定：从支付宝进程绑定模块的 CommandService
      */
     private suspend fun ensureServiceBound(context: Context): Boolean {
         // 快速检查：如果已经绑定且服务对象有效
@@ -89,8 +90,17 @@ object CommandUtil {
             handleServiceLost()
             connectionDeferred = CompletableDeferred()
 
-            val intent = Intent(ACTION_BIND).apply {
+            // 关键修改：显式指定包名和类名，支持跨进程绑定
+            val intent = Intent().apply {
+                // 方式1：使用 Action + Package（推荐）
+                action = ACTION_BIND
                 setPackage(PACKAGE_NAME)
+
+                // 方式2：直接指定 ComponentName（更明确）
+                component = ComponentName(
+                    PACKAGE_NAME,
+                    "fansirsqi.xposed.sesame.service.CommandService"
+                )
             }
 
             try {
@@ -113,12 +123,16 @@ object CommandUtil {
                 if (!success) {
                     Log.e(TAG, "绑定服务超时或失败")
                     // 超时后清理一下
-                    context.applicationContext.unbindService(serviceConnection)
+                    try {
+                        context.applicationContext.unbindService(serviceConnection)
+                    } catch (_: Exception) {
+                        // 忽略解绑异常
+                    }
                 }
 
                 return@withLock success
             } catch (e: Exception) {
-                Log.e(TAG, "绑定服务异常", e)
+                Log.e(TAG, "绑定服务异常: ${e.message}", e)
                 return@withLock false
             }
         }
