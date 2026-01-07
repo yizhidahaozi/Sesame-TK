@@ -49,7 +49,7 @@ android {
         }.format(Date())
 
         versionCode = gitCommitCount
-        versionName = "0.8.8"
+        versionName = "0.9.2"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
