@@ -236,15 +236,36 @@ class RpcDebugActivity : BaseActivity() {
     }
 
     /**
-     * 解析 JSON 并提取字段（支持大小写）
+     * 解析 JSON 并提取字段（支持多种格式）
+     * 支持格式1: { "Method": "xxx", "requestData": [...] }
+     * 支持格式2: { "Method": "xxx", "Params": { "requestData": [...] } }
      */
     private fun parseJsonFields(jsonText: String): Triple<String, String, Any?> {
         val cleanedJson = cleanJsonString(jsonText)
         val jsonMap = objectMapper.readValue(cleanedJson, Map::class.java)
         
-        // 支持 Method/method/methodName
-        val method = (jsonMap["Method"] ?: jsonMap["method"] ?: jsonMap["methodName"])?.toString() ?: ""
-        val requestData = jsonMap["requestData"] ?: jsonMap["RequestData"]
+        // 提取 Method
+        var method = (jsonMap["Method"] ?: jsonMap["method"] ?: jsonMap["methodName"])?.toString() ?: ""
+        
+        // 提取 requestData（支持两种格式）
+        var requestData: Any? = jsonMap["requestData"] ?: jsonMap["RequestData"]
+        
+        // 如果有 Params 字段，从 Params 中提取
+        val params = jsonMap["Params"] ?: jsonMap["params"]
+        if (params is Map<*, *>) {
+            // 如果 Params 中有 operationType，优先使用它作为 method
+            val operationType = params["operationType"]?.toString()
+            if (!operationType.isNullOrEmpty()) {
+                method = operationType
+            }
+            // 从 Params 中提取 requestData
+            val paramsRequestData = params["requestData"] ?: params["RequestData"]
+            if (paramsRequestData != null) {
+                requestData = paramsRequestData
+            }
+        }
+        
+        // 提取名称
         val name = (jsonMap["Name"] ?: jsonMap["name"])?.toString() ?: ""
         
         return Triple(name, method, requestData)

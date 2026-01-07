@@ -99,7 +99,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="💡 示例 2：使用 methodName"
+            android:text="💡 示例 2：带 Params 格式(抓包)"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
@@ -108,7 +108,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="{\n  &quot;methodName&quot;: &quot;com.alipay.xxx&quot;,\n  &quot;requestData&quot;: [{\n    &quot;key&quot;: &quot;value&quot;\n  }]\n}"
+            android:text="{\n  &quot;Method&quot;: &quot;xxx&quot;,\n  &quot;Params&quot;: {\n    &quot;requestData&quot;: [{}]\n  }\n}"
             android:textSize="11sp"
             android:textColor="#1565C0"
             android:fontFamily="monospace"
