@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.ui
 
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -30,17 +29,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Agriculture
 import androidx.compose.material.icons.rounded.AlignVerticalTop
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Forest
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -54,7 +59,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,10 +81,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fansirsqi.xposed.sesame.BuildConfig
-import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
 import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.entity.UserEntity
@@ -85,6 +90,7 @@ import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkLayer
 import fansirsqi.xposed.sesame.newutil.IconManager
+import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
 import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.util.Detector
@@ -135,6 +141,7 @@ class MainActivity : ComponentActivity() {
             val userList by viewModel.userList.collectAsStateWithLifecycle()
             val moduleStatus by viewModel.moduleStatus.collectAsStateWithLifecycle()
 
+
             // AppTheme 会处理状态栏颜色
             AppTheme {
                 WatermarkLayer {
@@ -143,7 +150,12 @@ class MainActivity : ComponentActivity() {
                         activeUserName = activeUser?.showName ?: "未载入^o^ 重启支付宝看看👀",
                         moduleStatus = moduleStatus,
                         viewModel = viewModel,
-                        onEvent = { event -> handleEvent(event, userList) }
+                        userList = userList, // 传入列表
+                        // 🔥 处理跳转逻辑
+                        onNavigateToSettings = { selectedUser ->
+                            performNavigationToSettings(selectedUser)
+                        },
+                        onEvent = { event -> handleEvent(event) }
                     )
                 }
             }
@@ -173,7 +185,6 @@ class MainActivity : ComponentActivity() {
         data object OpenOtherLog : MainUiEvent()
         data object OpenAllLog : MainUiEvent()
         data object OpenDebugLog : MainUiEvent()
-        data object OpenSettings : MainUiEvent()
         data class ToggleIconHidden(val isHidden: Boolean) : MainUiEvent()
         data object OpenCaptureLog : MainUiEvent()
         data object OpenExtend : MainUiEvent()
@@ -183,7 +194,7 @@ class MainActivity : ComponentActivity() {
     /**
      * 统一处理事件
      */
-    private fun handleEvent(event: MainUiEvent, userList: List<UserEntity>) {
+    private fun handleEvent(event: MainUiEvent) {
         when (event) {
             MainUiEvent.RefreshOneWord -> viewModel.fetchOneWord()
             MainUiEvent.OpenForestLog -> openLogFile(Files.getForestLogFile())
@@ -193,12 +204,6 @@ class MainActivity : ComponentActivity() {
             MainUiEvent.OpenErrorLog -> executeWithVerification { openLogFile(Files.getErrorLogFile()) }
             MainUiEvent.OpenAllLog -> openLogFile(Files.getRecordLogFile())
             MainUiEvent.OpenDebugLog -> openLogFile(Files.getDebugLogFile())
-            MainUiEvent.OpenSettings -> {
-                showUserSelectionDialog(userList) { selectedUser ->
-                    navigateToSettings(selectedUser)
-                }
-            }
-
             is MainUiEvent.ToggleIconHidden -> {
                 val shouldHide = event.isHidden
                 getSharedPreferences(preferencesKey, MODE_PRIVATE).edit { putBoolean("is_icon_hidden", shouldHide) }
@@ -209,16 +214,14 @@ class MainActivity : ComponentActivity() {
             MainUiEvent.OpenCaptureLog -> openLogFile(Files.getCaptureLogFile())
             MainUiEvent.OpenExtend -> startActivity(Intent(this, ExtendActivity::class.java))
             MainUiEvent.ClearConfig -> {
-                // ✅ 使用 android.app.AlertDialog 以兼容 ComponentActivity
-                AlertDialog.Builder(this)
-                    .setTitle("⚠️ 警告")
-                    .setMessage("🤔 确认清除所有模块配置？")
-                    .setPositiveButton(R.string.ok) { _, _ ->
-                        if (Files.delFile(Files.CONFIG_DIR)) Toast.makeText(this, "🙂 清空配置成功", Toast.LENGTH_SHORT).show()
-                        else Toast.makeText(this, "😭 清空配置失败", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
-                    .show()
+                // 🔥 这里只负责执行逻辑，不再负责弹窗
+                if (Files.delFile(Files.CONFIG_DIR)) {
+                    ToastUtil.showToast(this, "🙂 清空配置成功")
+                    // 可选：重载配置或刷新 UI
+                    viewModel.reloadUserConfigs()
+                } else {
+                    ToastUtil.showToast(this, "😭 清空配置失败")
+                }
             }
         }
     }
@@ -259,20 +262,6 @@ class MainActivity : ComponentActivity() {
         block()
     }
 
-    private fun showUserSelectionDialog(userList: List<UserEntity>, onUserSelected: (UserEntity) -> Unit) {
-        if (userList.isEmpty()) {
-            ToastUtil.showToast(this, "暂无用户配置")
-            return
-        }
-        val userNames = userList.map { it.showName }.toTypedArray()
-
-        AlertDialog.Builder(this)
-            .setTitle("选择用户进行设置")
-            .setItems(userNames) { _, which ->
-                onUserSelected(userList[which])
-            }
-            .show()
-    }
 
 }
 
@@ -357,15 +346,28 @@ fun MainScreen(
     activeUserName: String,
     moduleStatus: MainViewModel.ModuleStatus,
     viewModel: MainViewModel,
+    userList: List<UserEntity>, // 🔥 确保 userList 被传入 MainScreen
+    onNavigateToSettings: (UserEntity) -> Unit, // 🔥 新增回调：跳转设置
     onEvent: (MainActivity.MainUiEvent) -> Unit,
 ) {
+    // 状态卡展开状态
     var isStatusCardExpanded by remember { mutableStateOf(false) }
+    // 获取上下文
     val context = LocalContext.current
+    // 获取 isOneWordLoading
     val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
+    // 获取 SharedPreferences
     val prefs = context.getSharedPreferences(preferencesKey, Context.MODE_PRIVATE)
+    // 控制图标隐藏
     var isIconHidden by remember { mutableStateOf(prefs.getBoolean("is_icon_hidden", false)) }
+    // 控制菜单状态
     var showMenu by remember { mutableStateOf(false) }
+    // 控制用户选择弹窗的状态
+    var showUserDialog by remember { mutableStateOf(false) }
+    // 控制清空配置弹窗的状态
+    var showClearConfigDialog by remember { mutableStateOf(false) }
 
+    // 获取设备信息
     val deviceInfoMap by produceState<Map<String, String>?>(initialValue = null) {
         value = DeviceInfoUtil.showInfo(context)
         repeat(1) {
@@ -396,24 +398,39 @@ fun MainScreen(
 
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text("本应用为免费软件", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
-                            onClick = { }, enabled = false
+                            text = {
+                                Text("本应用为免费软件", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            },
+                            onClick = { showMenu = false },
+                            enabled = false
                         )
                         DropdownMenuItem(
-                            text = { Text("严禁倒卖/付费购买", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) },
-                            onClick = { }, enabled = false
+                            text = {
+                                Text("严禁倒卖/付费购买", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            },
+                            onClick = { showMenu = false },
+                            enabled = false
                         )
                         DropdownMenuItem(
                             text = { Text("Github 仓库") },
-                            onClick = { uriHandler.openUri("https://github.com/Fansirsqi/Sesame-TK"); showMenu = false }
+                            onClick = {
+                                uriHandler.openUri("https://github.com/Fansirsqi/Sesame-TK")
+                                showMenu = false
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text("Telegram 频道") },
-                            onClick = { uriHandler.openUri("https://t.me/Sesame_TK_Channel"); showMenu = false }
+                            onClick = {
+                                uriHandler.openUri("https://t.me/Sesame_TK_Channel")
+                                showMenu = false
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text("加入 QQ 群") },
-                            onClick = { uriHandler.openUri("https://qm.qq.com/q/Aj0Xby6AGQ"); showMenu = false }
+                            onClick = {
+                                joinQQGroup(context)
+                                showMenu = false
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text(if (isIconHidden) "显示应用图标" else "隐藏应用图标") },
@@ -425,23 +442,34 @@ fun MainScreen(
                         )
                         DropdownMenuItem(
                             text = { Text("查看抓包") },
-                            onClick = { onEvent(MainActivity.MainUiEvent.OpenCaptureLog); showMenu = false }
+                            onClick = {
+                                onEvent(MainActivity.MainUiEvent.OpenCaptureLog)
+                                showMenu = false
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text("扩展功能") },
-                            onClick = { onEvent(MainActivity.MainUiEvent.OpenExtend); showMenu = false }
+                            onClick = {
+                                onEvent(MainActivity.MainUiEvent.OpenExtend)
+                                showMenu = false
+                            }
                         )
                         if (BuildConfig.DEBUG) {
                             DropdownMenuItem(
                                 text = { Text("清除配置") },
-                                onClick = { onEvent(MainActivity.MainUiEvent.ClearConfig); showMenu = false }
+                                onClick = {
+                                    showMenu = false
+                                    showClearConfigDialog = true
+                                }
                             )
                         }
                     }
+
                 }
             )
         },
-    ) { innerPadding ->
+    )
+    { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -493,7 +521,8 @@ fun MainScreen(
                             }
                         )
                         .padding(8.dp)
-                ) {
+                )
+                {
                     AnimatedContent(
                         targetState = isOneWordLoading,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -527,7 +556,8 @@ fun MainScreen(
                     .fillMaxWidth()
                     .padding(bottom = 48.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            )
+            {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     MenuButton(text = "森林日志", icon = Icons.Rounded.Forest, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenForestLog) }
                     MenuButton(text = "农场日志", icon = Icons.Rounded.Agriculture, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenFarmLog) }
@@ -536,7 +566,41 @@ fun MainScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     MenuButton(text = "错误日志", icon = Icons.Rounded.BugReport, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenErrorLog) }
                     MenuButton(text = "全部日志", icon = Icons.Rounded.Description, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenAllLog) }
-                    MenuButton(text = "设置", icon = Icons.Rounded.Settings, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenSettings) }
+                    MenuButton(text = "设置", icon = Icons.Rounded.Settings, modifier = Modifier.weight(1f)) {
+//                        onEvent(MainActivity.MainUiEvent.OpenSettings)
+                        // 直接在这里处理弹窗逻辑，或者发 Event 给 VM 处理
+                        if (userList.isNotEmpty()) {
+                            showUserDialog = true
+                        } else {
+                            ToastUtil.showToast(context, "暂无用户配置")
+                        }
+                    }
+                }
+                // ✨ 在 Scaffold 外部（或者内部最上层）挂载 Dialog
+                if (showUserDialog) {
+                    UserSelectionDialog(
+                        userList = userList,
+                        onDismissRequest = { showUserDialog = false },
+                        onUserSelected = { user ->
+                            showUserDialog = false
+                            onNavigateToSettings(user) // 触发跳转
+                        }
+                    )
+                }
+
+                // ✨ 挂载清除配置确认弹窗
+                if (showClearConfigDialog) {
+                    CommonAlertDialog(
+                        showDialog = true,
+                        onDismissRequest = { showClearConfigDialog = false },
+                        onConfirm = { onEvent(MainActivity.MainUiEvent.ClearConfig) },
+                        title = "⚠️ 警告",
+                        text = "🤔❗ 确认清除所有模块配置？\n此操作无法撤销❗❗❗",
+                        icon = Icons.Outlined.Warning,
+                        iconTint = MaterialTheme.colorScheme.error, // 红色图标
+                        confirmText = "确认清除",
+                        confirmButtonColor = MaterialTheme.colorScheme.error // 红色按钮
+                    )
                 }
             }
         }
@@ -569,4 +633,96 @@ fun MenuButton(
             Text(text = text, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
     }
+}
+
+
+@Composable
+fun UserSelectionDialog(
+    userList: List<UserEntity>,
+    onDismissRequest: () -> Unit,
+    onUserSelected: (UserEntity) -> Unit
+) {
+    if (userList.isEmpty()) return
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        icon = {
+            Icon(
+                Icons.Default.ManageAccounts,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "账号设置",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            // 给列表加个最大高度，防止太长铺满屏幕
+            Box(modifier = Modifier.heightIn(max = 400.dp)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp) // Item 之间的间距
+                ) {
+                    items(userList) { user ->
+                        // 使用 Surface 包裹，自带圆角和背景色适配
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh, // 比背景稍微亮一点的颜色
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { // Surface 自带 onClick，自带正确的水波纹
+                                onUserSelected(user)
+                                onDismissRequest()
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(16.dp) // 内部留白
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // 左侧头像/图标
+                                Icon(
+                                    imageVector = Icons.Rounded.AccountCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                // 右侧文本信息
+                                Column {
+                                    Text(
+                                        text = user.showName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (!user.account.isNullOrEmpty()) {
+                                        Text(
+                                            text = user.account,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("取消")
+            }
+        },
+        // 设置 Dialog 的背景色，使其更融合
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        textContentColor = MaterialTheme.colorScheme.onSurface
+    )
 }
