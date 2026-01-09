@@ -12,7 +12,7 @@ data class ModuleRuntimeStatus(
 
 object StatusManager {
     private const val TAG = "StatusManager"
-    private const val STATUS_FILE_NAME = "runtime_status.json"
+    private const val STATUS_FILE_NAME = "ModuleStatus.json"
 
     // 获取状态文件的位置 (与你的 Config 目录同级或在里面)
     private fun getStatusFile(): File {
