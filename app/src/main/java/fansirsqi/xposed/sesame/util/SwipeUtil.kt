@@ -80,7 +80,7 @@ object SwipeUtil {
     @JvmStatic
     fun startBySchemeSync(context: Context): Boolean {
         return try {
-            val intent = Intent(Intent.ACTION_VIEW, "alipays://platformapi/startapp?appId=20000067".toUri()).apply {
+            val intent = Intent(Intent.ACTION_VIEW, "alipays://platformapi/startapp?appId=".toUri()).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
