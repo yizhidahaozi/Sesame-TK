@@ -41,7 +41,9 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.Objects
 import java.util.regex.Pattern
 import kotlin.math.max
@@ -197,10 +199,10 @@ class AntMember : ModelTask() {
             BooleanModelField(
                 "beanExchangeBubbleBoost", "安心豆兑换时光加速器", false
             ).also { beanExchangeBubbleBoost = it })
-        modelFields.addField(
+       /* modelFields.addField(
             BooleanModelField(
                 "annualReview", "年度回顾", false
-            ).also { annualReview = it })
+            ).also { annualReview = it })*/
 
 
         collectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
@@ -2503,12 +2505,10 @@ class AntMember : ModelTask() {
                 record(TAG, "今日已兑换贴纸，跳过")
                 return
             }
+            val date = Date()
+            val year = SimpleDateFormat("yyyy",Locale.ENGLISH).format(Date())
+            val month = SimpleDateFormat("MM",Locale.ENGLISH).format(Date())
 
-            val calendar = Calendar.getInstance()
-            val year = calendar.get(Calendar.YEAR).toString()
-            val month = (calendar.get(Calendar.MONTH) + 1).toString()
-
-            // 1. 查询阶段
             val queryResp = AntMemberRpcCall.queryStickerCanReceive(year, month)
 
             val queryJson = JSONObject(queryResp)
