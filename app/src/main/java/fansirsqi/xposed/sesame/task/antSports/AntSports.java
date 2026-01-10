@@ -674,7 +674,7 @@ public class AntSports extends ModelTask {
         JSONObject theme = null;
         try {
             JSONObject jo = new JSONObject(AntSportsRpcCall.queryWorldMap(themeId));
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG+"queryWorldMap失败： [ThemeID: " + themeId + "]: " , jo)) {
                 theme = jo.getJSONObject("data");
             }else {
                 Log.error(TAG,"queryWorldMap失败： [ThemeID: " + themeId + "]: " +jo);
@@ -753,8 +753,8 @@ public class AntSports extends ModelTask {
         String pathId = null;
         try {
             JSONObject theme = queryWorldMap(walkPathThemeId);
-            if (!ResChecker.checkRes(TAG,theme)) {
-                Log.error(TAG,"queryJoinPath 失败："+theme);
+            if (theme==null) {
+                Log.error(TAG,"queryJoinPath-> theme 失败："+theme);
                 return null;
             }
             JSONArray cityList = theme.getJSONArray("cityList");
@@ -2767,13 +2767,33 @@ private boolean handleLightTask(JSONObject task, String title, String jumpLink) 
                         // 因为一旦 break，任务就结束了。如果想立刻处理，需要重构方法。
                         //break;
                     }
+                    // 获取建造前后的数据
+                    JSONObject before = buildData.optJSONObject("beforeStageInfo");
+                    JSONObject end = buildData.optJSONObject("endStageInfo");
 
-                    // 更新状态和日志记录
-                    int newLeftEnergy = buildData.optInt("leftCount", -1);
-                    if (newLeftEnergy >= 0) {
-                        leftEnergy = newLeftEnergy;
+                    int actualUsedEnergy = 0;
+
+                    if (before != null && end != null) {
+                        int bIdxBefore = before.optInt("buildingIndex");
+                        int bIdxEnd = end.optInt("buildingIndex");
+
+                        if (bIdxEnd > bIdxBefore) {
+                            // 情况 A: (B3 -> B4)
+                            // 消耗 = (B3的总进度 - B3开始时的进度) + B4当前的进度
+                            actualUsedEnergy = (before.optInt("buildingEnergyFinal") - before.optInt("buildingEnergyProcess"))
+                                    + end.optInt("buildingEnergyProcess");
+                        } else {
+                            // 情况 B: 还在同一个建筑
+                            actualUsedEnergy = end.optInt("buildingEnergyProcess") - before.optInt("buildingEnergyProcess");
+                        }
+                    } else {
+                        // 保底：按倍数扣除
+                        actualUsedEnergy = multiNum * 5;
                     }
+                    
 
+
+                    leftEnergy -= actualUsedEnergy;
                     int stepIncrease = calculateBuildSteps(buildData, multiNum);
                     int totalSteps = recordStepIncrease(stepIncrease);
                     remainSteps -= stepIncrease;
