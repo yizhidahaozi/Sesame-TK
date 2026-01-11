@@ -1253,14 +1253,13 @@ class AntFarm : ModelTask() {
                                         handleAutoFeedAnimal(true)
                                         Log.record(TAG, "🔄 下一次蹲点任务已创建")
                                     } catch (e: Exception) {
-                                        Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
-                                        Log.printStackTrace(TAG, e)
+                                        Log.printStackTrace(TAG,"蹲点投喂任务执行失败", e)
                                     }
                                 },
                                 execTime = nextFeedTime
                             )
                         )
-                        Log.farm(UserMap.getCurrentMaskName() + "小鸡的蹲点投喂时间[" + TimeUtil.getCommonDate(nextFeedTime)+"]")
+                        Log.record(UserMap.getCurrentMaskName() + "小鸡的蹲点投喂时间[" + TimeUtil.getCommonDate(nextFeedTime)+"]")
                     } else {
                         Log.record(TAG, "蹲点投喂🥣[倒计时为0，开始投喂]")
                         if (feedAnimal(ownerFarmId)) {
@@ -1484,7 +1483,7 @@ class AntFarm : ModelTask() {
                     }
                     val sendTypeInt = sendBackAnimalWay!!.value
                     user = UserMap.getMaskName(user)
-                    var s = AntFarmRpcCall.sendBackAnimal(
+                    val s = AntFarmRpcCall.sendBackAnimal(
                         SendBackAnimalWay.nickNames[sendTypeInt],
                         animal.animalId,
                         animal.currentFarmId,
@@ -1916,31 +1915,31 @@ class AntFarm : ModelTask() {
                     isSatisfied -> playAllFarmGames()
 
                     !isTaskEnabled -> {
-                        Log.farm("未开启饲料任务，虽然尝试领取了奖励，但饲料缺口仍超过${GAME_REWARD_MAX}g，直接执行游戏")
+                        Log.record("未开启饲料任务，虽然尝试领取了奖励，但饲料缺口仍超过${GAME_REWARD_MAX}g，直接执行游戏")
                         playAllFarmGames()
                     }
 
                     isTaskFinished -> {
-                        Log.farm("已开启饲料任务且今日已完成，但领取奖励后缺口仍超过${GAME_REWARD_MAX}g，暂不执行游戏改分。" +
+                        Log.record("已开启饲料任务且今日已完成，但领取奖励后缺口仍超过${GAME_REWARD_MAX}g，暂不执行游戏改分。" +
                                 "请确认饲料奖励完成情况，可以关闭设置里的“做饲料任务”选项直接进行游戏改分")
                     }
 
                     else -> {
-                        Log.farm("已开启饲料任务但尚未完成，现有饲料缺口超过${GAME_REWARD_MAX}g，等待任务完成后再执行")
+                        Log.record("已开启饲料任务但尚未完成，现有饲料缺口超过${GAME_REWARD_MAX}g，等待任务完成后再执行")
                     }
                 }
             }
 
             // 加速卡还没用完，等待加速卡用完
             isAccelEnabled && accelerateToolCount > 0 -> {
-                Log.farm("加速卡有${accelerateToolCount}张，已使用${Status.INSTANCE.useAccelerateToolCount}张，" +
+                Log.record("加速卡有${accelerateToolCount}张，已使用${Status.INSTANCE.useAccelerateToolCount}张，" +
                         "尚未达到今日使用上限，等待加速完成后再改分")
             }
         }
     }
 
     // 抽抽乐执行
-    private suspend fun playChouChouLe() {
+    private fun playChouChouLe() {
         val ccl = ChouChouLe()
         if (ccl.chouchoule()) {
             Status.setFlagToday("farm::chouChouLeFinished")
@@ -1949,7 +1948,7 @@ class AntFarm : ModelTask() {
             Log.record(TAG, "抽抽乐尚有未完成项（请检查是否需要验证）")
         }
     }
-    private suspend fun handleChouChouLeLogic() {
+    private fun handleChouChouLeLogic() {
         // 1. 检查抽抽乐是否已完成
         if (Status.hasFlagToday("farm::chouChouLeFinished")) {
             Log.record("今日抽抽乐已完成")
@@ -1976,7 +1975,7 @@ class AntFarm : ModelTask() {
 
             // 游戏改分任务尚未完成
             isGameEnabled && !isGameFinished -> {
-                Log.farm("游戏改分还没有完成，暂不执行抽抽乐")
+                Log.record("游戏改分还没有完成，暂不执行抽抽乐")
             }
         }
     }
@@ -2166,7 +2165,7 @@ class AntFarm : ModelTask() {
                                 // 针对连续使用加速卡时的领取饲料逻辑，留180g以内（含180g）的空间。如果游戏改分未完成，比如饲料正好是1620g时（上限1800g），不领取饲料。(同时确认开启游戏改分)
                                 if (!ignoreAcceLimit!!.value && (needFarmGame && foodStock >= (foodStockLimit - GAME_REWARD_MAX))) {
                                     unreceiveTaskAward++
-                                    Log.farm("当日游戏改分未完成，预留最多${GAME_REWARD_MAX}饲料空间，现有饲料${foodStock}g")
+                                    Log.record("当日游戏改分未完成，预留最多${GAME_REWARD_MAX}饲料空间，现有饲料${foodStock}g")
                                     isFeedFull = true
                                     break
                                 }
@@ -2488,9 +2487,9 @@ class AntFarm : ModelTask() {
         }
         // 这里打印没有连续使用8张加速卡的原因
         when(exitReason){
-            "CONDITION_NOT_MET" -> Log.farm("剩余可加速的时间少于设置的${remainingTimeValue}分钟，将在下次喂食后再次使用加速卡")
-            "SINGLE_USE_MODE" -> Log.farm("开启了“仅在满状态使用加速卡")
-            "EMOTION_NOT_MAX" -> Log.farm("开启了“仅心情满值时加速”，且当前心情不为 100")
+            "CONDITION_NOT_MET" -> Log.record("剩余可加速的时间少于设置的${remainingTimeValue}分钟，将在下次喂食后再次使用加速卡")
+            "SINGLE_USE_MODE" -> Log.record("开启了“仅在满状态使用加速卡")
+            "EMOTION_NOT_MAX" -> Log.record("开启了“仅心情满值时加速”，且当前心情不为 100")
         }
         Log.record(TAG, "加速卡内部⏩最终 isUseAccelerateTool=$isUseAccelerateTool")
         return isUseAccelerateTool
@@ -2619,6 +2618,9 @@ class AntFarm : ModelTask() {
                             break
                         }
                     }
+                }else{
+                    val username=UserMap.getMaskName(userId)
+                    Log.error(TAG, "😞进入用户 $userId[$username] 的庄园失败> $jo")
                 }
             }
         } catch (e: CancellationException) {
