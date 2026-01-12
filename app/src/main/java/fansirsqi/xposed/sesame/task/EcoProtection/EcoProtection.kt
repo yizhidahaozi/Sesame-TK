@@ -44,18 +44,6 @@ class EcoProtection : ModelTask() {
         return modelFields
     }
 
-    public override fun check(): Boolean? {
-        if (!TaskCommon.IS_ENERGY_TIME && TaskCommon.IS_AFTER_8AM) {
-            if (!ancientTreeOnlyWeek!!.value) {
-                return true
-            }
-            val sdfWeek = SimpleDateFormat("EEEE", Locale.getDefault())
-            val week = sdfWeek.format(Date())
-            return "星期一" == week || "星期三" == week || "星期五" == week
-        }
-        return false
-    }
-
     override suspend fun runSuspend() {
         try {
             Log.record(TAG, "开始执行$name")
