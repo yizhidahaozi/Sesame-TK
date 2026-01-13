@@ -419,8 +419,8 @@ public class ApplicationHook {
 
 
                     if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
-                        AlipayVersion max = new AlipayVersion("10.6.58");
-                        if (alipayVersion.compareTo(max) <= 0) {
+                        String version = alipayVersion.getVersionString();
+                        if (version.matches("^([0-9]\\.[0-9]+\\.[0-9]+\\.[0-9]+|10\\.[0-5]\\.[0-9]+\\.[0-9]+|10\\.6\\.([0-9]|[0-4][0-9]|5[0-8])\\.[0-9]+)$")) {
                             SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
                             SimplePageManager.INSTANCE.addHandler(
                                     "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
