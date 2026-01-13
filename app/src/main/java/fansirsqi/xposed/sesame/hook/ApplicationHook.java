@@ -581,11 +581,13 @@ public class ApplicationHook {
         Calendar calendar = Calendar.getInstance();
         calendar.add(Calendar.DAY_OF_MONTH, 1);
         resetToMidnight(calendar);
-        long delayToMidnight = calendar.getTimeInMillis() - System.currentTimeMillis();
+        // 延迟 10 秒启动，以规避 Logback 跨天归档时的多进程竞争和日志错乱问题
+        long delayToMidnight = (calendar.getTimeInMillis() - System.currentTimeMillis()) + 10_000L;
 
         if (delayToMidnight > 0) {
             SmartSchedulerManager.INSTANCE.schedule(delayToMidnight, "每日0点任务", () -> {
                 Log.record(TAG, "⏰ 0点任务触发");
+                updateDay();
                 execHandler();
                 setWakenAtTimeAlarm(); // 递归设置明天的
                 return Unit.INSTANCE;
