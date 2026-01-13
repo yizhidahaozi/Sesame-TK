@@ -582,7 +582,7 @@ public class ApplicationHook {
         calendar.add(Calendar.DAY_OF_MONTH, 1);
         resetToMidnight(calendar);
         // 延迟 10 秒启动，以规避 Logback 跨天归档时的多进程竞争和日志错乱问题
-        long delayToMidnight = (calendar.getTimeInMillis() - System.currentTimeMillis()) + 10_000L;
+        long delayToMidnight = (calendar.getTimeInMillis() - System.currentTimeMillis());
 
         if (delayToMidnight > 0) {
             SmartSchedulerManager.INSTANCE.schedule(delayToMidnight, "每日0点任务", () -> {
