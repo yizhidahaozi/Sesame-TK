@@ -167,7 +167,7 @@ public class AntSports extends ModelTask {
                 addChildTask(new ChildModelTask("syncStep", () -> {
                     int step = tmpStepCount();
                     try {
-                        ClassLoader classLoader = ApplicationHook.getClassLoader();
+                        ClassLoader classLoader = ApplicationHook.classLoader;
                         Object rpcManager = XposedHelpers.callStaticMethod(
                                 classLoader.loadClass("com.alibaba.health.pedometer.intergation.rpc.RpcManager"),
                                 "a"
@@ -202,7 +202,7 @@ public class AntSports extends ModelTask {
                 sportsEnergyBubbleTask();
             }
 
-            ClassLoader loader = ApplicationHook.getClassLoader();
+            ClassLoader loader = ApplicationHook.classLoader;
 
             if (walk.getValue()) {
                 getWalkPathThemeIdOnConfig();
