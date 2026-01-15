@@ -10,13 +10,18 @@ import android.os.Handler;
 import android.os.Looper;
 
 
+import androidx.core.content.ContextCompat;
+
+import de.robv.android.xposed.XSharedPreferences;
+import fansirsqi.xposed.sesame.R;
+import fansirsqi.xposed.sesame.SesameApplication;
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager;
 import fansirsqi.xposed.sesame.hook.internal.LocationHelper;
-import fansirsqi.xposed.sesame.newutil.ModuleStatus;
-import fansirsqi.xposed.sesame.newutil.StatusManager;
+import fansirsqi.xposed.sesame.util.ModuleStatus;
+import fansirsqi.xposed.sesame.util.StatusManager;
 import fansirsqi.xposed.sesame.util.*;
 import kotlin.Unit;
 import lombok.Setter;
@@ -49,7 +54,7 @@ import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServer;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
-import fansirsqi.xposed.sesame.newutil.DataStore;
+import fansirsqi.xposed.sesame.util.DataStore;
 import fansirsqi.xposed.sesame.task.MainTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskRunnerAdapter;
@@ -75,8 +80,6 @@ public class ApplicationHook {
      */
     private static class BroadcastActions {
         static final String RESTART = "com.eg.android.AlipayGphone.sesame.restart";
-        // static final String EXECUTE = "com.eg.android.AlipayGphone.sesame.execute"; // 已废弃
-        // static final String PRE_WAKEUP = "com.eg.android.AlipayGphone.sesame.prewakeup"; // 已废弃
         static final String RE_LOGIN = "com.eg.android.AlipayGphone.sesame.reLogin";
         static final String STATUS = "com.eg.android.AlipayGphone.sesame.status";
         static final String RPC_TEST = "com.eg.android.AlipayGphone.sesame.rpctest";
@@ -88,45 +91,25 @@ public class ApplicationHook {
     }
 
     private static class ReflectionCache {
-        private static Class<?> alipayApplicationClass;
-        private static Class<?> socialSdkContactServiceClass;
         private static volatile boolean initialized = false;
 
         static void initialize(ClassLoader loader) {
             if (initialized) return;
             try {
-                alipayApplicationClass = XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
-                socialSdkContactServiceClass = XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
+                XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
+                XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
                 initialized = true;
             } catch (Throwable t) {
                 // Ignore
             }
         }
 
-        static Class<?> getAlipayApplicationClass(ClassLoader loader) {
-            if (!initialized) initialize(loader);
-            try {
-                if (alipayApplicationClass != null) return alipayApplicationClass;
-                return XposedHelpers.findClass(AlipayClasses.APPLICATION, loader);
-            } catch (Throwable t) {
-                return null;
-            }
-        }
-
-        static Class<?> getSocialSdkClass(ClassLoader loader) {
-            if (!initialized) initialize(loader);
-            try {
-                if (socialSdkContactServiceClass != null) return socialSdkContactServiceClass;
-                return XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
-            } catch (Throwable t) {
-                return null;
-            }
-        }
     }
 
     @Getter
     private static ClassLoader classLoader = null;
-    private static Object microApplicationContextObject = null;
+    @Getter
+    private static final Object microApplicationContextObject = null;
 
     @SuppressLint("StaticFieldLeak")
     static volatile Context appContext = null;
@@ -333,6 +316,9 @@ public class ApplicationHook {
 
     @SuppressLint("PrivateApi")
     private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
+        XSharedPreferences prefs = new XSharedPreferences(General.MODULE_PACKAGE_NAME, SesameApplication.PREFERENCES_KEY);//从这里获取模块配置
+        prefs.makeWorldReadable();
+
         // 1. 获取进程名
         String processName = null;
         if (rawParam instanceof XC_LoadPackage.LoadPackageParam) {
@@ -689,7 +675,7 @@ public class ApplicationHook {
             Model.bootAllModel(classLoader);
             Status.load(userId);
             updateDay();
-            String successMsg = "芝麻粒-TK 加载成功✨";
+            String successMsg = "Loaded SesameTk "+BuildConfig.VERSION_NAME+ "✨";
             Log.record(successMsg);
             Toast.INSTANCE.show(successMsg);
             offline = false;
@@ -871,7 +857,7 @@ public class ApplicationHook {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(new AlipayBroadcastReceiver(), intentFilter, Context.RECEIVER_EXPORTED);
             } else {
-                context.registerReceiver(new AlipayBroadcastReceiver(), intentFilter);
+                ContextCompat.registerReceiver(context, new AlipayBroadcastReceiver(), intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
             }
         } catch (Throwable th) {
             Log.record(TAG, "hook registerBroadcastReceiver err:");

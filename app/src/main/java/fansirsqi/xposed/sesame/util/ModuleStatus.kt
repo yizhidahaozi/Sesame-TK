@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
 
 import java.io.InputStream

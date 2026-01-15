@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.newui
+package fansirsqi.xposed.sesame.ui.screen
 
 import android.content.ClipData
 import android.content.ClipboardManager

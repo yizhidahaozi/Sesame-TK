@@ -1,10 +1,10 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import fansirsqi.xposed.sesame.data.General
-import fansirsqi.xposed.sesame.util.ToastUtil
+import java.util.Calendar
 
 object IconManager {
     // 请确保这两个常量对应 Manifest 中的完整路径
@@ -48,16 +48,16 @@ object IconManager {
     }
 
     private fun isChristmasTime(): Boolean {
-        val calendar = java.util.Calendar.getInstance()
-        val month = calendar.get(java.util.Calendar.MONTH) + 1
-        val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val calendar = Calendar.getInstance()
+        val month = calendar.get(Calendar.MONTH) + 1
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
         return month == 12 && (day in 25..25)
     }
 
     private fun inDateRange(mon: Int, start: Int, end: Int): Boolean {
-        val calendar = java.util.Calendar.getInstance()
-        val month = calendar.get(java.util.Calendar.MONTH) + 1
-        val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val calendar = Calendar.getInstance()
+        val month = calendar.get(Calendar.MONTH) + 1
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
         return mon == month && (day in start..end)
     }
 

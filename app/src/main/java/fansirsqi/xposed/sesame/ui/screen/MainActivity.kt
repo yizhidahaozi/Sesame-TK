@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui
+package fansirsqi.xposed.sesame.ui.screen
 
 import android.content.Context
 import android.content.Intent
@@ -84,18 +84,20 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
+import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
-import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.newui.DeviceInfoCard
-import fansirsqi.xposed.sesame.newui.WatermarkLayer
-import fansirsqi.xposed.sesame.newutil.IconManager
 import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
-import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.ui.compose.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.ui.extension.joinQQGroup
+import fansirsqi.xposed.sesame.ui.extension.openUrl
+import fansirsqi.xposed.sesame.ui.extension.performNavigationToSettings
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
+import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
 import fansirsqi.xposed.sesame.util.CommandUtil
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.IconManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -142,7 +144,7 @@ class MainActivity : ComponentActivity() {
         setupShizuku()
 
         // 4. 同步图标状态
-        val prefs = getSharedPreferences(preferencesKey, MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFERENCES_KEY, MODE_PRIVATE)
         IconManager.syncIconState(this, prefs.getBoolean("is_icon_hidden", false))
 
         // 5. 设置 Compose 内容
@@ -150,10 +152,7 @@ class MainActivity : ComponentActivity() {
             // 收集 ViewModel 状态
             val oneWord by viewModel.oneWord.collectAsStateWithLifecycle()
             val activeUser by viewModel.activeUser.collectAsStateWithLifecycle()
-
             val moduleStatus by viewModel.moduleStatus.collectAsStateWithLifecycle()
-
-
             //  获取实时的 UserEntity 列表
             val userList by viewModel.userList.collectAsStateWithLifecycle()
             // 使用 derivedStateOf 优化性能，只在 userList 变化时重新映射
@@ -228,13 +227,13 @@ class MainActivity : ComponentActivity() {
             MainUiEvent.OpenDebugLog -> openLogFile(Files.getDebugLogFile())
             is MainUiEvent.ToggleIconHidden -> {
                 val shouldHide = event.isHidden
-                getSharedPreferences(preferencesKey, MODE_PRIVATE).edit { putBoolean("is_icon_hidden", shouldHide) }
+                getSharedPreferences(PREFERENCES_KEY, MODE_PRIVATE).edit { putBoolean("is_icon_hidden", shouldHide) }
                 viewModel.syncIconState(shouldHide)
                 Toast.makeText(this, "设置已保存，可能需要重启桌面才能生效", Toast.LENGTH_SHORT).show()
             }
 
             MainUiEvent.OpenCaptureLog -> openLogFile(Files.getCaptureLogFile())
-            MainUiEvent.OpenExtend -> startActivity(Intent(this, ExtendActivity::class.java))
+            MainUiEvent.OpenExtend -> startActivity(Intent(this, _root_ide_package_.fansirsqi.xposed.sesame.ui.ExtendActivity::class.java))
             MainUiEvent.ClearConfig -> {
                 // 🔥 这里只负责执行逻辑，不再负责弹窗
                 if (Files.delFile(Files.CONFIG_DIR)) {
@@ -383,7 +382,7 @@ fun MainScreen(
     // 获取 isOneWordLoading
     val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
     // 获取 SharedPreferences
-    val prefs = context.getSharedPreferences(preferencesKey, Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
     // 控制图标隐藏
     var isIconHidden by remember { mutableStateOf(prefs.getBoolean("is_icon_hidden", false)) }
     // 控制菜单状态

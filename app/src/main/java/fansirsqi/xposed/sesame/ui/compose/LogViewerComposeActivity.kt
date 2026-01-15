@@ -1,9 +1,10 @@
-package fansirsqi.xposed.sesame.ui.log
+package fansirsqi.xposed.sesame.ui.compose
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import fansirsqi.xposed.sesame.newui.WatermarkLayer
+import fansirsqi.xposed.sesame.ui.screen.WatermarkLayer
+import fansirsqi.xposed.sesame.ui.screen.LogViewerScreen
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 
 /**

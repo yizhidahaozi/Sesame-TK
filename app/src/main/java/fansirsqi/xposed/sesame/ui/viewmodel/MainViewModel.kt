@@ -1,22 +1,21 @@
-package fansirsqi.xposed.sesame.ui
+package fansirsqi.xposed.sesame.ui.viewmodel
 
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import fansirsqi.xposed.sesame.data.ConnectionState
-import fansirsqi.xposed.sesame.data.LsposedServiceManager
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
-import fansirsqi.xposed.sesame.newutil.DataStore
-import fansirsqi.xposed.sesame.newutil.IconManager
-import fansirsqi.xposed.sesame.newutil.StatusManager
+import fansirsqi.xposed.sesame.service.ConnectionState
+import fansirsqi.xposed.sesame.service.LsposedServiceManager
+import fansirsqi.xposed.sesame.ui.screen.DeviceInfoUtil
 import fansirsqi.xposed.sesame.util.AssetUtil
-import fansirsqi.xposed.sesame.util.DirectoryWatcher.observeDirectoryChanges
+import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.util.DirectoryWatcher
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
-import fansirsqi.xposed.sesame.util.FansirsqiUtil.getFolderList
 import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.IconManager
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.StatusManager
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -47,7 +46,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val TAG = "MainViewModel"
-        var verifuids = getFolderList(Files.CONFIG_DIR.absolutePath)
+        var verifuids = FansirsqiUtil.getFolderList(Files.CONFIG_DIR.absolutePath)
     }
 
     // --- StateFlows ---
@@ -154,11 +153,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     @OptIn(FlowPreview::class)
     private fun startConfigDirectoryObserver() {
         viewModelScope.launch(Dispatchers.IO) {
-            observeDirectoryChanges(Files.CONFIG_DIR)
+            DirectoryWatcher.observeDirectoryChanges(Files.CONFIG_DIR)
                 .debounce(100)
                 .collectLatest {
-                    // 文件夹变动意味着用户数据可能有更新
                     reloadUserConfigs()
+                    refreshActiveUser()
                 }
         }
     }
@@ -166,21 +165,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reloadUserConfigs() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                try {
-                    fansirsqi.xposed.sesame.data.UIConfig.load()
-                } catch (_: Exception) {
-                }
 
-                val latestUserIds = getFolderList(Files.CONFIG_DIR.absolutePath)
+                val latestUserIds = FansirsqiUtil.getFolderList(Files.CONFIG_DIR.absolutePath)
                 val newList = mutableListOf<UserEntity>()
                 for (userId in latestUserIds) {
                     UserMap.loadSelf(userId)
                     UserMap.get(userId)?.let { newList.add(it) }
                 }
                 _userList.value = newList
-
-                // 🔥 每次用户列表变动，顺便刷新一下当前激活用户，防止数据不同步
-                refreshActiveUser()
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error reloading user configs", e)

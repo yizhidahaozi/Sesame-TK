@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.compose
+package fansirsqi.xposed.sesame.ui.extension
 
 import android.app.Activity
 import android.view.ViewGroup
@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import fansirsqi.xposed.sesame.newui.WatermarkLayer
+import fansirsqi.xposed.sesame.ui.screen.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 
 /**
@@ -22,7 +22,7 @@ object WatermarkInjector {
                 AppTheme {
                     // 水印层作为覆盖层
                     WatermarkLayer(
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.Companion.fillMaxSize()
                     ) {
                         // 内容为空，因为我们只是要把水印盖在原来的 View 上
                         // Canvas 默认不拦截点击，所以点击事件会穿透到下面的 View

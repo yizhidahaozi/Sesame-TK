@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.log
+package fansirsqi.xposed.sesame.ui.screen
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -92,16 +92,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
+import fansirsqi.xposed.sesame.ui.viewmodel.LogViewerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -343,7 +346,7 @@ fun LogViewerScreen(
                                             DropdownMenu(
                                                 expanded = showFontSubMenu,
                                                 onDismissRequest = { showFontSubMenu = false },
-                                                offset = androidx.compose.ui.unit.DpOffset(x = 10.dp, y = 0.dp)
+                                                offset = DpOffset(x = 10.dp, y = 0.dp)
                                             ) {
                                                 DropdownMenuItem(
                                                     text = { Text("放大字体") },
@@ -545,7 +548,7 @@ fun LogLineItem(line: String, searchQuery: String, fontSize: TextUnit, textColor
             // 如果没有搜索，直接返回普通 AnnotatedString，开销极小
             // 注意：这里不用 buildAnnotatedString { append(line) }
             // 而是直接用 AnnotatedString(line) 构造，省去 Builder 开销
-            androidx.compose.ui.text.AnnotatedString(line)
+            AnnotatedString(line)
         }
     }
 

@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.data
+package fansirsqi.xposed.sesame.service
 
 
 import fansirsqi.xposed.sesame.util.Log

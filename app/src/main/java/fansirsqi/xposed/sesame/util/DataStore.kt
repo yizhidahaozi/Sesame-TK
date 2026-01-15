@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
 import android.annotation.SuppressLint
 import android.util.Log
@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import java.io.File
+import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -286,7 +287,7 @@ object DataStore {
                 var shouldReload = false
                 key.pollEvents().forEach { event ->
                     // 安全转换 context
-                    val changedPath = event.context() as? java.nio.file.Path
+                    val changedPath = event.context() as? Path
                     val fileName = changedPath?.toString()
 
                     if (fileName == storageFile.name) {

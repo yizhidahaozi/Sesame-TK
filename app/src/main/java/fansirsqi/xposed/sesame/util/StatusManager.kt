@@ -1,7 +1,5 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
-import fansirsqi.xposed.sesame.util.Files
-import fansirsqi.xposed.sesame.util.Log
 import java.io.File
 
 data class ModuleRuntimeStatus(

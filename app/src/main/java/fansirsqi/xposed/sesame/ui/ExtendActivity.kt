@@ -14,8 +14,8 @@ import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.entity.ExtendFunctionItem
 import fansirsqi.xposed.sesame.model.CustomSettings
-import fansirsqi.xposed.sesame.newutil.DataStore
-import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector
+import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector
 import fansirsqi.xposed.sesame.ui.widget.ExtendFunctionAdapter
 import fansirsqi.xposed.sesame.util.Detector.getApiUrl
 import fansirsqi.xposed.sesame.util.FansirsqiUtil

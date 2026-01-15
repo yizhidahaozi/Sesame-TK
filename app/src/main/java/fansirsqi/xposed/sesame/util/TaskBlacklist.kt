@@ -1,7 +1,6 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
 import com.fasterxml.jackson.core.type.TypeReference
-import fansirsqi.xposed.sesame.util.Log
 
 /**
  * 通用任务黑名单管理器

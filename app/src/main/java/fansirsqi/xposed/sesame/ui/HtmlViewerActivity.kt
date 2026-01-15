@@ -22,7 +22,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.databinding.ActivityHtmlViewerBinding
-import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector
+import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log

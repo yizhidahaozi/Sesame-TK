@@ -15,7 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import fansirsqi.xposed.sesame.hook.ApplicationHook
-import fansirsqi.xposed.sesame.ui.MainActivity
+import fansirsqi.xposed.sesame.ui.screen.MainActivity
 
 /**
  * 权限工具类，用于检查和请求所需权限。

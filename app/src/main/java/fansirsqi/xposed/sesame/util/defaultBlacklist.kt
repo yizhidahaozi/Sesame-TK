@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.newutil
+package fansirsqi.xposed.sesame.util
 
 /**
  * 默认黑名单列表（包含常见无法完成的任务）

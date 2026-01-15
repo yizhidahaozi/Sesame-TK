@@ -13,7 +13,7 @@ import androidx.core.app.NotificationCompat
 import fansirsqi.xposed.sesame.ICallback
 import fansirsqi.xposed.sesame.ICommandService
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.ui.MainActivity
+import fansirsqi.xposed.sesame.ui.screen.MainActivity
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

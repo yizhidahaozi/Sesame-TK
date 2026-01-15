@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.log
+package fansirsqi.xposed.sesame.ui.viewmodel
 
 import android.app.Application
 import android.content.Context
@@ -9,10 +9,11 @@ import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
+import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -20,10 +21,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,7 +56,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val tag = "LogViewerViewModel"
 
-    private val prefs = application.getSharedPreferences(preferencesKey, Context.MODE_PRIVATE)
+    private val prefs = application.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
     private val logFontSizeKey = "pref_font_size"
 
     private val _uiState = MutableStateFlow(LogUiState())
@@ -323,7 +324,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             // ✅ 协程取消异常不记录日志，直接静默处理
             // 这是正常的协程生命周期管理，不需要打印错误
             throw e // 重新抛出让协程框架处理

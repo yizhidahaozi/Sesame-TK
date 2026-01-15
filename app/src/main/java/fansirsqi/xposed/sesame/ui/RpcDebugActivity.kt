@@ -19,7 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.android.material.button.MaterialButton
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.entity.RpcDebugItem
-import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.ui.compose.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.widget.RpcDebugAdapter
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
