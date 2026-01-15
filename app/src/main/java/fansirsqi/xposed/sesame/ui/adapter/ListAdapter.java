@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.widget;
+package fansirsqi.xposed.sesame.ui.adapter;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -19,6 +19,7 @@ import java.util.Objects;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.entity.MapperEntity;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
+import fansirsqi.xposed.sesame.ui.widget.ListDialog;
 import fansirsqi.xposed.sesame.util.Log;
 
 public class ListAdapter extends BaseAdapter {
@@ -184,6 +185,6 @@ public class ListAdapter extends BaseAdapter {
      */
     public static class ViewHolder {
         TextView tv;
-        CheckBox cb;
+        public CheckBox cb;
     }
 }

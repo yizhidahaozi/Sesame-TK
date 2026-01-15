@@ -1,9 +1,8 @@
-package fansirsqi.xposed.sesame.ui.widget
+package fansirsqi.xposed.sesame.ui.adapter
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -38,15 +37,15 @@ class RpcDebugAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
-        
+
         holder.tvName.text = item.getDisplayName()
         holder.tvMethod.text = item.method
-        
+
         holder.btnRun.setOnClickListener { onRun(item) }
         holder.btnEdit.setOnClickListener { onEdit(item) }
         holder.btnDelete.setOnClickListener { onDelete(item) }
         holder.btnCopy.setOnClickListener { onCopy(item) }
-        
+
         // 点击整行也可以运行
         holder.itemView.setOnClickListener { onRun(item) }
     }
@@ -54,4 +53,3 @@ class RpcDebugAdapter(
     override fun getItemCount() = items.size
 
 }
-

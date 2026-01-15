@@ -1,16 +1,16 @@
-package fansirsqi.xposed.sesame.ui.compose
+package fansirsqi.xposed.sesame.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import fansirsqi.xposed.sesame.ui.screen.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.screen.LogViewerScreen
+import fansirsqi.xposed.sesame.ui.screen.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 
 /**
  * 承载 Compose 日志查看器的 Activity
  */
-class LogViewerComposeActivity : ComponentActivity() {
+class LogViewerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val path = intent.data?.path ?: ""
@@ -21,7 +21,6 @@ class LogViewerComposeActivity : ComponentActivity() {
                     LogViewerScreen(
                         filePath = path,
                         onBackClick = {
-                            // 点击返回箭头时关闭当前页面
                             finish()
                         }
                     )

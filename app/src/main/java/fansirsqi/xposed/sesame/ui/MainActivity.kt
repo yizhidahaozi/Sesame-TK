@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.screen
+package fansirsqi.xposed.sesame.ui
 
 import android.content.Context
 import android.content.Intent
@@ -88,7 +88,7 @@ import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
-import fansirsqi.xposed.sesame.ui.compose.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.ui.LogViewerActivity
 import fansirsqi.xposed.sesame.ui.extension.joinQQGroup
 import fansirsqi.xposed.sesame.ui.extension.openUrl
 import fansirsqi.xposed.sesame.ui.extension.performNavigationToSettings
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
 
             // AppTheme 会处理状态栏颜色
             AppTheme {
-                WatermarkLayer(
+                _root_ide_package_.fansirsqi.xposed.sesame.ui.screen.WatermarkLayer(
                     uidList = uidList
                 ) {
                     MainScreen(
@@ -271,7 +271,7 @@ class MainActivity : ComponentActivity() {
             ToastUtil.showToast(this, "日志文件不存在: ${logFile.name}")
             return
         }
-        val intent = Intent(this, LogViewerComposeActivity::class.java).apply {
+        val intent = Intent(this, LogViewerActivity::class.java).apply {
             data = logFile.toUri()
         }
         startActivity(intent)
@@ -522,7 +522,7 @@ fun MainScreen(
                 )
 
                 if (deviceInfoMap != null) {
-                    DeviceInfoCard(deviceInfoMap!!)
+                    _root_ide_package_.fansirsqi.xposed.sesame.ui.screen.DeviceInfoCard(deviceInfoMap!!)
                 } else {
                     CircularProgressIndicator()
                 }

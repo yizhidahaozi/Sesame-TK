@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui;
+package fansirsqi.xposed.sesame.ui.widget;
 
 import android.content.Context;
 import android.content.DialogInterface;

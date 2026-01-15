@@ -19,8 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.android.material.button.MaterialButton
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.entity.RpcDebugItem
-import fansirsqi.xposed.sesame.ui.compose.LogViewerComposeActivity
-import fansirsqi.xposed.sesame.ui.widget.RpcDebugAdapter
+import fansirsqi.xposed.sesame.ui.LogViewerActivity
+import fansirsqi.xposed.sesame.ui.adapter.RpcDebugAdapter
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -442,7 +442,7 @@ class RpcDebugActivity : BaseActivity() {
                 ToastUtil.showToast(this@RpcDebugActivity, "已发送: ${item.getDisplayName()}")
                 // 跳转到日志查看器
                 try {
-                    val logIntent = Intent(this@RpcDebugActivity, LogViewerComposeActivity::class.java).apply {
+                    val logIntent = Intent(this@RpcDebugActivity, LogViewerActivity::class.java).apply {
                         data = logFile.toUri()
                     }
                     startActivity(logIntent)
