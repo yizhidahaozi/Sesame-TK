@@ -28,6 +28,7 @@ import fansirsqi.xposed.sesame.util.ToastUtil
 /**
  * 扩展函数：打开浏览器
  */
+
 fun Context.openUrl(url: String) {
     try {
         val intent = Intent(Intent.ACTION_VIEW, url.toUri())
@@ -126,7 +127,7 @@ fun joinQQGroup(context: Context) {
     } catch (e: Exception) {
         // 如果没安装 QQ 或唤起失败，回退到打开网页
         try {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://qm.qq.com/q/Aj0Xby6AGQ")) // 这里的 URL 结构可能需要根据实际生成的链接调整
+            val webIntent = Intent(Intent.ACTION_VIEW, "https://qm.qq.com/q/Aj0Xby6AGQ".toUri()) // 这里的 URL 结构可能需要根据实际生成的链接调整
             context.startActivity(webIntent)
         } catch (e2: Exception) {
             Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
