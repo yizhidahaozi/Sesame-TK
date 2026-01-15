@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui
+package fansirsqi.xposed.sesame.ui.extension
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -17,6 +17,10 @@ import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.entity.UserEntity
+import fansirsqi.xposed.sesame.ui.SettingActivity
+import fansirsqi.xposed.sesame.ui.WebSettingsActivity
+import fansirsqi.xposed.sesame.ui.model.UiMode
+import fansirsqi.xposed.sesame.ui.repository.ConfigRepository
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -132,11 +136,14 @@ fun joinQQGroup(context: Context) {
 
 
 fun Context.performNavigationToSettings(user: UserEntity) {
-    // 这里是你提供的原有逻辑
     if (Detector.loadLibrary("checker")) {
         Log.record("载入用户配置 ${user.showName}")
         try {
-            val targetActivity = fansirsqi.xposed.sesame.data.UIConfig.INSTANCE.targetActivityClass
+            // 1. 【改动点】从仓库获取当前模式
+            val currentMode = ConfigRepository.uiMode.value
+            // 2. 【改动点】获取对应的 Activity 类 (使用上面定义的扩展属性)
+            val targetActivity = currentMode.targetActivity
+
             val intent = Intent(this, targetActivity).apply {
                 putExtra("userId", user.userId)
                 putExtra("userName", user.showName)
@@ -149,4 +156,10 @@ fun Context.performNavigationToSettings(user: UserEntity) {
         Detector.tips(this, "缺少必要依赖！")
     }
 }
+
+val UiMode.targetActivity: Class<*>
+    get() = when (this) {
+        UiMode.Web -> WebSettingsActivity::class.java
+        UiMode.New -> SettingActivity::class.java
+    }
 
