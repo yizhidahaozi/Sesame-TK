@@ -332,17 +332,32 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             val newOffsets = mutableListOf<Long>()
+            val readBuffer = ByteArray(8192) // 8KB 缓冲区
 
             synchronized(localRaf) {
                 localRaf.seek(startPosition)
                 var currentOffset = startPosition
-
+                // ✅ 读取新增的内容，找到所有换行符位置
                 while (currentOffset < currentFileSize) {
                     ensureActive()
-                    newOffsets.add(currentOffset)
-                    currentOffset = localRaf.filePointer
+                    val remainingBytes = (currentFileSize - currentOffset).toInt()
+                    val bytesToRead = minOf(readBuffer.size, remainingBytes)
+                    if (bytesToRead <= 0) break
+                    val bytesRead = localRaf.read(readBuffer, 0, bytesToRead)
+                    if (bytesRead == -1) break
+                    // ✅ 遍历读取的字节，找到换行符
+                    for (i in 0 until bytesRead) {
+                        currentOffset++
+                        if (readBuffer[i] == '\n'.code.toByte()) {
+                            // 记录下一行的起始位置
+                            if (currentOffset < currentFileSize) {
+                                newOffsets.add(currentOffset)
+                            }
+                        }
+                    }
                 }
             }
+            
             if (newOffsets.isNotEmpty()) {
                 // ✅ 先更新文件大小,再修改列表
                 lastKnownFileSize.set(currentFileSize)
