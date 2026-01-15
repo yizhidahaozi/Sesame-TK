@@ -294,7 +294,7 @@ public class NewRpcBridge implements RpcBridge {
                         // 检测安全验证错误，自动启动支付宝（带防抖和版本检查）
 
                         if (errorMessage != null && errorMessage.contains("为了保障您的操作安全，请进行验证后继续")) {
-                            // 检查版本号，只有版本低于等于10.6.58.88888才自动启动支付宝
+                            // 检查版本号，只有版本低于等于10.6.58.99999才自动启动支付宝
                             if (!ApplicationHook.shouldEnableSimplePageManager()) {
                               //  Log.record(TAG, "支付宝版本不支持自动启动支付宝进行滑块验证，跳过");
                                 return null;

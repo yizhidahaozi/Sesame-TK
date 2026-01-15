@@ -136,15 +136,15 @@ public class ApplicationHook {
 
     /**
      * 检查支付宝版本是否需要启用SimplePageManager功能
-     * @return true表示版本低于等于10.6.58.88888，需要启用；false表示不需要
+     * @return true表示版本低于等于10.6.58.99999，需要启用；false表示不需要
      */
     public static boolean shouldEnableSimplePageManager() {
         if (!VersionHook.hasVersion() || alipayVersion.getVersionString() == null) {
             Log.debug(TAG, "无法获取支付宝版本信息，跳过 SimplePageManager 初始化");
             return false;
         }
-        // 例如：10.6.58.8000 <= 10.6.58.88888，但 10.6.59 > 10.6.58.88888
-        if (alipayVersion.compareTo(new AlipayVersion("10.6.58.88888")) <= 0) {
+        // 例如：10.6.58.8000 <= 10.6.58.99999，但 10.6.59 > 10.6.58.99999
+        if (alipayVersion.compareTo(new AlipayVersion("10.6.58.99999")) <= 0) {
             return true;
         } else {
             Log.debug(TAG, "支付宝版本 " + alipayVersion.getVersionString() + " 高于 10.6.58，跳过 SimplePageManager 初始化");
