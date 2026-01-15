@@ -156,8 +156,6 @@ class RpcDebugViewModel(application: Application) : AndroidViewModel(application
             try {
                 val logFile = Files.getDebugLogFile()
                 Files.clearFile(logFile)
-                delay(300)
-
                 val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest").apply {
                     putExtra("method", item.method)
                     putExtra("data", item.getRequestDataString())
@@ -165,7 +163,18 @@ class RpcDebugViewModel(application: Application) : AndroidViewModel(application
                 }
                 activityContext.sendBroadcast(intent)
                 ToastUtil.makeText("已发送: ${item.getDisplayName()}", Toast.LENGTH_SHORT).show()
-
+                // 轮询等待日志写入（Logback 是异步写入的，需要等待）
+                var waitCount = 0
+                val maxWait = 30 // 最多等待 3 秒（30 * 100ms）
+                while (waitCount < maxWait) {
+                    delay(100)
+                    if (logFile.exists() && logFile.length() > 0) {
+                        // 日志文件有内容了，再等待一小段时间确保写入完成
+                        delay(200)
+                        break
+                    }
+                    waitCount++
+                }
                 // 跳转日志
                 try {
                     val logIntent = Intent(activityContext, LogViewerActivity::class.java).apply {

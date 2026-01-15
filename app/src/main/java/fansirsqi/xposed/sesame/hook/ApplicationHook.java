@@ -281,7 +281,6 @@ public class ApplicationHook {
 
                     initVersionInfo(packageName);
                     loadLibs();
-
                     // 特殊版本处理
                     if (VersionHook.hasVersion() && alipayVersion.compareTo(new AlipayVersion("10.7.26.8100")) == 0) {
                         HookUtil.INSTANCE.fuckAccounLimit(classLoader);
@@ -427,11 +426,16 @@ public class ApplicationHook {
 
     private void initSimplePageManager() {
         if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
-            if (alipayVersion.compareTo(new AlipayVersion("10.6.58")) <= 0) {
+            // 例如：10.6.58.8000 <= 10.6.58.88888，但 10.6.59 > 10.6.58.88888
+            if (alipayVersion.compareTo(new AlipayVersion("10.6.58.88888")) <= 0) {
                 SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
                 SimplePageManager.INSTANCE.addHandler("com.alipay.mobile.nebulax.xriver.activity.XRiverActivity", new Captcha1Handler());
                 SimplePageManager.INSTANCE.addHandler("com.eg.android.AlipayGphone.AlipayLogin", new Captcha2Handler());
+            } else {
+                Log.debug(TAG, "支付宝版本 " + alipayVersion.getVersionString() + " 高于 10.6.58，跳过 SimplePageManager 初始化");
             }
+        } else {
+            Log.debug(TAG, "无法获取支付宝版本信息，跳过 SimplePageManager 初始化");
         }
     }
 

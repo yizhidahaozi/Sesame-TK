@@ -181,6 +181,10 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             lineCache.evictAll()
             refreshList()
 
+        } catch (e: CancellationException) {
+            // ✅ 协程取消异常不记录日志，直接静默处理
+            // 这是正常的协程生命周期管理，不需要打印错误
+            throw e // 重新抛出让协程框架处理
         } catch (e: Exception) {
             e.printStackTrace()
             val errorMsg = "索引失败: ${e.message}"
@@ -319,7 +323,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
 
     private suspend fun appendNewLines(currentFileSize: Long) = withContext(Dispatchers.IO) {
         val localRaf = raf ?: return@withContext
-
         try {
             val startPosition = lastKnownFileSize.get()
 
@@ -340,20 +343,21 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                     currentOffset = localRaf.filePointer
                 }
             }
-
             if (newOffsets.isNotEmpty()) {
                 // ✅ 先更新文件大小,再修改列表
                 lastKnownFileSize.set(currentFileSize)
-
                 synchronized(allLineOffsets) {
                     allLineOffsets.addAll(newOffsets)
                     while (allLineOffsets.size > maxLines) {
                         allLineOffsets.removeAt(0)
                     }
                 }
-
                 refreshList()
             }
+        } catch (e: CancellationException) {
+            // ✅ 协程取消异常不记录日志，直接静默处理
+            // 这是正常的协程生命周期管理，不需要打印错误
+            throw e // 重新抛出让协程框架处理
         } catch (e: Exception) {
             Log.printStackTrace(tag, "appendNewLines failed", e)
         }
