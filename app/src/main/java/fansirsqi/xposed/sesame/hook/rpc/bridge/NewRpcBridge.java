@@ -291,8 +291,14 @@ public class NewRpcBridge implements RpcBridge {
                         String response = rpcEntity.getResponseString();
                         String methodName = rpcEntity.getRequestMethod();
 
-                        // 检测安全验证错误，自动启动支付宝（带防抖）
+                        // 检测安全验证错误，自动启动支付宝（带防抖和版本检查）
+
                         if (errorMessage != null && errorMessage.contains("为了保障您的操作安全，请进行验证后继续")) {
+                            // 检查版本号，只有版本低于等于10.6.58.88888才自动启动支付宝
+                            if (!ApplicationHook.shouldEnableSimplePageManager()) {
+                              //  Log.record(TAG, "支付宝版本不支持自动启动支付宝进行滑块验证，跳过");
+                                return null;
+                            }
                             long currentTime = System.currentTimeMillis();
                             long timeSinceLastStart = currentTime - lastAlipayStartTime;
                             if (timeSinceLastStart < ALIPAY_START_DEBOUNCE_TIME) {

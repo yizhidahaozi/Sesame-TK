@@ -134,6 +134,24 @@ public class ApplicationHook {
     static AlipayVersion alipayVersion = new AlipayVersion("");
     private static volatile boolean hooked = false;
 
+    /**
+     * 检查支付宝版本是否需要启用SimplePageManager功能
+     * @return true表示版本低于等于10.6.58.88888，需要启用；false表示不需要
+     */
+    public static boolean shouldEnableSimplePageManager() {
+        if (!VersionHook.hasVersion() || alipayVersion.getVersionString() == null) {
+            Log.debug(TAG, "无法获取支付宝版本信息，跳过 SimplePageManager 初始化");
+            return false;
+        }
+        // 例如：10.6.58.8000 <= 10.6.58.88888，但 10.6.59 > 10.6.58.88888
+        if (alipayVersion.compareTo(new AlipayVersion("10.6.58.88888")) <= 0) {
+            return true;
+        } else {
+            Log.debug(TAG, "支付宝版本 " + alipayVersion.getVersionString() + " 高于 10.6.58，跳过 SimplePageManager 初始化");
+            return false;
+        }
+    }
+
     @JvmStatic
     public static boolean isHooked() {
         return hooked;
@@ -423,19 +441,12 @@ public class ApplicationHook {
         loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
         loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
     }
-
+    // 滑块验证hook注册
     private void initSimplePageManager() {
-        if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
-            // 例如：10.6.58.8000 <= 10.6.58.88888，但 10.6.59 > 10.6.58.88888
-            if (alipayVersion.compareTo(new AlipayVersion("10.6.58.88888")) <= 0) {
-                SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
-                SimplePageManager.INSTANCE.addHandler("com.alipay.mobile.nebulax.xriver.activity.XRiverActivity", new Captcha1Handler());
-                SimplePageManager.INSTANCE.addHandler("com.eg.android.AlipayGphone.AlipayLogin", new Captcha2Handler());
-            } else {
-                Log.debug(TAG, "支付宝版本 " + alipayVersion.getVersionString() + " 高于 10.6.58，跳过 SimplePageManager 初始化");
-            }
-        } else {
-            Log.debug(TAG, "无法获取支付宝版本信息，跳过 SimplePageManager 初始化");
+        if (shouldEnableSimplePageManager()) {
+            SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
+            SimplePageManager.INSTANCE.addHandler("com.alipay.mobile.nebulax.xriver.activity.XRiverActivity", new Captcha1Handler());
+            SimplePageManager.INSTANCE.addHandler("com.eg.android.AlipayGphone.AlipayLogin", new Captcha2Handler());
         }
     }
 
