@@ -37,15 +37,12 @@ class RpcDebugAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
-
         holder.tvName.text = item.getDisplayName()
         holder.tvMethod.text = item.method
-
         holder.btnRun.setOnClickListener { onRun(item) }
         holder.btnEdit.setOnClickListener { onEdit(item) }
         holder.btnDelete.setOnClickListener { onDelete(item) }
         holder.btnCopy.setOnClickListener { onCopy(item) }
-
         // 点击整行也可以运行
         holder.itemView.setOnClickListener { onRun(item) }
     }

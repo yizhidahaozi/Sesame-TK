@@ -82,9 +82,6 @@ class ExtendViewModel : ViewModel() {
 
         // 3. 每日单次运行 (特殊处理：调用原有逻辑)
         menuItems.add(MenuItem("每日单次运行设置") {
-            // 注意：这里需要 Activity Context，ViewModel 中最好不要持有 Activity，
-            // 但为了兼容旧逻辑，暂且在 UI 层处理这个点击，或者通过 Event 传出去
-            // 此处简化处理，假设 View 层会拦截处理，或者直接传入 Activity Context
             CustomSettings.showSingleRunMenu(context) { loadData(context) }
         })
 

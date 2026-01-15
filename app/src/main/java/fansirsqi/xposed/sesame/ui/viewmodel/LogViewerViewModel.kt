@@ -15,6 +15,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -32,7 +33,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
-import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicLong
 
 
@@ -89,6 +89,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
     // ✅ 用于防抖的互斥锁
     private val updateMutex = Mutex()
 
+    @OptIn(FlowPreview::class)
     fun loadLogs(path: String) {
         if (currentFilePath == path && loadJob?.isActive == true) return
         currentFilePath = path
@@ -137,10 +138,8 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             // ✅ 优化:一次扫描同时完成计数和索引
-            val buffer = ArrayDeque<Long>(maxLines)
             val readBuffer = ByteArray(8192)
             var currentOffset = 0L
-            var lineStartOffset = 0L
             var totalLines = 0L
 
             localRaf.seek(0)
@@ -191,22 +190,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                 ToastUtil.showToast(getApplication(), errorMsg)
             }
         }
-    }
-    private fun countLines(raf: RandomAccessFile): Long {
-        val originalPos = raf.filePointer
-        raf.seek(0)
-        var lines = 0L
-        val buffer = ByteArray(8192)
-        var read: Int
-        while (raf.read(buffer).also { read = it } != -1) {
-            for (i in 0 until read) {
-                if (buffer[i] == '\n'.code.toByte()) {
-                    lines++
-                }
-            }
-        }
-        raf.seek(originalPos)
-        return lines
     }
 
     private suspend fun refreshList() {
@@ -353,9 +336,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
 
                 while (currentOffset < currentFileSize) {
                     ensureActive()
-                    val line = localRaf.readLine()
-                    if (line == null) break
-
                     newOffsets.add(currentOffset)
                     currentOffset = localRaf.filePointer
                 }
