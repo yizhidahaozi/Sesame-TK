@@ -12,7 +12,6 @@ import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.model.CustomSettings
-import fansirsqi.xposed.sesame.ui.RpcDebugActivity
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
@@ -87,9 +86,6 @@ class ExtendViewModel : ViewModel() {
 
         // 4. Debug 功能
         if (BuildConfig.DEBUG) {
-            menuItems.add(MenuItem("RPC调试") {
-                context.startActivity(Intent(context, RpcDebugActivity::class.java))
-            })
 
             menuItems.add(MenuItem("写入光盘") {
                 currentDialog = ExtendDialog.WritePhotoTest("xxxx")
@@ -108,7 +104,7 @@ class ExtendViewModel : ViewModel() {
             })
 
             menuItems.add(MenuItem("TestShow") {
-                ToastUtil.showToast(context, isShizukuReady().toString())
+                ToastUtil.showToast(context, "shizuku:"+isShizukuReady().toString())
             })
         }
     }
@@ -175,7 +171,7 @@ class ExtendViewModel : ViewModel() {
             val isBinderAlive = Shizuku.pingBinder()
             val hasPermission = if (isBinderAlive) Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED else false
             isBinderAlive && hasPermission
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }

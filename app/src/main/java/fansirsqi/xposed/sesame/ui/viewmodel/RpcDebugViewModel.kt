@@ -187,7 +187,7 @@ class RpcDebugViewModel(application: Application) : AndroidViewModel(application
         if (_items.value.isEmpty()) return
         try {
             val json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(_items.value)
-            copyToClipboard("RPC Backup", json,context)
+            copyToClipboard("RPC Backup", json, context)
             ToastUtil.makeText("已备份到剪贴板", Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {
             ToastUtil.makeText("备份失败", Toast.LENGTH_SHORT).show()
@@ -220,6 +220,11 @@ class RpcDebugViewModel(application: Application) : AndroidViewModel(application
 
     fun loadDefaultItems() {
         val defaultList = listOf(
+            RpcDebugItem(
+                name = "雇佣黄金鸡",
+                method = "com.alipay.antfarm.hireAnimal",
+                requestData = listOf(mapOf("hireActionType" to "HIRE_IN_SELF_FARM", "sceneCode" to "ANTFARM")) // 简化示例
+            ),
             RpcDebugItem(
                 name = "雇佣黄金鸡",
                 method = "com.alipay.antfarm.hireAnimal",

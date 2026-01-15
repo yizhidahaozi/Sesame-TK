@@ -88,7 +88,6 @@ import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
-import fansirsqi.xposed.sesame.ui.LogViewerActivity
 import fansirsqi.xposed.sesame.ui.extension.joinQQGroup
 import fansirsqi.xposed.sesame.ui.extension.openUrl
 import fansirsqi.xposed.sesame.ui.extension.performNavigationToSettings
@@ -479,6 +478,15 @@ fun MainScreen(
                             }
                         )
                         if (BuildConfig.DEBUG) {
+
+                            DropdownMenuItem(
+                                text = { Text("RPC调试") },
+                                onClick = {
+                                    showMenu = false
+                                    context.startActivity(Intent(context, RpcDebugActivity::class.java))
+                                }
+                            )
+
                             DropdownMenuItem(
                                 text = { Text("清除配置") },
                                 onClick = {
