@@ -1,16 +1,10 @@
 package fansirsqi.xposed.sesame.ui.screen
 
 import android.content.Context
-import android.content.Intent
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,12 +26,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Agriculture
-import androidx.compose.material.icons.rounded.AlignVerticalTop
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Forest
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -51,6 +39,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,12 +54,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,11 +64,11 @@ import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.ui.MainActivity
-import fansirsqi.xposed.sesame.ui.RpcDebugActivity
-import fansirsqi.xposed.sesame.ui.compose.CommonAlertDialog
-import fansirsqi.xposed.sesame.ui.extension.joinQQGroup
+import fansirsqi.xposed.sesame.ui.navigation.BottomNavItem
+import fansirsqi.xposed.sesame.ui.screen.components.HomeContent
+import fansirsqi.xposed.sesame.ui.screen.components.LogsContent
+import fansirsqi.xposed.sesame.ui.screen.components.SettingsContent
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
-import fansirsqi.xposed.sesame.util.ToastUtil
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -245,33 +232,43 @@ fun MainScreen(
     activeUserName: String,
     moduleStatus: MainViewModel.ModuleStatus,
     viewModel: MainViewModel,
+    isDynamicColor : Boolean, // 传给 MainScreen
     userList: List<UserEntity>, // 🔥 确保 userList 被传入 MainScreen
     onNavigateToSettings: (UserEntity) -> Unit, // 🔥 新增回调：跳转设置
     onEvent: (MainActivity.MainUiEvent) -> Unit,
 ) {
-    // ... 状态变量保持不变 ...
-    var isStatusCardExpanded by remember { mutableStateOf(false) }
-    var isServiceCardExpanded by remember { mutableStateOf(false) }
-    val serviceStatus by viewModel.serviceStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
-    val prefs = context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
-    var isIconHidden by remember { mutableStateOf(prefs.getBoolean("is_icon_hidden", false)) }
-    var showMenu by remember { mutableStateOf(false) }
-    var showUserDialog by remember { mutableStateOf(false) }
-    var showClearConfigDialog by remember { mutableStateOf(false) }
-    val deviceInfoMap by viewModel.deviceInfo.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.refreshDeviceInfo(context)
     }
+
+    var currentScreen by remember { mutableStateOf<BottomNavItem>(BottomNavItem.Home) } // 默认显示主页
+
+    var isStatusCardExpanded by remember { mutableStateOf(false) }
+    var isServiceCardExpanded by remember { mutableStateOf(false) }
+    val serviceStatus by viewModel.serviceStatus.collectAsStateWithLifecycle()
+
+    val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
+    val prefs = context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
+    var isIconHidden by remember { mutableStateOf(prefs.getBoolean("is_icon_hidden", false)) }
+    var showMenu by remember { mutableStateOf(false) }
+//    var showUserDialog by remember { mutableStateOf(false) }
+
+    val deviceInfoMap by viewModel.deviceInfo.collectAsStateWithLifecycle()
+
+
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = activeUserName,
+                        text = when (currentScreen) {
+                            BottomNavItem.Home -> activeUserName
+                            BottomNavItem.Logs -> "日志中心"
+                            BottomNavItem.Settings -> "模块设置"
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         fontSize = 28.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -281,48 +278,13 @@ fun MainScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
-                    val uriHandler = LocalUriHandler.current
 
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "更多")
                     }
 
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = {
-                                Text("本应用为免费软件", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                            },
-                            onClick = { showMenu = false },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text("严禁倒卖/付费购买", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                            },
-                            onClick = { showMenu = false },
-                            enabled = false
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Github 仓库") },
-                            onClick = {
-                                uriHandler.openUri("https://github.com/Fansirsqi/Sesame-TK")
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Telegram 频道") },
-                            onClick = {
-                                uriHandler.openUri("https://t.me/Sesame_TK_Channel")
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("加入 QQ 群") },
-                            onClick = {
-                                joinQQGroup(context)
-                                showMenu = false
-                            }
-                        )
+
                         DropdownMenuItem(
                             text = { Text(if (isIconHidden) "显示应用图标" else "隐藏应用图标") },
                             onClick = {
@@ -331,210 +293,62 @@ fun MainScreen(
                                 showMenu = false
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("查看抓包") },
-                            onClick = {
-                                onEvent(MainActivity.MainUiEvent.OpenCaptureLog)
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("扩展功能") },
-                            onClick = {
-                                onEvent(MainActivity.MainUiEvent.OpenExtend)
-                                showMenu = false
-                            }
-                        )
-                        if (BuildConfig.DEBUG) {
-
-                            DropdownMenuItem(
-                                text = { Text("RPC调试") },
-                                onClick = {
-                                    showMenu = false
-                                    context.startActivity(Intent(context, RpcDebugActivity::class.java))
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("清除配置") },
-                                onClick = {
-                                    showMenu = false
-                                    showClearConfigDialog = true
-                                }
-                            )
-                        }
                     }
 
                 }
             )
         },
+        bottomBar = {
+            NavigationBar {
+                val items = listOf(BottomNavItem.Logs, BottomNavItem.Home, BottomNavItem.Settings)
+                items.forEach { item ->
+                    val selected = currentScreen == item
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { currentScreen = item },
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label) },
+                        // 🔥 关键：只有选中时才显示文字
+                        alwaysShowLabel = false
+                    )
+                }
+            }
+        }
     )
     { innerPadding ->
-        // 🔥 核心修改：使用 LazyColumn 替换 Column
-        // LazyColumn 自带滚动，且只会渲染屏幕可见区域，性能更好
-        LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp), // 全局水平内边距
-            verticalArrangement = Arrangement.spacedBy(12.dp), // 统一的垂直间距，替代 Spacer
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp) // 底部留白，防止到底部太挤
-        ) {
+        // 使用 Crossfade 做简单的切换动画 (可选)
+        Box(modifier = Modifier
+            .padding(innerPadding)
+            .fillMaxSize()) {
+            when (currentScreen) {
+                BottomNavItem.Home -> HomeContent(
+                    moduleStatus = moduleStatus,
+                    serviceStatus = serviceStatus,
+                    deviceInfoMap = deviceInfoMap,
+                    oneWord = oneWord,
+                    isOneWordLoading = isOneWordLoading,
+                    isStatusCardExpanded = isStatusCardExpanded,
+                    isServiceCardExpanded = isServiceCardExpanded,
+                    onStatusCardClick = { isStatusCardExpanded = !isStatusCardExpanded },
+                    onServiceCardClick = { isServiceCardExpanded = !isServiceCardExpanded },
+                    onOneWordClick = { onEvent(MainActivity.MainUiEvent.RefreshOneWord) }
+                )
 
-            // --- 1. 顶部状态卡片区域 ---
+                BottomNavItem.Logs -> LogsContent(
+                    onEvent = onEvent
+                )
 
-            item(key = "module_status") {
-                ModuleStatusCard(
-                    status = moduleStatus,
-                    expanded = isStatusCardExpanded,
-                    onClick = {
-                        if (moduleStatus is MainViewModel.ModuleStatus.NotActivated) {
-                            isStatusCardExpanded = !isStatusCardExpanded
-                        }
-                    }
+                BottomNavItem.Settings -> SettingsContent(
+                    userList = userList,
+                    isDynamicColor = isDynamicColor, // 传给 MainScreen
+                    onToggleDynamicColor = viewModel::toggleDynamicColor, // 传入回调
+                    onNavigateToSettings = onNavigateToSettings,
+                    onEvent = onEvent
                 )
             }
-
-            item(key = "service_status") {
-                ServicesStatusCard(
-                    status = serviceStatus,
-                    expanded = isServiceCardExpanded,
-                    onClick = {
-                        if (serviceStatus is MainViewModel.ServiceStatus.Inactive) {
-                            isServiceCardExpanded = !isServiceCardExpanded
-                        }
-                    }
-                )
-            }
-
-            item(key = "device_info") {
-                if (deviceInfoMap != null) {
-                    DeviceInfoCard(deviceInfoMap!!)
-                } else {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-            }
-
-            // --- 2. 一言卡片区域 ---
-
-            item(key = "one_word") {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 112.dp)
-                        .padding(vertical = 8.dp) // 上下给点呼吸空间
-                        .clip(RoundedCornerShape(12.dp))
-                        .combinedClickable(
-                            enabled = !isOneWordLoading,
-                            onClick = { onEvent(MainActivity.MainUiEvent.RefreshOneWord) },
-                            onLongClick = {
-                                onEvent(MainActivity.MainUiEvent.OpenDebugLog)
-                                ToastUtil.showToast(context, "准备起飞🛫")
-                            }
-                        )
-                        .padding(16.dp)
-                ) {
-                    AnimatedContent(
-                        targetState = isOneWordLoading,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
-                        label = "OneWordAnimation"
-                    ) { loading ->
-                        if (loading) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "本来无一物,何处惹尘..",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = oneWord,
-                                fontSize = 14.sp,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            // --- 3. 底部间距调整 ---
-            // 如果你希望在大屏上按钮沉底，可以用 weight 但 LazyColumn 不支持 weight。
-            // 简单的适配做法是加一个大一点的 Spacer，或者就让它自然跟随。
-            item { Spacer(Modifier.height(16.dp)) }
-
-            // --- 4. 底部按钮网格区域 ---
-
-            item(key = "buttons_row_1") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MenuButton(text = "森林日志", icon = Icons.Rounded.Forest, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenForestLog) }
-                    MenuButton(text = "农场日志", icon = Icons.Rounded.Agriculture, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenFarmLog) }
-                    MenuButton(text = "其他日志", icon = Icons.Rounded.AlignVerticalTop, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenOtherLog) }
-                }
-            }
-
-            item(key = "buttons_row_2") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MenuButton(text = "错误日志", icon = Icons.Rounded.BugReport, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenErrorLog) }
-                    MenuButton(text = "全部日志", icon = Icons.Rounded.Description, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenAllLog) }
-                    MenuButton(text = "设置", icon = Icons.Rounded.Settings, modifier = Modifier.weight(1f)) {
-                        if (userList.isNotEmpty()) {
-                            showUserDialog = true
-                        } else {
-                            ToastUtil.showToast(context, "暂无用户配置")
-                        }
-                    }
-                }
-            }
-        } // End of LazyColumn
-
-        // --- 5. 弹窗挂载 (保持在 LazyColumn 外部) ---
-
-        if (showUserDialog) {
-            UserSelectionDialog(
-                userList = userList,
-                onDismissRequest = { showUserDialog = false },
-                onUserSelected = { user ->
-                    showUserDialog = false
-                    onNavigateToSettings(user)
-                }
-            )
-        }
-
-        if (showClearConfigDialog) {
-            CommonAlertDialog(
-                showDialog = true,
-                onDismissRequest = { showClearConfigDialog = false },
-                onConfirm = { onEvent(MainActivity.MainUiEvent.ClearConfig) },
-                title = "⚠️ 警告",
-                text = "🤔❗ 确认清除所有模块配置？\n此操作无法撤销❗❗❗",
-                icon = Icons.Outlined.Warning,
-                iconTint = MaterialTheme.colorScheme.error,
-                confirmText = "确认清除",
-                confirmButtonColor = MaterialTheme.colorScheme.error
-            )
         }
     }
+
 }
 
 @Composable
