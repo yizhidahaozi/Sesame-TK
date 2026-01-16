@@ -224,8 +224,8 @@ fun ServicesStatusCard(
                     Text(text = "授权指南", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "本模块需要后台执行 Shell 命令来处理验证码。\n\n" +
-                                "推荐方案：\n" +
+                        text = "本模块需要后台执行 Shell 命令来处理滑块验证。\n\n" +
+                                "可选方案：\n" +
                                 "1. Shizuku (推荐)：免 Root，需安装 Shizuku APP 并激活。\n" +
                                 "2. Root：如果你已 Root，请授予本应用 Root 权限。",
                         style = MaterialTheme.typography.bodyMedium,
