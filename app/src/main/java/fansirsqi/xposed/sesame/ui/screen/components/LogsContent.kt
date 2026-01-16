@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.ui.MainActivity
-import fansirsqi.xposed.sesame.ui.screen.MenuButton
 
 @Composable
 fun LogsContent(

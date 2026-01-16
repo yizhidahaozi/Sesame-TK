@@ -12,15 +12,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import fansirsqi.xposed.sesame.ui.MainActivity
 import fansirsqi.xposed.sesame.ui.screen.DeviceInfoCard
-import fansirsqi.xposed.sesame.ui.screen.ModuleStatusCard
-import fansirsqi.xposed.sesame.ui.screen.ServicesStatusCard
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
+import fansirsqi.xposed.sesame.util.ToastUtil
 
 @Composable
 fun HomeContent(
@@ -29,12 +34,13 @@ fun HomeContent(
     deviceInfoMap: Map<String, String>?,
     oneWord: String,
     isOneWordLoading: Boolean,
-    isStatusCardExpanded: Boolean,
-    isServiceCardExpanded: Boolean,
-    onStatusCardClick: () -> Unit,
-    onServiceCardClick: () -> Unit,
-    onOneWordClick: () -> Unit
+    onOneWordClick: () -> Unit,
+    onEvent: (MainActivity.MainUiEvent) -> Unit
 ) {
+    val context = LocalContext.current
+    var isServiceCardExpanded by remember { mutableStateOf(false) }
+
+    var isStatusCardExpanded by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -61,7 +67,11 @@ fun HomeContent(
             ModuleStatusCard(
                 status = moduleStatus,
                 expanded = isStatusCardExpanded,
-                onClick = onStatusCardClick
+                onClick = {
+                    if (moduleStatus is MainViewModel.ModuleStatus.NotActivated) {
+                        isStatusCardExpanded = !isStatusCardExpanded//此处不可省略
+                    }
+                }
             )
         }
 
@@ -70,7 +80,11 @@ fun HomeContent(
             ServicesStatusCard(
                 status = serviceStatus,
                 expanded = isServiceCardExpanded,
-                onClick = onServiceCardClick
+                onClick = {
+                    if (serviceStatus is MainViewModel.ServiceStatus.Inactive) {
+                        isServiceCardExpanded = !isServiceCardExpanded //此处不可省略
+                    }
+                }
             )
         }
 
@@ -90,7 +104,11 @@ fun HomeContent(
             OneWordCard( // 提取出的一言卡片组件
                 oneWord = oneWord,
                 isLoading = isOneWordLoading,
-                onClick = onOneWordClick
+                onClick = onOneWordClick,
+                onLongClick = {
+                    onEvent(MainActivity.MainUiEvent.OpenDebugLog)
+                    ToastUtil.showToast(context, "准备起飞🛫")
+                }
             )
         }
 
