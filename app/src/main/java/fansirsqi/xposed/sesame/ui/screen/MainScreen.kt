@@ -237,6 +237,7 @@ fun ServicesStatusCard(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -248,32 +249,19 @@ fun MainScreen(
     onNavigateToSettings: (UserEntity) -> Unit, // 🔥 新增回调：跳转设置
     onEvent: (MainActivity.MainUiEvent) -> Unit,
 ) {
-    // 状态卡展开状态
+    // ... 状态变量保持不变 ...
     var isStatusCardExpanded by remember { mutableStateOf(false) }
-    // 🔥 新增：服务卡片展开状态
     var isServiceCardExpanded by remember { mutableStateOf(false) }
-
-    // 🔥 获取服务状态
     val serviceStatus by viewModel.serviceStatus.collectAsStateWithLifecycle()
-
-    // 获取上下文
     val context = LocalContext.current
-    // 获取 isOneWordLoading
     val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
-    // 获取 SharedPreferences
     val prefs = context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
-    // 控制图标隐藏
     var isIconHidden by remember { mutableStateOf(prefs.getBoolean("is_icon_hidden", false)) }
-    // 控制菜单状态
     var showMenu by remember { mutableStateOf(false) }
-    // 控制用户选择弹窗的状态
     var showUserDialog by remember { mutableStateOf(false) }
-    // 控制清空配置弹窗的状态
     var showClearConfigDialog by remember { mutableStateOf(false) }
-
-    // 改为观察 ViewModel
     val deviceInfoMap by viewModel.deviceInfo.collectAsStateWithLifecycle()
-    // 首次进入界面时，触发一次加载
+
     LaunchedEffect(Unit) {
         viewModel.refreshDeviceInfo(context)
     }
@@ -382,21 +370,20 @@ fun MainScreen(
         },
     )
     { innerPadding ->
-        Column(
+        // 🔥 核心修改：使用 LazyColumn 替换 Column
+        // LazyColumn 自带滚动，且只会渲染屏幕可见区域，性能更好
+        LazyColumn(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp), // 全局水平内边距
+            verticalArrangement = Arrangement.spacedBy(12.dp), // 统一的垂直间距，替代 Spacer
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp) // 底部留白，防止到底部太挤
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
 
+            // --- 1. 顶部状态卡片区域 ---
+
+            item(key = "module_status") {
                 ModuleStatusCard(
                     status = moduleStatus,
                     expanded = isStatusCardExpanded,
@@ -406,8 +393,9 @@ fun MainScreen(
                         }
                     }
                 )
+            }
 
-
+            item(key = "service_status") {
                 ServicesStatusCard(
                     status = serviceStatus,
                     expanded = isServiceCardExpanded,
@@ -417,22 +405,29 @@ fun MainScreen(
                         }
                     }
                 )
+            }
 
+            item(key = "device_info") {
                 if (deviceInfoMap != null) {
                     DeviceInfoCard(deviceInfoMap!!)
                 } else {
-                    CircularProgressIndicator()
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-                Spacer(modifier = Modifier.height(2.dp))
+            }
+
+            // --- 2. 一言卡片区域 ---
+
+            item(key = "one_word") {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 112.dp)
-                        .padding(8.dp) // 1. 外边距 (Margin)：让卡片和屏幕边缘有距离
-                        .clip(RoundedCornerShape(12.dp)) // 2. 裁剪形状：限制水波纹为圆角 (建议稍微大一点的圆角)
-//                        .background(MaterialTheme.colorScheme.surfaceContainer) // 3. 背景色：给点击区域一个底色，让它看起来像个卡片
-                        .combinedClickable( // 4. 点击事件：必须在 clip 之后，padding(内) 之前
+                        .padding(vertical = 8.dp) // 上下给点呼吸空间
+                        .clip(RoundedCornerShape(12.dp))
+                        .combinedClickable(
                             enabled = !isOneWordLoading,
                             onClick = { onEvent(MainActivity.MainUiEvent.RefreshOneWord) },
                             onLongClick = {
@@ -440,9 +435,8 @@ fun MainScreen(
                                 ToastUtil.showToast(context, "准备起飞🛫")
                             }
                         )
-                        .padding(16.dp) // 5. 内边距 (Padding)：让里面的文字和卡片边缘保持距离，不要贴边
-                )
-                {
+                        .padding(16.dp)
+                ) {
                     AnimatedContent(
                         targetState = isOneWordLoading,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -453,11 +447,18 @@ fun MainScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.height(1.dp))
-                                Text("本来无一物,何处惹尘..", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onBackground)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "本来无一物,何处惹尘..",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
                             }
-
                         } else {
                             Text(
                                 text = oneWord,
@@ -471,24 +472,32 @@ fun MainScreen(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 48.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            )
-            {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // --- 3. 底部间距调整 ---
+            // 如果你希望在大屏上按钮沉底，可以用 weight 但 LazyColumn 不支持 weight。
+            // 简单的适配做法是加一个大一点的 Spacer，或者就让它自然跟随。
+            item { Spacer(Modifier.height(16.dp)) }
+
+            // --- 4. 底部按钮网格区域 ---
+
+            item(key = "buttons_row_1") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     MenuButton(text = "森林日志", icon = Icons.Rounded.Forest, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenForestLog) }
                     MenuButton(text = "农场日志", icon = Icons.Rounded.Agriculture, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenFarmLog) }
                     MenuButton(text = "其他日志", icon = Icons.Rounded.AlignVerticalTop, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenOtherLog) }
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            }
+
+            item(key = "buttons_row_2") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     MenuButton(text = "错误日志", icon = Icons.Rounded.BugReport, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenErrorLog) }
                     MenuButton(text = "全部日志", icon = Icons.Rounded.Description, modifier = Modifier.weight(1f)) { onEvent(MainActivity.MainUiEvent.OpenAllLog) }
                     MenuButton(text = "设置", icon = Icons.Rounded.Settings, modifier = Modifier.weight(1f)) {
-//                        onEvent(MainActivity.MainUiEvent.OpenSettings)
-                        // 直接在这里处理弹窗逻辑，或者发 Event 给 VM 处理
                         if (userList.isNotEmpty()) {
                             showUserDialog = true
                         } else {
@@ -496,33 +505,34 @@ fun MainScreen(
                         }
                     }
                 }
-                // ✨ 在 Scaffold 外部（或者内部最上层）挂载 Dialog
-                if (showUserDialog) {
-                    UserSelectionDialog(
-                        userList = userList,
-                        onDismissRequest = { showUserDialog = false },
-                        onUserSelected = { user ->
-                            showUserDialog = false
-                            onNavigateToSettings(user) // 触发跳转
-                        }
-                    )
-                }
-
-                // ✨ 挂载清除配置确认弹窗
-                if (showClearConfigDialog) {
-                    CommonAlertDialog(
-                        showDialog = true,
-                        onDismissRequest = { showClearConfigDialog = false },
-                        onConfirm = { onEvent(MainActivity.MainUiEvent.ClearConfig) },
-                        title = "⚠️ 警告",
-                        text = "🤔❗ 确认清除所有模块配置？\n此操作无法撤销❗❗❗",
-                        icon = Icons.Outlined.Warning,
-                        iconTint = MaterialTheme.colorScheme.error, // 红色图标
-                        confirmText = "确认清除",
-                        confirmButtonColor = MaterialTheme.colorScheme.error // 红色按钮
-                    )
-                }
             }
+        } // End of LazyColumn
+
+        // --- 5. 弹窗挂载 (保持在 LazyColumn 外部) ---
+
+        if (showUserDialog) {
+            UserSelectionDialog(
+                userList = userList,
+                onDismissRequest = { showUserDialog = false },
+                onUserSelected = { user ->
+                    showUserDialog = false
+                    onNavigateToSettings(user)
+                }
+            )
+        }
+
+        if (showClearConfigDialog) {
+            CommonAlertDialog(
+                showDialog = true,
+                onDismissRequest = { showClearConfigDialog = false },
+                onConfirm = { onEvent(MainActivity.MainUiEvent.ClearConfig) },
+                title = "⚠️ 警告",
+                text = "🤔❗ 确认清除所有模块配置？\n此操作无法撤销❗❗❗",
+                icon = Icons.Outlined.Warning,
+                iconTint = MaterialTheme.colorScheme.error,
+                confirmText = "确认清除",
+                confirmButtonColor = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
