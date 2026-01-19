@@ -29,7 +29,7 @@ import fansirsqi.xposed.sesame.data.Config
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.task.antForest.AntForest
-import fansirsqi.xposed.sesame.task.manualtask.FarmSubTask
+import fansirsqi.xposed.sesame.task.customTasks.CustomTask
 import fansirsqi.xposed.sesame.ui.extension.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
@@ -75,7 +75,6 @@ class ManualTaskFragment : Fragment() {
     private fun ensureConfigLoaded() {
         // 1. 初始化所有模型实例
         Model.initAllModel()
-        
         // 2. 获取活跃用户并加载其配置
         val activeUser = DataStore.get("activedUser", UserEntity::class.java)
         activeUser?.userId?.let { uid ->
@@ -83,7 +82,7 @@ class ManualTaskFragment : Fragment() {
         }
     }
 
-    private fun runTask(task: FarmSubTask, params: Map<String, Any>) {
+    private fun runTask(task: CustomTask, params: Map<String, Any>) {
         try {
             // 1. 发送任务指令广播
             val intent = Intent("com.eg.android.AlipayGphone.sesame.manual_task")
@@ -127,8 +126,8 @@ private val toolDisplayNameMap = mapOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManualTaskScreen(onTaskClick: (FarmSubTask, Map<String, Any>) -> Unit) {
-    val tasks = FarmSubTask.entries.toTypedArray()
+fun ManualTaskScreen(onTaskClick: (CustomTask, Map<String, Any>) -> Unit) {
+    val tasks = CustomTask.entries.toTypedArray()
     
     // 从模型系统中读取实例（此时 getFields() 返回的字段已被 Config.load 挂载了正确的值）
     val antForestModel = remember { Model.getModel(AntForest::class.java) }
@@ -169,15 +168,15 @@ fun ManualTaskScreen(onTaskClick: (FarmSubTask, Map<String, Any>) -> Unit) {
         ) {
             items(tasks) { task ->
                 val params = when (task) {
-                    FarmSubTask.FOREST_WHACK_MOLE -> mapOf(
+                    CustomTask.FOREST_WHACK_MOLE -> mapOf(
                         "whackMoleMode" to whackMoleMode,
                         "whackMoleGames" to (whackMoleGames.toIntOrNull() ?: 5)
                     )
-                    FarmSubTask.FARM_SPECIAL_FOOD -> {
+                    CustomTask.FARM_SPECIAL_FOOD -> {
                         val count = specialFoodCount.toIntOrNull() ?: 0
                         mapOf("specialFoodCount" to count)
                     }
-                    FarmSubTask.FARM_USE_TOOL -> mapOf(
+                    CustomTask.FARM_USE_TOOL -> mapOf(
                         "toolType" to selectedTool,
                         "toolCount" to (toolCount.toIntOrNull() ?: 1)
                     )
@@ -187,7 +186,7 @@ fun ManualTaskScreen(onTaskClick: (FarmSubTask, Map<String, Any>) -> Unit) {
                 TaskItem(
                     task = task, 
                     onClick = { onTaskClick(task, params) },
-                    hasSettings = task == FarmSubTask.FOREST_WHACK_MOLE || task == FarmSubTask.FARM_SPECIAL_FOOD || task == FarmSubTask.FARM_USE_TOOL,
+                    hasSettings = task == CustomTask.FOREST_WHACK_MOLE || task == CustomTask.FARM_SPECIAL_FOOD || task == CustomTask.FARM_USE_TOOL,
                     whackMoleMode = whackMoleMode,
                     onModeChange = { whackMoleMode = it },
                     whackMoleGames = whackMoleGames,
@@ -208,7 +207,7 @@ fun ManualTaskScreen(onTaskClick: (FarmSubTask, Map<String, Any>) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskItem(
-    task: FarmSubTask, 
+    task: CustomTask,
     onClick: () -> Unit,
     hasSettings: Boolean = false,
     whackMoleMode: Int = 1,
@@ -270,7 +269,7 @@ fun TaskItem(
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
             ) {
-                if (task == FarmSubTask.FOREST_WHACK_MOLE) {
+                if (task == CustomTask.FOREST_WHACK_MOLE) {
                     Text("运行模式选择:", style = MaterialTheme.typography.labelMedium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = whackMoleMode == 1, onClick = { onModeChange(1) })
@@ -290,7 +289,7 @@ fun TaskItem(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                } else if (task == FarmSubTask.FARM_SPECIAL_FOOD) {
+                } else if (task == CustomTask.FARM_SPECIAL_FOOD) {
                     OutlinedTextField(
                         value = specialFoodCount,
                         onValueChange = onSpecialFoodCountChange,
@@ -299,7 +298,7 @@ fun TaskItem(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                } else if (task == FarmSubTask.FARM_USE_TOOL) {
+                } else if (task == CustomTask.FARM_USE_TOOL) {
                     val tools = toolDisplayNameMap.keys.toList()
                     var toolExpanded by remember { mutableStateOf(false) }
                     
