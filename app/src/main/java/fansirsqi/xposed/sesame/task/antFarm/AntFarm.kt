@@ -1009,7 +1009,11 @@ class AntFarm : ModelTask() {
                     ChildModelTask(
                         sleepTaskId,
                         "AS",
-                        suspendRunnable = { this.animalSleepNow() },
+                        suspendRunnable = {
+                            this.animalSleepNow()
+                            syncAnimalStatus(ownerFarmId)
+                            receiveFarmAwards()
+                        },
                         animalSleepTime
                     )
                 )
