@@ -4325,30 +4325,41 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (Status.hasFlagToday("AntForest::useEnergyRainChanceCard")) {
                 return
             }
-            // 背包查找 限时能量雨机会
-            var jo = findPropBag(queryPropList(), "LIMIT_TIME_ENERGY_RAIN_CHANCE")
-            // 活力值商店兑换
-            delay(3000)
-            if (jo == null) {
-                val skuInfo = Vitality.findSkuInfoBySkuName("能量雨次卡") ?: return
-                val skuId = skuInfo.getString("skuId")
-                if (Status.canVitalityExchangeToday(
-                        skuId,
-                        1
-                    ) && Vitality.VitalityExchange(
-                        skuInfo.getString("spuId"),
-                        skuId,
-                        "限时能量雨机会"
-                    )
-                ) {
-                    jo = findPropBag(queryPropList(true), "LIMIT_TIME_ENERGY_RAIN_CHANCE")
+            val propTypes = arrayOf("LIMIT_TIME_ENERGY_RAIN_CHANCE", "ENERGY_RAIN_CHANCE")
+            for (propType in propTypes) {
+                while (true) {
+                    val jo = findPropBag(queryPropList(true), propType) ?: break
+                    if (usePropBag(jo)) {
+                        Log.record(TAG, "成功使用一个能量雨道具: $propType")
+                        delay(2000)
+                    } else {
+                        break
+                    }
+                }
+
+                if (propType == "LIMIT_TIME_ENERGY_RAIN_CHANCE") {
+                    val skuInfo = Vitality.findSkuInfoBySkuName("能量雨次卡")
+                    if (skuInfo != null) {
+                        val skuId = skuInfo.getString("skuId")
+                        if (Status.canVitalityExchangeToday(skuId, 1)) {
+                            if (Vitality.VitalityExchange(
+                                    skuInfo.getString("spuId"),
+                                    skuId,
+                                    "限时能量雨机会"
+                                )
+                            ) {
+                                delay(1000)
+                                val joExchanged = findPropBag(queryPropList(true), propType)
+                                if (joExchanged != null && usePropBag(joExchanged)) {
+                                    delay(1000)
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            // 使用 道具
-            if (jo != null && usePropBag(jo)) {
-                Status.setFlagToday("AntForest::useEnergyRainChanceCard")
-                delay(1000)
-            }
+            Status.setFlagToday("AntForest::useEnergyRainChanceCard")
+            Log.record(TAG, "所有能量雨卡已处理完毕")
         } catch (th: Throwable) {
             Log.printStackTrace(TAG, "useEnergyRainChanceCard err",th)
         }
