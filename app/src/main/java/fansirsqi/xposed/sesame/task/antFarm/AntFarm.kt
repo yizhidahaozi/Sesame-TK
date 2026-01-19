@@ -1857,7 +1857,7 @@ class AntFarm : ModelTask() {
                         Log.farm("庄园游戏🎮[${gameType.gameName()}]#$awardStr")
 
                         if (joRecord.optInt("remainingGameCount", 0) > 0) {
-                            delay(2000)
+                            delay(3000)
                             continue
                         }
                     } else {
@@ -1867,7 +1867,7 @@ class AntFarm : ModelTask() {
 
                 // 次数用完后，尝试获取额外任务机会
                 if (handleGameTasks(gameType)) {
-                    delay(2000)
+                    delay(3000)
                     continue // 任务处理成功（如领完奖励或做完任务），重新进入初始化检查次数
                 }
 
