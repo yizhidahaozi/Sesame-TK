@@ -4889,4 +4889,28 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.printStackTrace(TAG, t)
         }
     }
+    /**
+     * 手动运行能量雨逻辑
+     * @param exchange 是否先尝试兑换并使用能量雨卡
+     */
+    suspend fun manualUseEnergyRain(exchange: Boolean) {
+        try {
+            Log.record(TAG, "🚀 开始执行手动能量雨任务...")
+            val obj =querySelfHome()
+            if (obj != null) {
+
+                if (exchange) {
+                    Log.record(TAG, "尝试兑换并激活能量雨卡...")
+                    useEnergyRainChanceCard()
+                }
+
+                EnergyRainCoroutine.execEnergyRainCompat()
+                Log.record(TAG, "✅ 手动能量雨任务处理完毕")
+            } else {
+                Log.record(TAG, "无法获取自己主页信息")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "manualUseEnergyRain 异常:", t)
+        }
+    }
 }
