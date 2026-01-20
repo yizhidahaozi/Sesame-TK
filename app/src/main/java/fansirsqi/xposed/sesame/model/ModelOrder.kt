@@ -27,9 +27,9 @@ object ModelOrder {
         AntCooperate::class.java,    // 合种
         AntSports::class.java,       // 运动
         AntMember::class.java,     // 会员
-        EcoProtection::class.java,     // 古树
-        GreenFinance::class.java,  // 绿色经营
-        Reserve::class.java,       // 保护地
+        //EcoProtection::class.java,     // 古树
+        //GreenFinance::class.java,  // 绿色经营
+        //Reserve::class.java,       // 保护地
         OtherTask::class.java,      // 其他
         AnswerAI::class.java         // AI答题
 

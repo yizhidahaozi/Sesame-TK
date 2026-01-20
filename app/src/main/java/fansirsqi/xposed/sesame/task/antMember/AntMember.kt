@@ -101,11 +101,12 @@ class AntMember : ModelTask() {
         modelFields.addField(BooleanModelField("memberSign", "会员签到", false).also {
             memberSign = it
         })
+
+        /*
         modelFields.addField(BooleanModelField("memberTask", "会员任务", false).also {
             memberTask = it
         })
-
-
+        */
 
         modelFields.addField(
             BooleanModelField(
@@ -136,10 +137,12 @@ class AntMember : ModelTask() {
                 SesameGift.getList()
             }.also { sesameGrainExchangeList = it })
 
+        /*
         modelFields.addField(
             BooleanModelField(
                 "sesameTask", "芝麻信用|芝麻粒信用任务", false
             ).also { sesameTask = it })
+
         modelFields.addField(BooleanModelField("collectSesame", "芝麻信用|芝麻粒领取", false).also {
             collectSesame = it
         })
@@ -147,6 +150,8 @@ class AntMember : ModelTask() {
             BooleanModelField(
                 "collectSesameWithOneClick", "芝麻信用|芝麻粒领取使用一键收取", false
             ).also { collectSesameWithOneClick = it })
+         */
+
         // 芝麻炼金
         modelFields.addField(
             BooleanModelField(
@@ -157,11 +162,12 @@ class AntMember : ModelTask() {
             enableZhimaTree = it
         })
 
-
+        /*
         modelFields.addField(
             BooleanModelField(
                 "collectInsuredGold", "蚂蚁保|保障金领取", false
             ).also { collectInsuredGold = it })
+         */
 
         // 黄金票配置
         modelFields.addField(
@@ -175,6 +181,7 @@ class AntMember : ModelTask() {
         modelFields.addField(BooleanModelField("enableGameCenter", "游戏中心签到", false).also {
             enableGameCenter = it
         })
+        /*
         modelFields.addField(
             BooleanModelField(
                 "merchantSign", "商家服务|签到", false
@@ -201,13 +208,10 @@ class AntMember : ModelTask() {
             BooleanModelField(
                 "annualReview", "年度回顾", false
             ).also { annualReview = it })*/
-
+         */
 
         collectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
         modelFields.addField(collectStickers)
-
-
-
         return modelFields
     }
 

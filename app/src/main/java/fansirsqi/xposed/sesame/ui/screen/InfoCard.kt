@@ -116,7 +116,8 @@ object DeviceInfoUtil {
             "Android Version" to "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
             "System Version" to "${Build.DISPLAY}",
             "Verify ID" to verifyId,
-            "Build Date" to "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME}"
+            "Build Date" to "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME}",
+            "说明" to "LITE版重现江湖~"
         )
     }
 }

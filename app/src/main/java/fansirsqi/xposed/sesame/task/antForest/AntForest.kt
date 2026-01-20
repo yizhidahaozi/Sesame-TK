@@ -357,7 +357,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         modelFields.addField(
             ListJoinCommaToStringModelField(
                 "doubleCardTime", "双击卡 | 使用时间/范围", ListUtil.newArrayList(
-                    "0700", "0730", "1200", "1230", "1700", "1730", "2000", "2030", "2359"
+                    "0000", "0650", "0700","2355"
                 )
             ).also { doubleCardTime = it })
         // 双击卡永动机
