@@ -80,8 +80,8 @@ class AntMember : ModelTask() {
     // 芝麻树
     private var enableZhimaTree: BooleanModelField? = null
 
-    //年度回顾
-    private var annualReview: BooleanModelField? = null
+    /*//年度回顾
+    private var annualReview: BooleanModelField? = null*/
 
     // 黄金票配置 - 签到
     private var enableGoldTicket: BooleanModelField? = null
@@ -304,9 +304,9 @@ class AntMember : ModelTask() {
                     deferredTasks.add(async(Dispatchers.IO) { beanSignIn() })
                 }
 
-                if (annualReview!!.value) {
+               /* if (annualReview!!.value) {   //年度回顾已下线
                     deferredTasks.add(async(Dispatchers.IO) { doAnnualReview() })
-                }
+                }*/
 
                 if (beanExchangeBubbleBoost!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { beanExchangeBubbleBoost() })
