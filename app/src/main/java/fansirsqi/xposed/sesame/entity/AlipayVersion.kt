@@ -1,58 +1,46 @@
-package fansirsqi.xposed.sesame.entity;
-import lombok.Getter;
-import org.jetbrains.annotations.NotNull;
+package fansirsqi.xposed.sesame.entity
 
 /**
  * 表示目标应用版本的实体类，可进行版本比较。
  */
-@Getter
-public class AlipayVersion implements Comparable<AlipayVersion> {
-    // 原始版本字符串
-    private final String versionString;
-    // 版本号数组，用于比较
-    private final Integer[] versionArray;
-    /**
-     * 构造方法，将版本字符串解析为整数数组。
-     * @param versionString 版本号字符串（以点号分隔，例如 "10.1.1"）
-     */
-    public AlipayVersion(String versionString) {
-        this.versionString = versionString;
-        String[] split = versionString.split("\\.");
-        int length = split.length;
-        versionArray = new Integer[length];
-        for (int i = 0; i < length; i++) {
-            try {
-                getVersionArray()[i] = Integer.parseInt(split[i]);
-            } catch (NumberFormatException e) {
-                getVersionArray()[i] = Integer.MAX_VALUE; // 如果解析失败，使用 Integer.MAX_VALUE 表示
-            }
-        }
-    }
-    /**
-     * 实现版本比较逻辑。
-     * @param alipayVersion 需要比较的另一个 AlipayVersion 实例
-     * @return -1 表示当前版本小于对比版本，1 表示大于，0 表示相等
-     */
-    @Override
-    public int compareTo(AlipayVersion alipayVersion) {
-        int thisLength = getVersionArray().length;
-        int thatLength = alipayVersion.getVersionArray().length;
-        int compareResult = Integer.compare(thisLength, thatLength); // 比较长度
-        int minLength = Math.min(thisLength, thatLength); // 取最小长度
-        // 按版本号逐段比较
-        for (int i = 0; i < minLength; i++) {
-            int thisVer = getVersionArray()[i];
-            int thatVer = alipayVersion.getVersionArray()[i];
-            if (thisVer != thatVer) {
-                return Integer.compare(thisVer, thatVer);
-            }
-        }
-        // 如果所有对应段都相等，返回长度比较结果
-        return compareResult;
+class AlipayVersion(val versionString: String) : Comparable<AlipayVersion> {
+
+    // 版本号列表，用于比较
+    // 解析版本字符串
+    // Kotlin 的 split(String) 默认按字面量分割，不需要正则转义
+    private val versionParts: List<Int> = versionString.split(".").map { part ->
+        part.toIntOrNull() ?: Int.MAX_VALUE
     }
 
-    @Override
-    public @NotNull String toString() {
-        return getVersionString();
+    /**
+     * 实现版本比较逻辑。
+     * @param other 需要比较的另一个 AlipayVersion 实例
+     * @return -1 表示当前版本小于对比版本，1 表示大于，0 表示相等
+     */
+    override fun compareTo(other: AlipayVersion): Int {
+        val thisSize = versionParts.size
+        val thatSize = other.versionParts.size
+
+        // 如果前面都相等，这就作为最终结果 (长度长的版本更大)
+        // 例如: 1.0 vs 1.0.1 -> 1.0.1 更大
+        val lengthCompare = thisSize.compareTo(thatSize)
+
+        val minLength = minOf(thisSize, thatSize)
+
+        // 逐段比较
+        for (i in 0 until minLength) {
+            val thisPart = versionParts[i]
+            val thatPart = other.versionParts[i]
+            if (thisPart != thatPart) {
+                return thisPart.compareTo(thatPart)
+            }
+        }
+
+        // 如果所有对应段都相等，返回长度比较结果
+        return lengthCompare
+    }
+
+    override fun toString(): String {
+        return versionString
     }
 }
