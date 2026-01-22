@@ -233,6 +233,7 @@ class ApplicationHook {
                         ensureScheduler()
 
                         SecurityBodyHelper.init(classLoader!!)
+                        AlipayMiniMarkHelper.init(classLoader!!)
                         LocationHelper.init(classLoader!!)
 
                         initVersionInfo(packageName)
