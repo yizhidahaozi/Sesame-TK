@@ -12,7 +12,6 @@ object AuthCodeHelper {
 
     private const val TAG = "Oauth2AuthCodeHelper"
     private var classLoader: ClassLoader? = null
-    private var capturedAuthCode: String? = null
 
     /**
      * 初始化 Oauth2AuthCodeHelper
@@ -28,9 +27,8 @@ object AuthCodeHelper {
      * 主动调用获取授权码
      * 通过反射调用 Oauth2AuthCodeService.getAuthSkipResult 方法获取授权码
      *
-
      * @param appId 应用ID
-     * @return 授权码，失败返回null
+     * @return code，失败返回null
      */
     fun getAuthCode(
         appId: String
