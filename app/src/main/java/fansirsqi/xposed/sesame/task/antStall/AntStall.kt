@@ -1,1144 +1,1472 @@
-package fansirsqi.xposed.sesame.task.antStall;
-import android.util.Base64;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Queue;
-import java.util.Set;
+package fansirsqi.xposed.sesame.task.antStall
 
-import fansirsqi.xposed.sesame.data.StatusFlags;
-import fansirsqi.xposed.sesame.entity.AlipayUser;
-import fansirsqi.xposed.sesame.model.BaseModel;
-import fansirsqi.xposed.sesame.model.ModelFields;
-import fansirsqi.xposed.sesame.model.ModelGroup;
-import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
-import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.task.TaskCommon;
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
-import fansirsqi.xposed.sesame.util.JsonUtil;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.maps.UserMap;
-import fansirsqi.xposed.sesame.util.RandomUtil;
-import fansirsqi.xposed.sesame.util.ResChecker;
-import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.util.StringUtil;
-import fansirsqi.xposed.sesame.util.TimeUtil;
-import fansirsqi.xposed.sesame.util.TimeCounter;
+import android.util.Base64
+import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.data.StatusFlags
+import fansirsqi.xposed.sesame.entity.AlipayUser
+import fansirsqi.xposed.sesame.model.ModelFields
+import fansirsqi.xposed.sesame.model.ModelGroup
+import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
+import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
+import fansirsqi.xposed.sesame.util.JsonUtil
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.TimeCounter
+import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.maps.UserMap
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.LinkedList
+import java.util.Queue
+
 /**
+ * @file AntStall.kt
+ * @brief 蚂蚁新村任务模块
  * @author Constanline
  * @since 2023/08/22
  */
-public class AntStall extends ModelTask {
-    private static final String TAG = AntStall.class.getSimpleName();
-    private static class Seat {
-        public String userId;
-        public int hot;
-        public Seat(String userId, int hot) {
-            this.userId = userId;
-            this.hot = hot;
-        }
-    }
-    private static final List<String> taskTypeList;
-    static {
-        taskTypeList = new ArrayList<>();
-        // 开启收新村收益提醒
-        taskTypeList.add("ANTSTALL_NORMAL_OPEN_NOTICE");
-        // 添加首页
-        taskTypeList.add("tianjiashouye");
-        // 【木兰市集】逛精选好物
-//        taskTypeList.add("ANTSTALL_XLIGHT_VARIABLE_AWARD");
-        // 去饿了么果园逛一逛
-        taskTypeList.add("ANTSTALL_ELEME_VISIT");
-        // 去点淘赚元宝提现
-        taskTypeList.add("ANTSTALL_TASK_diantao202311");
-        taskTypeList.add("ANTSTALL_TASK_nongchangleyuan");
-    }
-    @Override
-    public String getName() {
-        return "新村";
-    }
-    @Override
-    public ModelGroup getGroup() {
-        return ModelGroup.STALL;
-    }
-    @Override
-    public String getIcon() {
-        return "AntStall.png";
-    }
-    private BooleanModelField stallAutoOpen;
-    private ChoiceModelField stallOpenType;
-    private SelectModelField stallOpenList;
-    private BooleanModelField stallAutoClose;
-    private BooleanModelField stallAutoTicket;
-    private ChoiceModelField stallTicketType;
-    private SelectModelField stallTicketList;
-    private BooleanModelField stallAutoTask;
-    private BooleanModelField stallReceiveAward;
-    private SelectModelField stallWhiteList;
-    private SelectModelField stallBlackList;
-    private BooleanModelField stallAllowOpenReject;
-    private IntegerModelField stallAllowOpenTime;
-    private IntegerModelField stallSelfOpenTime;
-    private BooleanModelField stallDonate;
-    private BooleanModelField stallInviteRegister;
-    private BooleanModelField stallThrowManure;
-    private ChoiceModelField stallThrowManureType;
-    private SelectModelField stallThrowManureList;
-    private BooleanModelField stallInviteShop;
-    private ChoiceModelField stallInviteShopType;
-    private SelectModelField stallInviteShopList;
-    private BooleanModelField roadmap;
+class AntStall : ModelTask() {
+
     /**
-     * 邀请好友开通新村列表
+     * @brief 摊位数据类
+     * @property userId 用户ID
+     * @property hot 热度值
      */
-    private SelectModelField stallInviteRegisterList;
-    /**
-     * 助力好友列表
-     */
-    private SelectModelField assistFriendList;
-    @Override
-    public ModelFields getFields() {
-        ModelFields modelFields = new ModelFields();
-        modelFields.addField(stallAutoOpen = new BooleanModelField("stallAutoOpen", "摆摊 | 开启", false));
-        modelFields.addField(stallOpenType = new ChoiceModelField("stallOpenType", "摆摊 | 动作", StallOpenType.OPEN, StallOpenType.nickNames));
-        modelFields.addField(stallOpenList = new SelectModelField("stallOpenList", "摆摊 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallAutoClose = new BooleanModelField("stallAutoClose", "收摊 | 开启", false));
-        modelFields.addField(stallSelfOpenTime = new IntegerModelField("stallSelfOpenTime", "收摊 | 摆摊时长(分钟)", 120));
-        modelFields.addField(stallAutoTicket = new BooleanModelField("stallAutoTicket", "贴罚单 | 开启", false));
-        modelFields.addField(stallTicketType = new ChoiceModelField("stallTicketType", "贴罚单 | 动作", StallTicketType.DONT_TICKET, StallTicketType.nickNames));
-        modelFields.addField(stallTicketList = new SelectModelField("stallTicketList", "贴罚单 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallThrowManure = new BooleanModelField("stallThrowManure", "丢肥料 | 开启", false));
-        modelFields.addField(stallThrowManureType = new ChoiceModelField("stallThrowManureType", "丢肥料 | 动作", StallThrowManureType.DONT_THROW, StallThrowManureType.nickNames));
-        modelFields.addField(stallThrowManureList = new SelectModelField("stallThrowManureList", "丢肥料 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallInviteShop = new BooleanModelField("stallInviteShop", "邀请摆摊 | 开启", false));
-        modelFields.addField(stallInviteShopType = new ChoiceModelField("stallInviteShopType", "邀请摆摊 | 动作", StallInviteShopType.INVITE, StallInviteShopType.nickNames));
-        modelFields.addField(stallInviteShopList = new SelectModelField("stallInviteShopList", "邀请摆摊 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallAllowOpenReject = new BooleanModelField("stallAllowOpenReject", "请走小摊 | 开启", false));
-        modelFields.addField(stallAllowOpenTime = new IntegerModelField("stallAllowOpenTime", "请走小摊 | 允许摆摊时长(分钟)", 121));
-        modelFields.addField(stallWhiteList = new SelectModelField("stallWhiteList", "请走小摊 | 白名单(超时也不赶)", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallBlackList = new SelectModelField("stallBlackList", "请走小摊 | 黑名单(不超时也赶)", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(stallAutoTask = new BooleanModelField("stallAutoTask", "自动任务", false));
-        modelFields.addField(stallReceiveAward = new BooleanModelField("stallReceiveAward", "自动领奖", false));
-        modelFields.addField(stallDonate = new BooleanModelField("stallDonate", "自动捐赠", false));
-        modelFields.addField(roadmap = new BooleanModelField("roadmap", "自动进入下一村", false));
-        modelFields.addField(stallInviteRegister = new BooleanModelField("stallInviteRegister", "邀请 | 邀请好友开通新村", false));
-        modelFields.addField(stallInviteRegisterList = new SelectModelField("stallInviteRegisterList", "邀请 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(assistFriendList = new SelectModelField("assistFriendList", "助力好友列表", new LinkedHashSet<>(), AlipayUser::getList));
-        return modelFields;
-    }
-    @Override
-    protected void runJava() {
-        try {
-            TimeCounter tc = new TimeCounter(TAG);
-            Log.record(TAG,"执行开始-" + getName());
-            String s = AntStallRpcCall.home();
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                if (!jo.getBoolean("hasRegister") || jo.getBoolean("hasQuit")) {
-                    Log.farm("蚂蚁新村⛪请先开启蚂蚁新村");
-                    return;
-                }
-                JSONObject astReceivableCoinVO = jo.getJSONObject("astReceivableCoinVO");
-                if (astReceivableCoinVO.optBoolean("hasCoin")) {
-                    settleReceivable();
-                    tc.countDebug("收金币");
-                }
-                if (stallThrowManure.getValue()) {
-                    throwManure();
-                    tc.countDebug("丢肥料");
-                }
-                JSONObject seatsMap = jo.getJSONObject("seatsMap");
-                settle(seatsMap);
-                tc.countDebug("收取金币");
-                collectManure();
-                tc.countDebug("收肥料");
-                sendBack(seatsMap);
-                tc.countDebug("请走");
-                if (stallAutoClose.getValue()) {
-                    closeShop();
-                    tc.countDebug("收摊");
-                }
-                if (stallAutoOpen.getValue()) {
-                    openShop();
-                    tc.countDebug("摆摊");
-                }
-                if (stallAutoTask.getValue()) {
-                    taskList();
-                    tc.countDebug("自动任务第一次");
-                    GlobalThreadPools.sleepCompat(500);
-                    taskList();
-                    tc.countDebug("自动任务第二次");
-                }
-                assistFriend();
-                tc.countDebug("新村助力");
-                if (stallDonate.getValue() && Status.canStallDonateToday()) {
-                    donate();
-                    tc.countDebug("自动捐赠");
-                }
-                if (roadmap.getValue()) {
-                    roadmap();
-                    tc.countDebug("自动进入下一村");
-                }
-                if (stallAutoTicket.getValue()) {
-                    pasteTicket();
-                    tc.countDebug("贴罚单");
-                }
-            } else {
-                Log.record(TAG,"home err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"home err:",t);
-        }finally {
-            Log.record(TAG,"执行结束-" + getName());
-        }
-    }
-    private void sendBack(String billNo, String seatId, String shopId, String shopUserId, Set<String> sentUserId) {
-        String s = AntStallRpcCall.shopSendBackPre(billNo, seatId, shopId, shopUserId);
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONObject astPreviewShopSettleVO = jo.getJSONObject("astPreviewShopSettleVO");
-                JSONObject income = astPreviewShopSettleVO.getJSONObject("income");
-                int amount = (int) income.getDouble("amount");
-                s = AntStallRpcCall.shopSendBack(seatId);
-                jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
-                    Log.farm("蚂蚁新村⛪请走[" + UserMap.getMaskName(shopUserId) + "]的小摊"
-                            + (amount > 0 ? "获得金币" + amount : ""));
-                } else {
-                    Log.error(TAG,"sendBack err:" + " " + s);
-                }
-                if (stallInviteShop.getValue()) {
-                    inviteOpen(seatId, sentUserId);
-                }
-            } else {
-                Log.error(TAG,"sendBackPre err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"sendBack err:",t);
+    private data class Seat(val userId: String, val hot: Int)
+
+    // 配置字段
+    private lateinit var stallAutoOpen: BooleanModelField
+    private lateinit var stallOpenType: ChoiceModelField
+    private lateinit var stallOpenList: SelectModelField
+    private lateinit var stallAutoClose: BooleanModelField
+    private lateinit var stallAutoTicket: BooleanModelField
+    private lateinit var stallTicketType: ChoiceModelField
+    private lateinit var stallTicketList: SelectModelField
+    private lateinit var stallAutoTask: BooleanModelField
+    private lateinit var stallReceiveAward: BooleanModelField
+    private lateinit var stallWhiteList: SelectModelField
+    private lateinit var stallBlackList: SelectModelField
+    private lateinit var stallAllowOpenReject: BooleanModelField
+    private lateinit var stallAllowOpenTime: IntegerModelField
+    private lateinit var stallSelfOpenTime: IntegerModelField
+    private lateinit var stallDonate: BooleanModelField
+    private lateinit var stallInviteRegister: BooleanModelField
+    private lateinit var stallThrowManure: BooleanModelField
+    private lateinit var stallThrowManureType: ChoiceModelField
+    private lateinit var stallThrowManureList: SelectModelField
+    private lateinit var stallInviteShop: BooleanModelField
+    private lateinit var stallInviteShopType: ChoiceModelField
+    private lateinit var stallInviteShopList: SelectModelField
+    private lateinit var roadmap: BooleanModelField
+    private lateinit var stallInviteRegisterList: SelectModelField
+    private lateinit var assistFriendList: SelectModelField
+
+    override fun getName(): String = "新村"
+
+    override fun getGroup(): ModelGroup = ModelGroup.STALL
+
+    override fun getIcon(): String = "AntStall.png"
+
+    override fun getFields(): ModelFields {
+        return ModelFields().apply {
+            addField(BooleanModelField("stallAutoOpen", "摆摊 | 开启", false).also {
+                stallAutoOpen = it
+            })
+            addField(
+                ChoiceModelField(
+                    "stallOpenType",
+                    "摆摊 | 动作",
+                    StallOpenType.OPEN,
+                    StallOpenType.nickNames
+                ).also { stallOpenType = it })
+            addField(
+                SelectModelField(
+                    "stallOpenList",
+                    "摆摊 | 好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallOpenList = it })
+            addField(
+                BooleanModelField(
+                    "stallAutoClose",
+                    "收摊 | 开启",
+                    false
+                ).also { stallAutoClose = it })
+            addField(
+                IntegerModelField(
+                    "stallSelfOpenTime",
+                    "收摊 | 摆摊时长(分钟)",
+                    120
+                ).also { stallSelfOpenTime = it })
+            addField(
+                BooleanModelField(
+                    "stallAutoTicket",
+                    "贴罚单 | 开启",
+                    false
+                ).also { stallAutoTicket = it })
+            addField(
+                ChoiceModelField(
+                    "stallTicketType",
+                    "贴罚单 | 动作",
+                    StallTicketType.DONT_TICKET,
+                    StallTicketType.nickNames
+                ).also { stallTicketType = it })
+            addField(
+                SelectModelField(
+                    "stallTicketList",
+                    "贴罚单 | 好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallTicketList = it })
+            addField(
+                BooleanModelField(
+                    "stallThrowManure",
+                    "丢肥料 | 开启",
+                    false
+                ).also { stallThrowManure = it })
+            addField(
+                ChoiceModelField(
+                    "stallThrowManureType",
+                    "丢肥料 | 动作",
+                    StallThrowManureType.DONT_THROW,
+                    StallThrowManureType.nickNames
+                ).also { stallThrowManureType = it })
+            addField(
+                SelectModelField(
+                    "stallThrowManureList",
+                    "丢肥料 | 好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallThrowManureList = it })
+            addField(
+                BooleanModelField(
+                    "stallInviteShop",
+                    "邀请摆摊 | 开启",
+                    false
+                ).also { stallInviteShop = it })
+            addField(
+                ChoiceModelField(
+                    "stallInviteShopType",
+                    "邀请摆摊 | 动作",
+                    StallInviteShopType.INVITE,
+                    StallInviteShopType.nickNames
+                ).also { stallInviteShopType = it })
+            addField(
+                SelectModelField(
+                    "stallInviteShopList",
+                    "邀请摆摊 | 好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallInviteShopList = it })
+            addField(
+                BooleanModelField(
+                    "stallAllowOpenReject",
+                    "请走小摊 | 开启",
+                    false
+                ).also { stallAllowOpenReject = it })
+            addField(
+                IntegerModelField(
+                    "stallAllowOpenTime",
+                    "请走小摊 | 允许摆摊时长(分钟)",
+                    121
+                ).also { stallAllowOpenTime = it })
+            addField(
+                SelectModelField(
+                    "stallWhiteList",
+                    "请走小摊 | 白名单(超时也不赶)",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallWhiteList = it })
+            addField(
+                SelectModelField(
+                    "stallBlackList",
+                    "请走小摊 | 黑名单(不超时也赶)",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallBlackList = it })
+            addField(BooleanModelField("stallAutoTask", "自动任务", false).also {
+                stallAutoTask = it
+            })
+            addField(
+                BooleanModelField(
+                    "stallReceiveAward",
+                    "自动领奖",
+                    false
+                ).also { stallReceiveAward = it })
+            addField(BooleanModelField("stallDonate", "自动捐赠", false).also { stallDonate = it })
+            addField(BooleanModelField("roadmap", "自动进入下一村", false).also { roadmap = it })
+            addField(
+                BooleanModelField(
+                    "stallInviteRegister",
+                    "邀请 | 邀请好友开通新村",
+                    false
+                ).also { stallInviteRegister = it })
+            addField(
+                SelectModelField(
+                    "stallInviteRegisterList",
+                    "邀请 | 好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { stallInviteRegisterList = it })
+            addField(
+                SelectModelField(
+                    "assistFriendList",
+                    "助力好友列表",
+                    LinkedHashSet(),
+                    AlipayUser::getList
+                ).also { assistFriendList = it })
         }
     }
 
-    private void inviteOpen(String seatId, Set<String> sentUserId) {
-        String s = AntStallRpcCall.rankInviteOpen();
+    override fun runJava() {
         try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONArray friendRankList = jo.getJSONArray("friendRankList");
-                for (int i = 0; i < friendRankList.length(); i++) {
-                    JSONObject friend = friendRankList.getJSONObject(i);
-                    String friendUserId = friend.getString("userId");
-                    boolean isInviteShop = stallInviteShopList.getValue().contains(friendUserId);
-                    if (stallInviteShopType.getValue() == StallInviteShopType.DONT_INVITE) {
-                        isInviteShop = !isInviteShop;
-                    }
-                    if (!isInviteShop) {
-                        continue;
-                    }
-                    if (sentUserId.contains(friendUserId)) {
-                        continue;
-                    }
-                    if (friend.getBoolean("canInviteOpenShop")) {
-                        s = AntStallRpcCall.oneKeyInviteOpenShop(friendUserId, seatId);
-                        if (s.isEmpty()) {
-                            Log.record(TAG, "邀请[" + UserMap.getMaskName(friendUserId) + "]开店返回空，跳过");
-                            continue;
-                        }
-                        jo = new JSONObject(s);
-                        if (ResChecker.checkRes(TAG,jo)) {
-                            Log.farm("蚂蚁新村⛪邀请[" + UserMap.getMaskName(friendUserId) + "]开店成功");
-                            sentUserId.add(friendUserId);
-                            return;
-                        } else {
-                            Log.record(TAG, "邀请[" + UserMap.getMaskName(friendUserId) + "]开店失败: " + jo.optString("errorMessage"));
-                        }
-                    }
-                }
-            } else {
-                Log.error(TAG,"inviteOpen err:" + " " + s);
+            val tc = TimeCounter(TAG)
+            Log.record(TAG, "执行开始-$name")
+
+            val homeResponse = AntStallRpcCall.home()
+            val homeJson = JSONObject(homeResponse)
+
+            if (!ResChecker.checkRes(TAG, homeJson)) {
+                Log.record(TAG, "home err: $homeResponse")
+                return
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "inviteOpen err:",t);
+
+            // 检查是否已注册
+            if (!homeJson.getBoolean("hasRegister") || homeJson.getBoolean("hasQuit")) {
+                Log.farm("蚂蚁新村⛪请先开启蚂蚁新村")
+                return
+            }
+
+            // 收取应收金币
+            val astReceivableCoinVO = homeJson.getJSONObject("astReceivableCoinVO")
+            if (astReceivableCoinVO.optBoolean("hasCoin")) {
+                settleReceivable()
+                tc.countDebug("收金币")
+            }
+
+            // 丢肥料
+            if (stallThrowManure.value) {
+                throwManure()
+                tc.countDebug("丢肥料")
+            }
+
+            val seatsMap = homeJson.getJSONObject("seatsMap")
+
+            // 收取金币
+            settle(seatsMap)
+            tc.countDebug("收取金币")
+
+            // 收肥料
+            collectManure()
+            tc.countDebug("收肥料")
+
+            // 请走操作
+            sendBack(seatsMap)
+            tc.countDebug("请走")
+
+            // 收摊
+            if (stallAutoClose.value) {
+                closeShop()
+                tc.countDebug("收摊")
+            }
+
+            // 摆摊
+            if (stallAutoOpen.value) {
+                openShop()
+                tc.countDebug("摆摊")
+            }
+
+            // 自动任务
+            if (stallAutoTask.value) {
+                taskList()
+                tc.countDebug("自动任务第一次")
+                GlobalThreadPools.sleepCompat(500)
+                taskList()
+                tc.countDebug("自动任务第二次")
+            }
+
+            // 新村助力
+            assistFriend()
+            tc.countDebug("新村助力")
+
+            // 自动捐赠
+            if (stallDonate.value && Status.canStallDonateToday()) {
+                donate()
+                tc.countDebug("自动捐赠")
+            }
+
+            // 进入下一村
+            if (roadmap.value) {
+                roadmap()
+                tc.countDebug("自动进入下一村")
+            }
+
+            // 贴罚单
+            if (stallAutoTicket.value) {
+                pasteTicket()
+                tc.countDebug("贴罚单")
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "home err:", t)
+        } finally {
+            Log.record(TAG, "执行结束-$name")
         }
     }
 
-    private void sendBack(JSONObject seatsMap) {
+    /**
+     * @brief 请走小摊
+     */
+    private fun sendBack(
+        billNo: String,
+        seatId: String,
+        shopId: String,
+        shopUserId: String,
+        sentUserId: MutableSet<String>
+    ) {
         try {
-            Set<String> sentUserId = new LinkedHashSet<>();
-            for (int i = 1; i <= 2; i++) {
-                JSONObject seat = seatsMap.getJSONObject("GUEST_0" + i);
-                if ("BUSY".equals(seat.getString("status"))) {
-                    String rentLastUser = seat.optString("rentLastUser");
-                    if (!StringUtil.isEmpty(rentLastUser)) {
-                        sentUserId.add(rentLastUser);
+            val preResponse = AntStallRpcCall.shopSendBackPre(billNo, seatId, shopId, shopUserId)
+            val preJson = JSONObject(preResponse)
+
+            if (!ResChecker.checkRes(TAG, preJson)) {
+                Log.error(TAG, "sendBackPre err: $preResponse")
+                return
+            }
+
+            val income = preJson.getJSONObject("astPreviewShopSettleVO").getJSONObject("income")
+            val amount = income.getDouble("amount").toInt()
+
+            val sendBackResponse = AntStallRpcCall.shopSendBack(seatId)
+            val sendBackJson = JSONObject(sendBackResponse)
+
+            if (ResChecker.checkRes(TAG, sendBackJson)) {
+                val amountText = if (amount > 0) "获得金币$amount" else ""
+                Log.farm("蚂蚁新村⛪请走[${UserMap.getMaskName(shopUserId)}]的小摊$amountText")
+            } else {
+                Log.error(TAG, "sendBack err: $sendBackResponse")
+            }
+
+            if (stallInviteShop.value) {
+                inviteOpen(seatId, sentUserId)
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "sendBack err:", t)
+        }
+    }
+
+    /**
+     * @brief 邀请开店
+     */
+    private fun inviteOpen(seatId: String, sentUserId: MutableSet<String>) {
+        try {
+            val response = AntStallRpcCall.rankInviteOpen()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "inviteOpen err: $response")
+                return
+            }
+
+            val friendRankList = json.getJSONArray("friendRankList")
+            for (i in 0 until friendRankList.length()) {
+                val friend = friendRankList.getJSONObject(i)
+                val friendUserId = friend.getString("userId")
+
+                var isInviteShop = stallInviteShopList.value.contains(friendUserId)
+                if (stallInviteShopType.value == StallInviteShopType.DONT_INVITE) {
+                    isInviteShop = !isInviteShop
+                }
+
+                if (!isInviteShop || sentUserId.contains(friendUserId)) {
+                    continue
+                }
+
+                if (friend.getBoolean("canInviteOpenShop")) {
+                    val inviteResponse = AntStallRpcCall.oneKeyInviteOpenShop(friendUserId, seatId)
+                    if (inviteResponse.isEmpty()) {
+                        Log.record(TAG, "邀请[${UserMap.getMaskName(friendUserId)}]开店返回空,跳过")
+                        continue
+                    }
+
+                    val inviteJson = JSONObject(inviteResponse)
+                    if (ResChecker.checkRes(TAG, inviteJson)) {
+                        Log.farm("蚂蚁新村⛪邀请[${UserMap.getMaskName(friendUserId)}]开店成功")
+                        sentUserId.add(friendUserId)
+                        return
+                    } else {
+                        Log.record(
+                            TAG,
+                            "邀请[${UserMap.getMaskName(friendUserId)}]开店失败: ${
+                                inviteJson.optString("errorMessage")
+                            }"
+                        )
                     }
                 }
             }
-            for (int i = 1; i <= 2; i++) {
-                JSONObject seat = seatsMap.getJSONObject("GUEST_0" + i);
-                String seatId = seat.getString("seatId");
-                if ("FREE".equals(seat.getString("status"))) {
-                    if (stallInviteShop.getValue()) {
-                        Log.record(TAG, "摊位[" + i + "]空闲，尝试邀请好友...");
-                        inviteOpen(seatId, sentUserId);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "inviteOpen err:", t)
+        }
+    }
+
+    /**
+     * @brief 处理摊位请走逻辑
+     */
+    private fun sendBack(seatsMap: JSONObject) {
+        try {
+            val sentUserId = mutableSetOf<String>()
+
+            // 记录已占用的用户
+            for (i in 1..2) {
+                val seat = seatsMap.getJSONObject("GUEST_0$i")
+                if (seat.getString("status") == "BUSY") {
+                    val rentLastUser = seat.optString("rentLastUser")
+                    if (rentLastUser.isNotEmpty()) {
+                        sentUserId.add(rentLastUser)
                     }
-                    continue;
                 }
-                // 请走小摊 未开启直接跳过
-                if (!stallAllowOpenReject.getValue()) {
-                    continue;
+            }
+
+            // 处理每个摊位
+            for (i in 1..2) {
+                val seat = seatsMap.getJSONObject("GUEST_0$i")
+                val seatId = seat.getString("seatId")
+
+                // 摊位空闲时尝试邀请
+                if (seat.getString("status") == "FREE") {
+                    if (stallInviteShop.value) {
+                        Log.record(TAG, "摊位[$i]空闲,尝试邀请好友...")
+                        inviteOpen(seatId, sentUserId)
+                    }
+                    continue
                 }
-                String rentLastUser = seat.optString("rentLastUser");
-                if (StringUtil.isEmpty(rentLastUser)) {
-                    continue;
+
+                if (!stallAllowOpenReject.value) {
+                    continue
                 }
-                // 白名单直接跳过
-                if (stallWhiteList.getValue().contains(rentLastUser)) {
-                    Log.record(TAG, "好友[" + UserMap.getMaskName(rentLastUser) + "]在白名单中，跳过请走。");
-                    continue;
+
+                val rentLastUser = seat.optString("rentLastUser")
+                if (rentLastUser.isEmpty()) {
+                    continue
                 }
-                String rentLastBill = seat.getString("rentLastBill");
-                String rentLastShop = seat.getString("rentLastShop");
+
+                // 白名单跳过
+                if (stallWhiteList.value.contains(rentLastUser)) {
+                    Log.record(
+                        TAG,
+                        "好友[${UserMap.getMaskName(rentLastUser)}]在白名单中,跳过请走。"
+                    )
+                    continue
+                }
+
+                val rentLastBill = seat.getString("rentLastBill")
+                val rentLastShop = seat.getString("rentLastShop")
+
                 // 黑名单直接赶走
-                if (stallBlackList.getValue().contains(rentLastUser)) {
-                    Log.record(TAG, "好友[" + UserMap.getMaskName(rentLastUser) + "]在黑名单中，立即请走。");
-                    sendBack(rentLastBill, seatId, rentLastShop, rentLastUser, sentUserId);
-                    continue;
+                if (stallBlackList.value.contains(rentLastUser)) {
+                    Log.record(
+                        TAG,
+                        "好友[${UserMap.getMaskName(rentLastUser)}]在黑名单中,立即请走。"
+                    )
+                    sendBack(rentLastBill, seatId, rentLastShop, rentLastUser, sentUserId)
+                    continue
                 }
-                long bizStartTime = seat.getLong("bizStartTime");
-                long endTime = bizStartTime + stallAllowOpenTime.getValue() * 60 * 1000;
+
+                // 超时判断
+                val bizStartTime = seat.getLong("bizStartTime")
+                val endTime = bizStartTime + stallAllowOpenTime.value * 60 * 1000L
+
                 if (System.currentTimeMillis() > endTime) {
-                    Log.record(TAG, "好友[" + UserMap.getMaskName(rentLastUser) + "]摆摊超时，立即请走。");
-                    sendBack(rentLastBill, seatId, rentLastShop, rentLastUser, sentUserId);
+                    Log.record(TAG, "好友[${UserMap.getMaskName(rentLastUser)}]摆摊超时,立即请走。")
+                    sendBack(rentLastBill, seatId, rentLastShop, rentLastUser, sentUserId)
                 } else {
-                    String taskId = "SB|" + seatId;
+                    val taskId = "SB|$seatId"
                     if (!hasChildTask(taskId)) {
-                        addChildTask(new ChildModelTask(taskId, "SB", () -> {
-                            if (stallAllowOpenReject.getValue()) {
-                                sendBack(rentLastBill, seatId, rentLastShop, rentLastUser, sentUserId);
+                        addChildTask(ChildModelTask(taskId, "SB", {
+                            if (stallAllowOpenReject.value) {
+                                sendBack(
+                                    rentLastBill,
+                                    seatId,
+                                    rentLastShop,
+                                    rentLastUser,
+                                    sentUserId
+                                )
                             }
-                        }, endTime));
-                        Log.record(TAG,"添加蹲点请走⛪在[" + TimeUtil.getCommonDate(endTime) + "]执行");
+                        }, endTime))
+                        Log.record(TAG, "添加蹲点请走⛪在[${TimeUtil.getCommonDate(endTime)}]执行")
                     }
                 }
             }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "sendBack err:",t);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "sendBack err:", t)
         }
-    }
-
-    private void settle(JSONObject seatsMap) {
-        try {
-            JSONObject seat = seatsMap.getJSONObject("MASTER");
-            if (seat.has("coinsMap")) {
-                JSONObject coinsMap = seat.getJSONObject("coinsMap");
-                JSONObject master = coinsMap.getJSONObject("MASTER");
-                String assetId = master.getString("assetId");
-                int settleCoin = (int) (master.getJSONObject("money").getDouble("amount"));
-                boolean fullShow = master.getBoolean("fullShow");
-                if (fullShow || settleCoin > 100) {
-                    String s = AntStallRpcCall.settle(assetId, settleCoin);
-                    JSONObject jo = new JSONObject(s);
-                    if (ResChecker.checkRes(TAG,jo)) {
-                        Log.farm("蚂蚁新村⛪[收取金币]#" + settleCoin);
-                    } else {
-                        Log.error(TAG,"settle err:" + " " + s);
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "settle err:",t);
-        }
-    }
-
-    private void closeShop() {
-        String s = AntStallRpcCall.shopList();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONArray astUserShopList = jo.getJSONArray("astUserShopList");
-                if (astUserShopList.length() == 0) {
-                    Log.record(TAG, "没有正在摆摊的小摊可收。");
-                    return;
-                }
-                Log.record(TAG, "检查 " + astUserShopList.length() + " 个小摊的收摊时间...");
-                for (int i = 0; i < astUserShopList.length(); i++) {
-                    JSONObject shop = astUserShopList.getJSONObject(i);
-                    if ("OPEN".equals(shop.getString("status"))) {
-                        JSONObject rentLastEnv = shop.getJSONObject("rentLastEnv");
-                        long gmtLastRent = rentLastEnv.getLong("gmtLastRent");
-                        long shopTime = gmtLastRent + stallSelfOpenTime.getValue() * 60 * 1000;
-                        String shopId = shop.getString("shopId");
-                        String rentLastBill = shop.getString("rentLastBill");
-                        String rentLastUser = shop.getString("rentLastUser");
-                        if (System.currentTimeMillis() > shopTime) {
-                            Log.record(TAG, "小摊[" + shopId + "]摆摊时间已到，执行收摊。");
-                            shopClose(shopId, rentLastBill, rentLastUser);
-                        } else {
-                            String taskId = "SH|" + shopId;
-                            if (!hasChildTask(taskId)) {
-                                addChildTask(new ChildModelTask(taskId, "SH", () -> {
-                                    if (stallAutoClose.getValue()) {
-                                        shopClose(shopId, rentLastBill, rentLastUser);
-                                    }
-                                    GlobalThreadPools.sleepCompat(300L);
-                                    if (stallAutoOpen.getValue()) {
-                                        openShop();
-                                    }
-                                }, shopTime));
-                                Log.record(TAG,"添加蹲点收摊⛪在[" + TimeUtil.getCommonDate(shopTime) + "]执行");
-                            } /*else {
-                                addChildTask(new ChildModelTask(taskId, "SH", () -> {
-                                    if (stallAutoClose.getValue()) {
-                                        shopClose(shopId, rentLastBill, rentLastUser);
-                                    }
-                                }, shopTime));
-                            }*/
-                        }
-                    }
-                }
-            } else {
-                Log.error(TAG,"closeShop err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "closeShop err:",t);
-        }
-    }
-
-    private void openShop() {
-        String s = AntStallRpcCall.shopList();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONArray astUserShopList = jo.getJSONArray("astUserShopList");
-                Queue<String> shopIds = new LinkedList<>();
-                for (int i = 0; i < astUserShopList.length(); i++) {
-                    JSONObject astUserShop = astUserShopList.getJSONObject(i);
-                    if ("FREE".equals(astUserShop.getString("status"))) {
-                        shopIds.add(astUserShop.getString("shopId"));
-                    }
-                }
-                if (shopIds.isEmpty()) {
-                    Log.record(TAG, "没有空闲的小摊可用于摆摊。");
-                    return;
-                }
-                Log.record(TAG, "找到 " + shopIds.size() + " 个空闲小摊，开始寻找好友村庄...");
-                rankCoinDonate(shopIds);
-            } else {
-                Log.error(TAG,"openShop err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "openShop err:",t);
-        }
-    }
-
-    private void rankCoinDonate(Queue<String> shopIds) {
-        String s = AntStallRpcCall.rankCoinDonate();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONArray friendRankList = jo.getJSONArray("friendRankList");
-                List<Seat> seats = new ArrayList<>();
-                for (int i = 0; i < friendRankList.length(); i++) {
-                    JSONObject friendRank = friendRankList.getJSONObject(i);
-                    if (friendRank.getBoolean("canOpenShop")) {
-                        String userId = friendRank.getString("userId");
-                        boolean isStallOpen = stallOpenList.getValue().contains(userId);
-                        if (stallOpenType.getValue() == StallOpenType.CLOSE) {
-                            isStallOpen = !isStallOpen;
-                        }
-                        if (!isStallOpen) {
-                            continue;
-                        }
-                        int hot = friendRank.getInt("hot");
-                        seats.add(new Seat(userId, hot));
-                    }
-                }
-                friendHomeOpen(seats, shopIds);
-            } else {
-                Log.error(TAG,"rankCoinDonate err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "rankCoinDonate err:",t);
-        }
-    }
-
-    private void openShop(String seatId, String userId, String shopId) {
-        String s = AntStallRpcCall.shopOpen(seatId, userId, shopId);
-        try {
-            JSONObject jo = new JSONObject(s);
-            if ("SUCCESS".equals(jo.optString("resultCode"))) {
-                Log.farm("蚂蚁新村⛪在[" + UserMap.getMaskName(userId) + "]家摆摊");
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "openShop err:",t);
-        }
-    }
-
-    private void friendHomeOpen(List<Seat> seats, Queue<String> shopIds) {
-        seats.sort((e1, e2) -> e2.hot - e1.hot);
-        String currentUid = UserMap.INSTANCE.getCurrentUid();
-        for (Seat seat : seats) {
-            String shopId = shopIds.poll();
-            if (shopId == null) {
-                return;
-            }
-            String userId = seat.userId;
-            try {
-                String s = AntStallRpcCall.friendHome(userId);
-                JSONObject jo = new JSONObject(s);
-                if ("SUCCESS".equals(jo.optString("resultCode"))) {
-                    JSONObject seatsMap = jo.getJSONObject("seatsMap");
-                    // 修复B_OPEN_SHOP_LIMIT错误：在尝试摆摊前，先检查自己是否已经在这个好友的村庄里占用了摊位。
-                    // 如果已经存在一个摊位，则跳过此好友，避免在同一好友家重复摆摊导致接口报错。
-                    JSONObject guest1 = seatsMap.getJSONObject("GUEST_01");
-                    String rentUser1 = guest1.optString("rentLastUser");
-                    JSONObject guest2 = seatsMap.getJSONObject("GUEST_02");
-                    String rentUser2 = guest2.optString("rentLastUser");
-                    if (Objects.equals(currentUid, rentUser1) || Objects.equals(currentUid, rentUser2)) {
-                        Log.record(TAG, "已在[" + UserMap.getMaskName(userId) + "]家摆摊，跳过");
-                        continue;
-                    }
-                    if (guest1.getBoolean("canOpenShop")) {
-                        openShop(guest1.getString("seatId"), userId, shopId);
-                    } else {
-                        guest2 = seatsMap.getJSONObject("GUEST_02");
-                        if (guest2.getBoolean("canOpenShop")) {
-                            openShop(guest2.getString("seatId"), userId, shopId);
-                        }
-                    }
-                } else {
-                    Log.error(TAG,"新村摆摊失败: " + s);
-                    return;
-                }
-            } catch (Throwable t) {
-                Log.printStackTrace(TAG, t);
-            }
-        }
-    }
-
-    private void shopClose(String shopId, String billNo, String userId) {
-        String s = AntStallRpcCall.preShopClose(shopId, billNo);
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONObject income = jo.getJSONObject("astPreviewShopSettleVO").getJSONObject("income");
-                s = AntStallRpcCall.shopClose(shopId);
-                jo = new JSONObject(s);
-                if (ResChecker.checkRes(TAG,jo)) {
-                    Log.farm("蚂蚁新村⛪收取在[" + UserMap.getMaskName(userId) + "]的摊位获得" + income.getString("amount"));
-                } else {
-                    Log.error(TAG,"shopClose err:" + " " + s);
-                }
-            } else {
-                Log.error(TAG,"shopClose  err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"shopClose  err:", t);
-        }
-    }
-
-    private void taskList() {
-        try {
-            String s = AntStallRpcCall.taskList();
-            JSONObject jo = new JSONObject(s);
-            if (!ResChecker.checkRes(TAG,jo)) {
-                Log.error(TAG,"taskList err:" + " " + s);
-                return;
-            }
-            JSONObject signListModel = jo.getJSONObject("signListModel");
-            if (!signListModel.getBoolean("currentKeySigned")) {
-                Log.record(TAG, "开始执行每日签到...");
-                signToday();
-            }
-            JSONArray taskModels = jo.getJSONArray("taskModels");
-            Log.record(TAG, "开始检查 " + taskModels.length() + " 个新村任务...");
-            for (int i = 0; i < taskModels.length(); i++) {
-                try {
-                    JSONObject task = taskModels.getJSONObject(i);
-                    String taskStatus = task.getString("taskStatus");
-                    String taskType = task.getString("taskType");
-                    if ("FINISHED".equals(taskStatus)) {
-                        Log.record(TAG, "任务[" + taskType + "]已完成，尝试领取奖励...");
-                        receiveTaskAward(taskType);
-                        continue;
-                    }
-                    if (!"TODO".equals(taskStatus)) {
-                        continue;
-                    }
-                    JSONObject bizInfo = new JSONObject(task.getString("bizInfo"));
-                    String title = bizInfo.optString("title", taskType);
-                    if ("VISIT_AUTO_FINISH".equals(bizInfo.getString("actionType"))
-                            || taskTypeList.contains(taskType)) {
-                        if (!finishTask(taskType)) {
-                            continue;
-                        }
-                        Log.farm("蚂蚁新村👣任务[" + title + "]完成");
-                        GlobalThreadPools.sleepCompat(200L);
-                        continue;
-                    }
-                    switch (taskType) {
-                        case "ANTSTALL_NORMAL_DAILY_QA":
-                            if (ReadingDada.answerQuestion(bizInfo)) {
-                                receiveTaskAward(taskType);
-                            }
-                            break;
-                        case "ANTSTALL_NORMAL_INVITE_REGISTER":
-                            if (inviteRegister()) {
-                                GlobalThreadPools.sleepCompat(200L);
-                                continue;
-                            }
-                            break;
-                        case "ANTSTALL_P2P_DAILY_SHARER":
-                            //                                shareP2P();
-                            break;
-                        case "ANTSTALL_TASK_taojinbihuanduan":
-                            //进入淘宝芭芭农场
-                            //没用，暂时先不做
-//                            String sceneCode = JsonUtil.getValueByPath(task, "bizInfo.targetUrl")
-//                                    .replaceAll(".*sceneCode%3D([^&]+).*", "$1");
-//                            if (sceneCode.isEmpty()) {
-//                                continue;
-//                            }
-//                            s = AntStallRpcCall.queryCallAppSchema(sceneCode);
-//                            jo = new JSONObject(s);
-//                            if (!jo.optBoolean("success")) {
-//                                Log.runtime(TAG, "taskList.queryCallAppSchema err:" + jo.optString("resultDesc"));
-//                            }
-//                            Log.record("延时5S 芭芭农场");
-//                            GlobalThreadPools.sleepCompat(5000);
-//                            AntStallRpcCall.home();
-//                            AntStallRpcCall.taskList();
-                            break;
-                        case "ANTSTALL_XLIGHT_VARIABLE_AWARD":
-                            //【木兰市集】逛精选好物
-                            s = AntStallRpcCall.xlightPlugin();
-                            jo = new JSONObject(s);
-                            if (!jo.has("playingResult")) {
-                                Log.error(TAG, "taskList.xlightPlugin err:" + jo.optString("resultDesc"));
-                                continue;
-                            }
-                            jo = jo.getJSONObject("playingResult");
-                            String pid = jo.getString("playingBizId");
-                            JSONArray jsonArray = (JSONArray) JsonUtil.getValueByPathObject(jo, "eventRewardDetail.eventRewardInfoList");
-                            if (jsonArray == null || jsonArray.length() == 0) {
-                                continue;
-                            }
-//                            Log.record("延时5S 木兰市集");
-//                            GlobalThreadPools.sleepCompat(5000);
-                            for (int j = 0; j < jsonArray.length(); j++) {
-                                try{
-                                    JSONObject jsonObject = jsonArray.getJSONObject(j);
-                                    s = AntStallRpcCall.finish(pid, jsonObject);
-                                    Log.record("延时5S 木兰市集");
-                                    GlobalThreadPools.sleepCompat(5000);
-                                    jo = new JSONObject(s);
-                                    if (!jo.optBoolean("success")) {
-                                        Log.error(TAG, "taskList.finish err:" + jo.optString("resultDesc"));
-                                    }
-                                } catch (Throwable t) {
-                                    Log.printStackTrace(TAG, "taskList for err:",t);
-                                }
-                            }
-                            break;
-                    }
-                    GlobalThreadPools.sleepCompat(200L);
-                } catch (Throwable t) {
-                    Log.printStackTrace(TAG,"taskList for err:", t);
-                }
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "taskList err:",t);
-        }
-    }
-
-    private void signToday() {
-        String s = AntStallRpcCall.signToday();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                Log.farm("蚂蚁新村⛪[签到成功]");
-            } else {
-                Log.error(TAG,"signToday err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "signToday err:",t);
-        }
-    }
-
-    private void receiveTaskAward(String taskType) {
-        if (!stallReceiveAward.getValue()) {
-            return;
-        }
-        String s = AntStallRpcCall.receiveTaskAward(taskType);
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (jo.optBoolean("success")) {
-                Log.farm("蚂蚁新村⛪[领取奖励]");
-            } else {
-                Log.error(TAG,"receiveTaskAward err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "receiveTaskAward err:",t);
-        }
-    }
-
-    private boolean finishTask(String taskType) {
-        String s = AntStallRpcCall.finishTask(taskType + "_" + System.currentTimeMillis(), taskType);
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (jo.optBoolean("success")) {
-                return true;
-            } else {
-                Log.error(TAG,"finishTask err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"finishTask err:", t);
-        }
-        return false;
-    }
-
-    private boolean inviteRegister() {
-        if (!stallInviteRegister.getValue()) {
-            return false;
-        }
-        try {
-            String s = AntStallRpcCall.rankInviteRegister();
-            JSONObject jo = new JSONObject(s);
-            if (!ResChecker.checkRes(TAG,jo)) {
-                Log.error(TAG,"rankInviteRegister err:" + " " + s);
-                return false;
-            }
-            JSONArray friendRankList = jo.optJSONArray("friendRankList");
-            if (friendRankList == null || friendRankList.length() <= 0) {
-                return false;
-            }
-            for (int i = 0; i < friendRankList.length(); i++) {
-                JSONObject friend = friendRankList.getJSONObject(i);
-                if (!friend.optBoolean("canInviteRegister", false)
-                        || !"UNREGISTER".equals(friend.getString("userStatus"))) {
-                    continue;
-                }
-                /* 名单筛选 */
-                String userId = friend.getString("userId");
-                if (!stallInviteRegisterList.getValue().contains(userId)) {
-                    continue;
-                }
-                jo = new JSONObject(AntStallRpcCall.friendInviteRegister(userId));
-                if (ResChecker.checkRes(TAG,jo)) {
-                    Log.farm("蚂蚁新村⛪邀请好友[" + UserMap.getMaskName(userId) + "]#开通新村");
-                    return true;
-                } else {
-                    Log.error(TAG,"friendInviteRegister err:" + " " + jo);
-                }
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "InviteRegister err:",t);
-        }
-        return false;
-    }
-
-    private String shareP2P() {
-        try {
-            String s = AntStallRpcCall.shareP2P();
-            JSONObject jo = new JSONObject(s);
-            if (jo.optBoolean("success")) {
-                String shareId = jo.getString("shareId");
-                Log.record(TAG,"蚂蚁新村⛪[分享助力]");
-                return shareId;
-            } else {
-                Log.error(TAG,"shareP2P err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"shareP2P err:", t);
-        }
-        return null;
     }
 
     /**
-     * 助力好友
+     * @brief 结算金币
      */
-    private void assistFriend() {
+    private fun settle(seatsMap: JSONObject) {
+        try {
+            val seat = seatsMap.getJSONObject("MASTER")
+            if (!seat.has("coinsMap")) return
+
+            val coinsMap = seat.getJSONObject("coinsMap")
+            val master = coinsMap.getJSONObject("MASTER")
+            val assetId = master.getString("assetId")
+            val settleCoin = master.getJSONObject("money").getDouble("amount").toInt()
+            val fullShow = master.getBoolean("fullShow")
+
+            if (fullShow || settleCoin > 100) {
+                val response = AntStallRpcCall.settle(assetId, settleCoin)
+                val json = JSONObject(response)
+                if (ResChecker.checkRes(TAG, json)) {
+                    Log.farm("蚂蚁新村⛪[收取金币]#$settleCoin")
+                } else {
+                    Log.error(TAG, "settle err: $response")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "settle err:", t)
+        }
+    }
+
+    /**
+     * @brief 收摊
+     */
+    private fun closeShop() {
+        try {
+            val response = AntStallRpcCall.shopList()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "closeShop err: $response")
+                return
+            }
+
+            val astUserShopList = json.getJSONArray("astUserShopList")
+            if (astUserShopList.length() == 0) {
+                Log.record(TAG, "没有正在摆摊的小摊可收。")
+                return
+            }
+
+            Log.record(TAG, "检查 ${astUserShopList.length()} 个小摊的收摊时间...")
+
+            for (i in 0 until astUserShopList.length()) {
+                val shop = astUserShopList.getJSONObject(i)
+                if (shop.getString("status") != "OPEN") continue
+
+                val rentLastEnv = shop.getJSONObject("rentLastEnv")
+                val gmtLastRent = rentLastEnv.getLong("gmtLastRent")
+                val shopTime = gmtLastRent + stallSelfOpenTime.value * 60 * 1000L
+                val shopId = shop.getString("shopId")
+                val rentLastBill = shop.getString("rentLastBill")
+                val rentLastUser = shop.getString("rentLastUser")
+
+                if (System.currentTimeMillis() > shopTime) {
+                    Log.record(TAG, "小摊[$shopId]摆摊时间已到,执行收摊。")
+                    shopClose(shopId, rentLastBill, rentLastUser)
+                } else {
+                    val taskId = "SH|$shopId"
+                    if (!hasChildTask(taskId)) {
+                        addChildTask(ChildModelTask(taskId, "SH", {
+                            if (stallAutoClose.value) {
+                                shopClose(shopId, rentLastBill, rentLastUser)
+                            }
+                            GlobalThreadPools.sleepCompat(300L)
+                            if (stallAutoOpen.value) {
+                                openShop()
+                            }
+                        }, shopTime))
+                        Log.record(TAG, "添加蹲点收摊⛪在[${TimeUtil.getCommonDate(shopTime)}]执行")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "closeShop err:", t)
+        }
+    }
+
+    /**
+     * @brief 摆摊
+     */
+    private fun openShop() {
+        try {
+            val response = AntStallRpcCall.shopList()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "openShop err: $response")
+                return
+            }
+
+            val astUserShopList = json.getJSONArray("astUserShopList")
+            val shopIds: Queue<String> = LinkedList()
+
+            for (i in 0 until astUserShopList.length()) {
+                val shop = astUserShopList.getJSONObject(i)
+                if (shop.getString("status") == "FREE") {
+                    shopIds.add(shop.getString("shopId"))
+                }
+            }
+
+            if (shopIds.isEmpty()) {
+                Log.record(TAG, "没有空闲的小摊可用于摆摊。")
+                return
+            }
+
+            Log.record(TAG, "找到 ${shopIds.size} 个空闲小摊,开始寻找好友村庄...")
+            rankCoinDonate(shopIds)
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "openShop err:", t)
+        }
+    }
+
+    /**
+     * @brief 获取好友排行榜
+     */
+    private fun rankCoinDonate(shopIds: Queue<String>) {
+        try {
+            val response = AntStallRpcCall.rankCoinDonate()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "rankCoinDonate err: $response")
+                return
+            }
+
+            val friendRankList = json.getJSONArray("friendRankList")
+            val seats = mutableListOf<Seat>()
+
+            for (i in 0 until friendRankList.length()) {
+                val friendRank = friendRankList.getJSONObject(i)
+                if (!friendRank.getBoolean("canOpenShop")) continue
+
+                val userId = friendRank.getString("userId")
+                var isStallOpen = stallOpenList.value.contains(userId)
+                if (stallOpenType.value == StallOpenType.CLOSE) {
+                    isStallOpen = !isStallOpen
+                }
+
+                if (isStallOpen) {
+                    val hot = friendRank.getInt("hot")
+                    seats.add(Seat(userId, hot))
+                }
+            }
+
+            friendHomeOpen(seats, shopIds)
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "rankCoinDonate err:", t)
+        }
+    }
+
+    /**
+     * @brief 在好友村庄开店
+     */
+    private fun openShop(seatId: String, userId: String, shopId: String) {
+        try {
+            val response = AntStallRpcCall.shopOpen(seatId, userId, shopId)
+            val json = JSONObject(response)
+
+            if (json.optString("resultCode") == "SUCCESS") {
+                Log.farm("蚂蚁新村⛪在[${UserMap.getMaskName(userId)}]家摆摊")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "openShop err:", t)
+        }
+    }
+
+    /**
+     * @brief 访问好友主页并开店
+     */
+    private fun friendHomeOpen(seats: List<Seat>, shopIds: Queue<String>) {
+        val sortedSeats = seats.sortedByDescending { it.hot }
+        val currentUid = UserMap.currentUid
+
+        for (seat in sortedSeats) {
+            val shopId = shopIds.poll() ?: return
+            val userId = seat.userId
+
+            try {
+                val response = AntStallRpcCall.friendHome(userId)
+                val json = JSONObject(response)
+
+                if (json.optString("resultCode") != "SUCCESS") {
+                    Log.error(TAG, "新村摆摊失败: $response")
+                    return
+                }
+
+                val seatsMap = json.getJSONObject("seatsMap")
+
+                // 检查是否已占用摊位
+                val guest1 = seatsMap.getJSONObject("GUEST_01")
+                val rentUser1 = guest1.optString("rentLastUser")
+                val guest2 = seatsMap.getJSONObject("GUEST_02")
+                val rentUser2 = guest2.optString("rentLastUser")
+
+                if (currentUid == rentUser1 || currentUid == rentUser2) {
+                    Log.record(TAG, "已在[${UserMap.getMaskName(userId)}]家摆摊,跳过")
+                    continue
+                }
+
+                // 尝试在第一个摊位开店
+                if (guest1.getBoolean("canOpenShop")) {
+                    openShop(guest1.getString("seatId"), userId, shopId)
+                } else if (guest2.getBoolean("canOpenShop")) {
+                    openShop(guest2.getString("seatId"), userId, shopId)
+                }
+
+            } catch (t: Throwable) {
+                Log.printStackTrace(TAG, t)
+            }
+        }
+    }
+
+    /**
+     * @brief 关闭商店
+     */
+    private fun shopClose(shopId: String, billNo: String, userId: String) {
+        try {
+            val preResponse = AntStallRpcCall.preShopClose(shopId, billNo)
+            val preJson = JSONObject(preResponse)
+
+            if (!ResChecker.checkRes(TAG, preJson)) {
+                Log.error(TAG, "shopClose err: $preResponse")
+                return
+            }
+
+            val income = preJson.getJSONObject("astPreviewShopSettleVO").getJSONObject("income")
+            val closeResponse = AntStallRpcCall.shopClose(shopId)
+            val closeJson = JSONObject(closeResponse)
+
+            if (ResChecker.checkRes(TAG, closeJson)) {
+                Log.farm(
+                    "蚂蚁新村⛪收取在[${UserMap.getMaskName(userId)}]的摊位获得${
+                        income.getString(
+                            "amount"
+                        )
+                    }"
+                )
+            } else {
+                Log.error(TAG, "shopClose err: $closeResponse")
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "shopClose err:", t)
+        }
+    }
+
+    /**
+     * @brief 处理任务列表
+     */
+    private fun taskList() {
+        try {
+            val response = AntStallRpcCall.taskList()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "taskList err: $response")
+                return
+            }
+
+            // 签到
+            val signListModel = json.getJSONObject("signListModel")
+            if (!signListModel.getBoolean("currentKeySigned")) {
+                Log.record(TAG, "开始执行每日签到...")
+                signToday()
+            }
+
+            val taskModels = json.getJSONArray("taskModels")
+            Log.record(TAG, "开始检查 ${taskModels.length()} 个新村任务...")
+
+            for (i in 0 until taskModels.length()) {
+                try {
+                    val task = taskModels.getJSONObject(i)
+                    val taskStatus = task.getString("taskStatus")
+                    val taskType = task.getString("taskType")
+
+                    // 已完成的任务领取奖励
+                    if (taskStatus == "FINISHED") {
+                        Log.record(TAG, "任务[$taskType]已完成,尝试领取奖励...")
+                        receiveTaskAward(taskType)
+                        continue
+                    }
+
+                    if (taskStatus != "TODO") continue
+
+                    val bizInfo = JSONObject(task.getString("bizInfo"))
+                    val title = bizInfo.optString("title", taskType)
+                    val actionType = bizInfo.getString("actionType")
+
+                    // 自动完成任务
+                    if (actionType == "VISIT_AUTO_FINISH" || taskType in TASK_TYPE_LIST) {
+                        if (finishTask(taskType)) {
+                            Log.farm("蚂蚁新村💣任务[$title]完成")
+                            GlobalThreadPools.sleepCompat(200L)
+                        }
+                        continue
+                    }
+
+                    // 特殊任务处理
+                    when (taskType) {
+                        "ANTSTALL_NORMAL_DAILY_QA" -> {
+                            if (ReadingDada.answerQuestion(bizInfo)) {
+                                receiveTaskAward(taskType)
+                            }
+                        }
+
+                        "ANTSTALL_NORMAL_INVITE_REGISTER" -> {
+                            if (inviteRegister()) {
+                                GlobalThreadPools.sleepCompat(200L)
+                            }
+                        }
+
+                        "ANTSTALL_XLIGHT_VARIABLE_AWARD" -> {
+                            handleXlightTask()
+                        }
+                    }
+
+                    GlobalThreadPools.sleepCompat(200L)
+
+                } catch (t: Throwable) {
+                    Log.printStackTrace(TAG, "taskList for err:", t)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "taskList err:", t)
+        }
+    }
+
+    /**
+     * @brief 处理X-light任务
+     */
+    private fun handleXlightTask() {
+        try {
+            val response = AntStallRpcCall.xlightPlugin()
+            val json = JSONObject(response)
+
+            if (!json.has("playingResult")) {
+                Log.error(TAG, "taskList.xlightPlugin err: ${json.optString("resultDesc")}")
+                return
+            }
+
+            val playingResult = json.getJSONObject("playingResult")
+            val pid = playingResult.getString("playingBizId")
+            val eventList = JsonUtil.getValueByPathObject(
+                playingResult,
+                "eventRewardDetail.eventRewardInfoList"
+            ) as? JSONArray ?: return
+
+            if (eventList.length() == 0) return
+
+            for (j in 0 until eventList.length()) {
+                try {
+                    val eventInfo = eventList.getJSONObject(j)
+                    val finishResponse = AntStallRpcCall.finish(pid, eventInfo)
+                    Log.record("延时5S 木兰市集")
+                    GlobalThreadPools.sleepCompat(5000)
+
+                    val finishJson = JSONObject(finishResponse)
+                    if (!finishJson.optBoolean("success")) {
+                        Log.error(TAG, "taskList.finish err: ${finishJson.optString("resultDesc")}")
+                    }
+                } catch (t: Throwable) {
+                    Log.printStackTrace(TAG, "taskList for err:", t)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "handleXlightTask err:", t)
+        }
+    }
+
+    /**
+     * @brief 今日签到
+     */
+    private fun signToday() {
+        try {
+            val response = AntStallRpcCall.signToday()
+            val json = JSONObject(response)
+
+            if (ResChecker.checkRes(TAG, json)) {
+                Log.farm("蚂蚁新村⛪[签到成功]")
+            } else {
+                Log.error(TAG, "signToday err: $response")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "signToday err:", t)
+        }
+    }
+
+    /**
+     * @brief 领取任务奖励
+     */
+    private fun receiveTaskAward(taskType: String) {
+        if (!stallReceiveAward.value) return
+
+        try {
+            val response = AntStallRpcCall.receiveTaskAward(taskType)
+            val json = JSONObject(response)
+
+            if (json.optBoolean("success")) {
+                Log.farm("蚂蚁新村⛪[领取奖励]")
+            } else {
+                Log.error(TAG, "receiveTaskAward err: $response")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "receiveTaskAward err:", t)
+        }
+    }
+
+    /**
+     * @brief 完成任务
+     */
+    private fun finishTask(taskType: String): Boolean {
+        try {
+            val response = AntStallRpcCall.finishTask(
+                "${taskType}_${System.currentTimeMillis()}",
+                taskType
+            )
+            val json = JSONObject(response)
+
+            if (json.optBoolean("success")) {
+                return true
+            } else {
+                Log.error(TAG, "finishTask err: $response")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "finishTask err:", t)
+        }
+        return false
+    }
+
+    /**
+     * @brief 邀请好友注册
+     */
+    private fun inviteRegister(): Boolean {
+        if (!stallInviteRegister.value) return false
+
+        try {
+            val response = AntStallRpcCall.rankInviteRegister()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "rankInviteRegister err: $response")
+                return false
+            }
+
+            val friendRankList = json.optJSONArray("friendRankList") ?: return false
+            if (friendRankList.length() == 0) return false
+
+            for (i in 0 until friendRankList.length()) {
+                val friend = friendRankList.getJSONObject(i)
+
+                if (!friend.optBoolean("canInviteRegister", false) ||
+                    friend.getString("userStatus") != "UNREGISTER"
+                ) {
+                    continue
+                }
+
+                val userId = friend.getString("userId")
+                if (!stallInviteRegisterList.value.contains(userId)) {
+                    continue
+                }
+
+                val inviteResponse = AntStallRpcCall.friendInviteRegister(userId)
+                val inviteJson = JSONObject(inviteResponse)
+
+                if (ResChecker.checkRes(TAG, inviteJson)) {
+                    Log.farm("蚂蚁新村⛪邀请好友[${UserMap.getMaskName(userId)}]#开通新村")
+                    return true
+                } else {
+                    Log.error(TAG, "friendInviteRegister err: $inviteJson")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "InviteRegister err:", t)
+        }
+        return false
+    }
+
+    /**
+     * @brief 分享助力
+     */
+    private fun shareP2P(): String? {
+        try {
+            val response = AntStallRpcCall.shareP2P()
+            val json = JSONObject(response)
+
+            if (json.optBoolean("success")) {
+                val shareId = json.getString("shareId")
+                Log.record(TAG, "蚂蚁新村⛪[分享助力]")
+                return shareId
+            } else {
+                Log.error(TAG, "shareP2P err: $response")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "shareP2P err:", t)
+        }
+        return null
+    }
+
+    /**
+     * @brief 助力好友
+     */
+    private fun assistFriend() {
         try {
             if (!Status.canAntStallAssistFriendToday()) {
-                Log.record(TAG, "今日新村助力次数已用完。");
-                return;
+                Log.record(TAG, "今日新村助力次数已用完。")
+                return
             }
-            Set<String> friendSet = assistFriendList.getValue();
-            if (friendSet.isEmpty()) {
-                Log.record(TAG, "未设置新村助力好友列表。");
-                return;
-            }
-            Log.record(TAG, "开始为 " + friendSet.size() + " 位好友进行新村助力...");
-            for (String uid : friendSet) {
-                String shareId = Base64.encodeToString((uid + "-" + RandomUtil.getRandomInt(5) + "ANUTSALTML_2PA_SHARE").getBytes(), Base64.NO_WRAP);
-                String str = AntStallRpcCall.achieveBeShareP2P(shareId);
-                JSONObject jsonObject = new JSONObject(str);
-                String name = UserMap.getMaskName(uid);
-                if (!jsonObject.optBoolean("success")) {
-                    String code = jsonObject.getString("code");
-                    if ("600000028".equals(code)) {
-                        Log.record(TAG,"新村助力🐮被助力次数上限[" + name + "]");
-                        continue;
-                    }
-                    if ("600000027".equals(code)) {
-                        Log.record(TAG,"新村助力💪今日助力他人次数上限");
-                        Status.antStallAssistFriendToday();
-                        return;
-                    }
-                    //600000010 人传人邀请关系不存在
-                    //600000015 人传人完成邀请，菲方用户
-                    //600000031 人传人完成邀请过于频繁
-                    //600000029 人传人分享一对一接受邀请达到限制
-                    Log.error(TAG,"新村助力😔失败[" + name + "]" + jsonObject.optString("desc"));
-                    continue;
-                }
-                Log.farm("新村助力🎉成功[" + name + "]");
-                GlobalThreadPools.sleepCompat(5000);
-            }
-            //暂时一天只做一次
-            Status.antStallAssistFriendToday();
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "assistFriend err:",t);
-        }
-    }
 
-    // 捐赠项目
-    private void donate() {
-        try {
-            // 调用远程接口获取项目列表信息
-            String response = AntStallRpcCall.projectList();
-            // 将返回的 JSON 字符串转换为 JSONObject 对象
-            JSONObject jsonResponse = new JSONObject(response);
-            // 检查返回结果是否成功
-            if ("SUCCESS".equals(jsonResponse.optString("resultCode", ""))) {
-                // 获取 astUserInfoVO 对象
-                JSONObject userInfo = jsonResponse.optJSONObject("astUserInfoVO");
-                if (userInfo != null) {
-                    // 获取当前余额的金额
-                    double currentCoinAmount = Objects.requireNonNull(userInfo.optJSONObject("currentCoin")).optDouble("amount", 0.0);
-                    // 检查当前余额是否大于15000
-                    if (currentCoinAmount < 15000) {
-                        // 当 currentCoinAmount 小于 15000 时，直接返回，不执行后续操作
-                        return;
-                    }
-                }
-                // 获取项目列表中的 astProjectVOS 数组
-                JSONArray projects = jsonResponse.optJSONArray("astProjectVOS");
-                // 遍历项目列表
-                if (projects != null) {
-                    for (int i = 0; i < projects.length(); i++) {
-                        // 获取每个项目的 JSONObject
-                        JSONObject project = projects.optJSONObject(i);
-                        if (project != null && "ONLINE".equals(project.optString("status", ""))) {
-                            // 获取项目的 projectId
-                            String projectId = project.optString("projectId", "");
-                            // 调用远程接口获取项目详情
-                            response = AntStallRpcCall.projectDetail(projectId);
-                            // 将返回的 JSON 字符串转换为 JSONObject 对象
-                            JSONObject projectDetail = new JSONObject(response);
-                            // 检查返回结果是否成功
-                            if ("SUCCESS".equals(projectDetail.optString("resultCode", ""))) {
-                                // 调用远程接口进行捐赠操作
-                                response = AntStallRpcCall.projectDonate(projectId);
-                                // 将返回的 JSON 字符串转换为 JSONObject 对象
-                                JSONObject donateResponse = new JSONObject(response);
-                                // 获取捐赠操作返回的 astProjectVO 对象
-                                JSONObject astProjectVO = donateResponse.optJSONObject("astProjectVO");
-                                if (astProjectVO != null) {
-                                    // 获取 astProjectVO 对象中的 title 字段值
-                                    String title = astProjectVO.optString("title", "未知项目");
-                                    // 检查捐赠操作返回结果是否成功
-                                    if ("SUCCESS".equals(donateResponse.optString("resultCode", ""))) {
-                                        Log.farm("蚂蚁新村⛪[捐赠:" + title + "]");
-                                        Status.setStallDonateToday();
-                                    }
-                                }
-                            }
+            val friendSet = assistFriendList.value
+            if (friendSet.isEmpty()) {
+                Log.record(TAG, "未设置新村助力好友列表。")
+                return
+            }
+
+            Log.record(TAG, "开始为 ${friendSet.size} 位好友进行新村助力...")
+
+            for (uid in friendSet) {
+                val shareId = Base64.encodeToString(
+                    "$uid-${RandomUtil.getRandomInt(5)}ANUTSALTML_2PA_SHARE".toByteArray(),
+                    Base64.NO_WRAP
+                )
+
+                val response = AntStallRpcCall.achieveBeShareP2P(shareId)
+                val json = JSONObject(response)
+                val name = UserMap.getMaskName(uid)
+
+                if (!json.optBoolean("success")) {
+                    when (json.getString("code")) {
+                        "600000028" -> {
+                            Log.record(TAG, "新村助力🮐被助力次数上限[$name]")
+                            continue
+                        }
+
+                        "600000027" -> {
+                            Log.record(TAG, "新村助力💪今日助力他人次数上限")
+                            Status.antStallAssistFriendToday()
+                            return
+                        }
+
+                        else -> {
+                            Log.error(TAG, "新村助力😔失败[$name]${json.optString("desc")}")
+                            continue
                         }
                     }
                 }
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "donate err:",t);
-        }
-    }
 
-    // 进入下一村
-    private void roadmap() {
-        try {
-            String s = AntStallRpcCall.roadmap();
-            JSONObject jo = new JSONObject(s);
-            if (!ResChecker.checkRes(TAG,jo)) {
-                return;
-            }
-            JSONArray roadList = jo.getJSONArray("roadList");
-            boolean hasNewVillage = false;
-            for (int i = 0; i < roadList.length(); i++) {
-                JSONObject road = roadList.getJSONObject(i);
-                // 检查 status 字段是否为 "NEW"
-                if (!"NEW".equals(road.getString("status"))) {
-                    continue;
-                }
-                hasNewVillage = true;
-                String villageName = road.getString("villageName");
-
-                // 检查今日是否已进入过这个村庄
-                String flagKey = "stall::roadmap::" + villageName;
-                if (Status.hasFlagToday(flagKey)) {
-                    Log.record(TAG, "今日已进入[" + villageName + "]，跳过重复打印。");
-                    continue;
-                }
-
-                Log.farm("蚂蚁新村⛪[进入:" + villageName + "]成功");
-
-                // 标记今日已进入该村庄，避免重复打印
-                Status.setFlagToday(flagKey);
-                break; // 进入一个新村后退出循环
-            }
-            if (!hasNewVillage) {
-                Log.record(TAG, "所有村庄都已解锁，无需进入下一村。");
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"roadmap err:", t);
-        }
-    }
-
-    private void collectManure() {
-        String s = AntStallRpcCall.queryManureInfo();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (jo.optBoolean("success")) {
-                JSONObject astManureInfoVO = jo.getJSONObject("astManureInfoVO");
-                if (astManureInfoVO.optBoolean("hasManure")) {
-                    int manure = astManureInfoVO.getInt("manure");
-                    s = AntStallRpcCall.collectManure();
-                    jo = new JSONObject(s);
-                    if (ResChecker.checkRes(TAG,jo)) {
-                        Log.farm("蚂蚁新村⛪获得肥料" + manure + "g");
-                    }
-                } else {
-                    Log.record(TAG, "没有可收取的肥料。");
-                }
-            } else {
-                Log.error(TAG,"collectManure err:" + " " + s);
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "collectManure err:",t);
-        }
-    }
-
-
-
-    private void throwManure(JSONArray dynamicList) {
-        // 1. 前置检查：如果今日已达上限，直接跳过
-        if (Status.hasFlagToday(StatusFlags.FLAG_ANTSTALL_THROW_MANURE_LIMIT)) {
-            return;
-        }
-
-        try {
-            String s = AntStallRpcCall.throwManure(dynamicList);
-            JSONObject jo = new JSONObject(s);
-
-            // 2. 先于 ResChecker 判断特定业务错误码
-            String resultCode = jo.optString("resultCode");
-            if ("B_OVER_LIMIT_COUNT_OF_THROW_TO_FRIEND".equals(resultCode)) {
-                Log.record(TAG, "检测到今日丢肥料次数已达上限，停止后续尝试");
-                Status.setFlagToday(StatusFlags.FLAG_ANTSTALL_THROW_MANURE_LIMIT);
-                return; // 既然已经上限，直接返回，不再走 ResChecker
+                Log.farm("新村助力🎉成功[$name]")
+                GlobalThreadPools.sleepCompat(5000)
             }
 
-            // 3. 正常的响应检查（处理 success: true/false）
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("蚂蚁新村⛪扔肥料成功");
-            }
+            Status.antStallAssistFriendToday()
 
-        } catch (Throwable th) {
-            // 这样即使 ResChecker 抛出异常，th 也能捕获到，但我们上面的 return 已经避开了大部分情况
-            Log.printStackTrace(TAG, "throwManure err:", th);
-        } finally {
-            try {
-                GlobalThreadPools.sleepCompat(1000);
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-            }
-        }
-    }
-
-    private void throwManure() {
-        try {
-            String s = AntStallRpcCall.dynamicLoss();
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                JSONArray astLossDynamicVOS = jo.getJSONArray("astLossDynamicVOS");
-                JSONArray dynamicList = new JSONArray();
-                for (int i = 0; i < astLossDynamicVOS.length(); i++) {
-                    JSONObject lossDynamic = astLossDynamicVOS.getJSONObject(i);
-                    if (lossDynamic.has("specialEmojiVO")) {
-                        continue;
-                    }
-                    String objectId = lossDynamic.getString("objectId");
-                    boolean isThrowManure = stallThrowManureList.getValue().contains(objectId);
-                    if (stallThrowManureType.getValue() == StallThrowManureType.DONT_THROW) {
-                        isThrowManure = !isThrowManure;
-                    }
-                    if (!isThrowManure) {
-                        continue;
-                    }
-                    JSONObject dynamic = new JSONObject();
-                    dynamic.put("bizId", lossDynamic.getString("bizId"));
-                    dynamic.put("bizType", lossDynamic.getString("bizType"));
-                    dynamicList.put(dynamic);
-                    if (dynamicList.length() == 5) {
-                        throwManure(dynamicList);
-                        dynamicList = new JSONArray();
-                    }
-                }
-                if (dynamicList.length() > 0) {
-                    throwManure(dynamicList);
-                }
-            } else {
-                Log.error(TAG,"throwManure err:" + " " + s);
-            }
-
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG,"throwManure err:", t);
-        }
-    }
-
-
-    private void settleReceivable() {
-        String s = AntStallRpcCall.settleReceivable();
-        try {
-            JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
-                Log.farm("蚂蚁新村⛪收取应收金币");
-            }
-        } catch (Throwable th) {
-            Log.printStackTrace(TAG, "settleReceivable err:",th);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "assistFriend err:", t)
         }
     }
 
     /**
-     * 贴罚单
+     * @brief 捐赠项目
      */
-    private void pasteTicket() {
+    private fun donate() {
         try {
-            if (!Status.canPasteTicketTime()) {
-                Log.record(TAG, "未到贴罚单时间或今日已贴完。");
-                return;
+            val response = AntStallRpcCall.projectList()
+            val json = JSONObject(response)
+
+            if (json.optString("resultCode", "") != "SUCCESS") return
+
+            // 检查余额
+            val userInfo = json.optJSONObject("astUserInfoVO")
+            if (userInfo != null) {
+                val currentCoinAmount = userInfo.optJSONObject("currentCoin")
+                    ?.optDouble("amount", 0.0) ?: 0.0
+
+                if (currentCoinAmount < 15000) {
+                    return
+                }
             }
-            Log.record(TAG, "开始巡逻，寻找可贴罚单的好友...");
-            while (true) {
-                try {
-                    String str = AntStallRpcCall.nextTicketFriend();
-                    JSONObject jsonObject = new JSONObject(str);
-                    if (!jsonObject.optBoolean("success")) {
-                        Log.error(TAG, "pasteTicket.nextTicketFriend err:" + jsonObject.optString("resultDesc"));
-                        return;
-                    }
-                    if (jsonObject.getInt("canPasteTicketCount") == 0) {
-                        Log.record(TAG,"蚂蚁新村👍[今日罚单已贴完]");
-                        Status.pasteTicketTime();
-                        return;
-                    }
-                    String friendId = jsonObject.optString("friendUserId");
-                    if (friendId.isEmpty()) {
-                        Log.record(TAG, "没有更多可贴罚单的好友了。");
-                        return;
-                    }
-                    boolean isStallTicket = stallTicketList.getValue().contains(friendId);
-                    if (stallTicketType.getValue() == StallTicketType.DONT_TICKET) {
-                        isStallTicket = !isStallTicket;
-                    }
-                    if (!isStallTicket) {
-                        continue;
-                    }
-                    str = AntStallRpcCall.friendHome(friendId);
-                    jsonObject = new JSONObject(str);
-                    if (!jsonObject.optBoolean("success")) {
-                        Log.error(TAG, "pasteTicket.friendHome err:" + jsonObject.optString("resultDesc"));
-                        return;
-                    }
-                    JSONObject object = jsonObject.getJSONObject("seatsMap");
-                    // 使用 keys() 方法获取所有键
-                    Iterator<String> keys = object.keys();
-                    // 遍历所有键
-                    while (keys.hasNext()) {
-                        try {
-                            String key = keys.next();
-                            // 获取键对应的值
-                            Object propertyValue = object.get(key);
-                            if (!(propertyValue instanceof JSONObject jo)) {
-                                continue;
-                            }
-                            //如signInDTO、priorityChannelDTO
-                            if (jo.length() == 0) {
-                                continue;
-                            }
-                            if (jo.getBoolean("canOpenShop") || !"BUSY".equals(jo.getString("status")) || !jo.getBoolean("overTicketProtection")) {
-                                continue;
-                            }
-                            String rentLastUser = jo.getString("rentLastUser");
-                            str = AntStallRpcCall.ticket(jo.getString("rentLastBill"), jo.getString("seatId"),
-                                    jo.getString("rentLastShop"), rentLastUser, jo.getString("userId"));
-                            jo = new JSONObject(str);
-                            if (!jo.optBoolean("success")) {
-                                Log.error(TAG, "pasteTicket.ticket err:" + jo.optString("resultDesc"));
-                                return;
-                            }
-                            Log.farm("蚂蚁新村🚫在[" + UserMap.getMaskName(friendId) + "]贴罚单");
-                        } finally {
-                            try {
-                                GlobalThreadPools.sleepCompat(1000);
-                            } catch (Exception e) {
-                                Log.printStackTrace(e);
+
+            // 查找在线项目
+            val projects = json.optJSONArray("astProjectVOS") ?: return
+
+            for (i in 0 until projects.length()) {
+                val project = projects.optJSONObject(i) ?: continue
+
+                if (project.optString("status", "") == "ONLINE") {
+                    val projectId = project.optString("projectId", "")
+
+                    // 获取项目详情
+                    val detailResponse = AntStallRpcCall.projectDetail(projectId)
+                    val detailJson = JSONObject(detailResponse)
+
+                    if (detailJson.optString("resultCode", "") == "SUCCESS") {
+                        // 执行捐赠
+                        val donateResponse = AntStallRpcCall.projectDonate(projectId)
+                        val donateJson = JSONObject(donateResponse)
+
+                        val astProjectVO = donateJson.optJSONObject("astProjectVO")
+                        if (astProjectVO != null) {
+                            val title = astProjectVO.optString("title", "未知项目")
+
+                            if (donateJson.optString("resultCode", "") == "SUCCESS") {
+                                Log.farm("蚂蚁新村⛪[捐赠:$title]")
+                                Status.setStallDonateToday()
                             }
                         }
                     }
-                } finally {
-                    try {
-                        GlobalThreadPools.sleepCompat(1500);
-                    } catch (Exception e) {
-                        Log.printStackTrace(e);
-                    }
                 }
             }
-        } catch (Throwable th) {
-            Log.printStackTrace(TAG, "pasteTicket err:",th);
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "donate err:", t)
         }
     }
 
-    public interface StallOpenType {
-        int OPEN = 0;
-        int CLOSE = 1;
-        String[] nickNames = {"选中摆摊", "选中不摆摊"};
+    /**
+     * @brief 进入下一村
+     */
+    private fun roadmap() {
+        try {
+            val response = AntStallRpcCall.roadmap()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) return
+
+            val roadList = json.getJSONArray("roadList")
+            var hasNewVillage = false
+
+            for (i in 0 until roadList.length()) {
+                val road = roadList.getJSONObject(i)
+
+                if (road.getString("status") != "NEW") continue
+
+                hasNewVillage = true
+                val villageName = road.getString("villageName")
+                val flagKey = "stall::roadmap::$villageName"
+
+                if (Status.hasFlagToday(flagKey)) {
+                    Log.record(TAG, "今日已进入[$villageName],跳过重复打卡。")
+                    continue
+                }
+
+                Log.farm("蚂蚁新村⛪[进入:$villageName]成功")
+                Status.setFlagToday(flagKey)
+                break
+            }
+
+            if (!hasNewVillage) {
+                Log.record(TAG, "所有村庄都已解锁,无需进入下一村。")
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "roadmap err:", t)
+        }
     }
 
-    public interface StallTicketType {
-        int TICKET = 0;
-        int DONT_TICKET = 1;
-        String[] nickNames = {"选中贴罚单", "选中不贴罚单"};
+    /**
+     * @brief 收集肥料
+     */
+    private fun collectManure() {
+        try {
+            val response = AntStallRpcCall.queryManureInfo()
+            val json = JSONObject(response)
+
+            if (!json.optBoolean("success")) {
+                Log.error(TAG, "collectManure err: $response")
+                return
+            }
+
+            val astManureInfoVO = json.getJSONObject("astManureInfoVO")
+            if (astManureInfoVO.optBoolean("hasManure")) {
+                val manure = astManureInfoVO.getInt("manure")
+                val collectResponse = AntStallRpcCall.collectManure()
+                val collectJson = JSONObject(collectResponse)
+
+                if (ResChecker.checkRes(TAG, collectJson)) {
+                    Log.farm("蚂蚁新村⛪获得肥料${manure}g")
+                }
+            } else {
+                Log.record(TAG, "没有可收取的肥料。")
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "collectManure err:", t)
+        }
     }
 
-    public interface StallThrowManureType {
-        int THROW = 0;
-        int DONT_THROW = 1;
-        String[] nickNames = {"选中丢肥料", "选中不丢肥料"};
+    /**
+     * @brief 丢肥料批量处理
+     */
+    private fun throwManure(dynamicList: JSONArray) {
+        // 前置检查:如果今日已达上限,直接跳过
+        if (Status.hasFlagToday(StatusFlags.FLAG_ANTSTALL_THROW_MANURE_LIMIT)) {
+            return
+        }
+
+        try {
+            val response = AntStallRpcCall.throwManure(dynamicList)
+            val json = JSONObject(response)
+
+            // 先于ResChecker判断特定业务错误码
+            val resultCode = json.optString("resultCode")
+            if (resultCode == "B_OVER_LIMIT_COUNT_OF_THROW_TO_FRIEND") {
+                Log.record(TAG, "检测到今日丢肥料次数已达上限,停止后续尝试")
+                Status.setFlagToday(StatusFlags.FLAG_ANTSTALL_THROW_MANURE_LIMIT)
+                return
+            }
+
+            // 正常的响应检查
+            if (ResChecker.checkRes(TAG, json)) {
+                Log.farm("蚂蚁新村⛪打肥料成功")
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "throwManure err:", t)
+        } finally {
+            GlobalThreadPools.sleepCompat(1000)
+        }
     }
 
-    public interface StallInviteShopType {
-        int INVITE = 0;
-        int DONT_INVITE = 1;
-        String[] nickNames = {"选中邀请", "选中不邀请"};
+    /**
+     * @brief 丢肥料主流程
+     */
+    private fun throwManure() {
+        try {
+            val response = AntStallRpcCall.dynamicLoss()
+            val json = JSONObject(response)
+
+            if (!ResChecker.checkRes(TAG, json)) {
+                Log.error(TAG, "throwManure err: $response")
+                return
+            }
+
+            val astLossDynamicVOS = json.getJSONArray("astLossDynamicVOS")
+            var dynamicList = JSONArray()
+
+            for (i in 0 until astLossDynamicVOS.length()) {
+                val lossDynamic = astLossDynamicVOS.getJSONObject(i)
+
+                if (lossDynamic.has("specialEmojiVO")) continue
+
+                val objectId = lossDynamic.getString("objectId")
+                var isThrowManure = stallThrowManureList.value.contains(objectId)
+
+                if (stallThrowManureType.value == StallThrowManureType.DONT_THROW) {
+                    isThrowManure = !isThrowManure
+                }
+
+                if (!isThrowManure) continue
+
+                val dynamic = JSONObject().apply {
+                    put("bizId", lossDynamic.getString("bizId"))
+                    put("bizType", lossDynamic.getString("bizType"))
+                }
+                dynamicList.put(dynamic)
+
+                if (dynamicList.length() == 5) {
+                    throwManure(dynamicList)
+                    dynamicList = JSONArray()
+                }
+            }
+
+            if (dynamicList.length() > 0) {
+                throwManure(dynamicList)
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "throwManure err:", t)
+        }
+    }
+
+    /**
+     * @brief 结算应收金币
+     */
+    private fun settleReceivable() {
+        try {
+            val response = AntStallRpcCall.settleReceivable()
+            val json = JSONObject(response)
+
+            if (ResChecker.checkRes(TAG, json)) {
+                Log.farm("蚂蚁新村⛪收取应收金币")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "settleReceivable err:", t)
+        }
+    }
+
+    /**
+     * @brief 贴罚单
+     */
+    private fun pasteTicket() {
+        try {
+            if (!Status.canPasteTicketTime()) {
+                Log.record(TAG, "未到贴罚单时间或今日已贴完。")
+                return
+            }
+
+            Log.record(TAG, "开始巡逻,寻找可贴罚单的好友...")
+
+            while (true) {
+                try {
+                    val response = AntStallRpcCall.nextTicketFriend()
+                    val json = JSONObject(response)
+
+                    if (!json.optBoolean("success")) {
+                        Log.error(
+                            TAG,
+                            "pasteTicket.nextTicketFriend err: ${json.optString("resultDesc")}"
+                        )
+                        return
+                    }
+
+                    if (json.getInt("canPasteTicketCount") == 0) {
+                        Log.record(TAG, "蚂蚁新村👍[今日罚单已贴完]")
+                        Status.pasteTicketTime()
+                        return
+                    }
+
+                    val friendId = json.optString("friendUserId")
+                    if (friendId.isEmpty()) {
+                        Log.record(TAG, "没有更多可贴罚单的好友了。")
+                        return
+                    }
+
+                    var isStallTicket = stallTicketList.value.contains(friendId)
+                    if (stallTicketType.value == StallTicketType.DONT_TICKET) {
+                        isStallTicket = !isStallTicket
+                    }
+
+                    if (!isStallTicket) continue
+
+                    // 访问好友主页
+                    val homeResponse = AntStallRpcCall.friendHome(friendId)
+                    val homeJson = JSONObject(homeResponse)
+
+                    if (!homeJson.optBoolean("success")) {
+                        Log.error(
+                            TAG,
+                            "pasteTicket.friendHome err: ${homeJson.optString("resultDesc")}"
+                        )
+                        return
+                    }
+
+                    val seatsMap = homeJson.getJSONObject("seatsMap")
+                    val keys = seatsMap.keys()
+
+                    while (keys.hasNext()) {
+                        try {
+                            val key = keys.next()
+                            val propertyValue = seatsMap.get(key)
+
+                            if (propertyValue !is JSONObject || propertyValue.length() == 0) {
+                                continue
+                            }
+
+                            if (propertyValue.getBoolean("canOpenShop") ||
+                                propertyValue.getString("status") != "BUSY" ||
+                                !propertyValue.getBoolean("overTicketProtection")
+                            ) {
+                                continue
+                            }
+
+                            val rentLastUser = propertyValue.getString("rentLastUser")
+                            val ticketResponse = AntStallRpcCall.ticket(
+                                propertyValue.getString("rentLastBill"),
+                                propertyValue.getString("seatId"),
+                                propertyValue.getString("rentLastShop"),
+                                rentLastUser,
+                                propertyValue.getString("userId")
+                            )
+
+                            val ticketJson = JSONObject(ticketResponse)
+                            if (!ticketJson.optBoolean("success")) {
+                                Log.error(
+                                    TAG,
+                                    "pasteTicket.ticket err: ${ticketJson.optString("resultDesc")}"
+                                )
+                                return
+                            }
+
+                            Log.farm("蚂蚁新村🚫在[${UserMap.getMaskName(friendId)}]贴罚单")
+
+                        } finally {
+                            GlobalThreadPools.sleepCompat(1000)
+                        }
+                    }
+
+                } finally {
+                    GlobalThreadPools.sleepCompat(1500)
+                }
+            }
+
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "pasteTicket err:", t)
+        }
+    }
+
+    /**
+     * @brief 摆摊操作类型
+     */
+    interface StallOpenType {
+        companion object {
+            const val OPEN = 0
+            const val CLOSE = 1
+            val nickNames = arrayOf("选中摆摊", "选中不摆摊")
+        }
+    }
+
+    /**
+     * @brief 贴罚单操作类型
+     */
+    interface StallTicketType {
+        companion object {
+            const val TICKET = 0
+            const val DONT_TICKET = 1
+            val nickNames = arrayOf("选中贴罚单", "选中不贴罚单")
+        }
+    }
+
+    /**
+     * @brief 丢肥料操作类型
+     */
+    interface StallThrowManureType {
+        companion object {
+            const val THROW = 0
+            const val DONT_THROW = 1
+            val nickNames = arrayOf("选中丢肥料", "选中不丢肥料")
+        }
+    }
+
+    /**
+     * @brief 邀请摆摊操作类型
+     */
+    interface StallInviteShopType {
+        companion object {
+            const val INVITE = 0
+            const val DONT_INVITE = 1
+            val nickNames = arrayOf("选中邀请", "选中不邀请")
+        }
+    }
+
+    companion object {
+        private const val TAG = "AntStall"
+
+        /**
+         * @brief 任务类型列表
+         */
+        private val TASK_TYPE_LIST = listOf(
+            "ANTSTALL_NORMAL_OPEN_NOTICE",  // 开启摊新村收益提醒
+            "tianjiashouye",                 // 添加首页
+            "ANTSTALL_ELEME_VISIT",          // 去饿了么果园逛一逛
+            "ANTSTALL_TASK_diantao202311",   // 去点淘赚元宝提现
+            "ANTSTALL_TASK_nongchangleyuan"  // 农场乐园
+        )
     }
 }

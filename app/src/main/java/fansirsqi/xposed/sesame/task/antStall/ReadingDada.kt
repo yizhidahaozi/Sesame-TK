@@ -1,61 +1,85 @@
-package fansirsqi.xposed.sesame.task.antStall;
+package fansirsqi.xposed.sesame.task.antStall
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import fansirsqi.xposed.sesame.model.ModelGroup;
-import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI;
-import fansirsqi.xposed.sesame.util.JsonUtil;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.StringUtil;
+import fansirsqi.xposed.sesame.model.ModelGroup
+import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
+import fansirsqi.xposed.sesame.util.JsonUtil
+import fansirsqi.xposed.sesame.util.Log
+import org.json.JSONObject
 
 /**
- * @author Constanline
+ * @file ReadingDada.kt
+ * @brief 阅读答题功能模块
+ * @author
  * @since 2023/08/22
  */
-public class ReadingDada {
-    private static final String TAG = ReadingDada.class.getSimpleName();
+object ReadingDada {
+    private const val TAG = "ReadingDada"
 
-    public ModelGroup getGroup() {
-        return ModelGroup.STALL;
-    }
+    val group: ModelGroup = ModelGroup.STALL
 
-    public static boolean answerQuestion(JSONObject bizInfo) {
+    /**
+     * @brief 回答问题
+     * @param bizInfo 业务信息JSON对象
+     * @return 是否回答成功
+     */
+    fun answerQuestion(bizInfo: JSONObject): Boolean {
         try {
-            String taskJumpUrl = bizInfo.optString("taskJumpUrl");
-            if (StringUtil.isEmpty(taskJumpUrl)) {
-                taskJumpUrl = bizInfo.getString("targetUrl");
-            }
-            String activityId = taskJumpUrl.split("activityId%3D")[1].split("%26")[0];
-            String outBizId;
-            if (taskJumpUrl.contains("outBizId%3D")) {
-                outBizId = taskJumpUrl.split("outBizId%3D")[1].split("%26")[0];
+            // 获取任务跳转URL
+            val taskJumpUrl = bizInfo.optString("taskJumpUrl").takeIf { it.isNotEmpty() }
+                ?: bizInfo.getString("targetUrl")
+
+            // 解析活动ID
+            val activityId = taskJumpUrl.split("activityId%3D")[1].split("%26")[0]
+
+            // 解析外部业务ID
+            val outBizId = if (taskJumpUrl.contains("outBizId%3D")) {
+                taskJumpUrl.split("outBizId%3D")[1].split("%26")[0]
             } else {
-                outBizId = "";
+                ""
             }
-            String s = ReadingDadaRpcCall.getQuestion(activityId);
-            JSONObject jo = new JSONObject(s);
-            if ("200".equals(jo.getString("resultCode"))) {
-                JSONArray jsonArray = jo.getJSONArray("options");
-                String question = jo.getString("title");
-                String answer = AnswerAI.getAnswer(question, JsonUtil.jsonArrayToList(jsonArray), "other");
-                if (answer == null || answer.isEmpty()) {
-                    answer = jsonArray.getString(0);
+
+            // 获取问题
+            val questionResponse = ReadingDadaRpcCall.getQuestion(activityId)
+            val questionJson = JSONObject(questionResponse)
+
+            if (questionJson.getString("resultCode") == "200") {
+                val options = questionJson.getJSONArray("options")
+                val question = questionJson.getString("title")
+
+                // 使用AI获取答案
+                var answer = AnswerAI.getAnswer(
+                    question,
+                    JsonUtil.jsonArrayToList(options),
+                    "other"
+                )
+
+                // 如果AI未返回答案,使用第一个选项
+                if (answer.isNullOrEmpty()) {
+                    answer = options.getString(0)
                 }
-                s = ReadingDadaRpcCall.submitAnswer(activityId, outBizId, jo.getString("questionId"), answer);
-                jo = new JSONObject(s);
-                if ("200".equals(jo.getString("resultCode"))) {
-                    Log.record(TAG, "答题完成");
-                    return true;
+
+                // 提交答案
+                val submitResponse = ReadingDadaRpcCall.submitAnswer(
+                    activityId,
+                    outBizId,
+                    questionJson.getString("questionId"),
+                    answer
+                )
+
+                val submitJson = JSONObject(submitResponse)
+                return if (submitJson.getString("resultCode") == "200") {
+                    Log.record(TAG, "答题完成")
+                    true
                 } else {
-                    Log.error(TAG, "答题失败");
+                    Log.error(TAG, "答题失败")
+                    false
                 }
             } else {
-                Log.error(TAG, "获取问题失败");
+                Log.error(TAG, "获取问题失败")
             }
-        } catch (Throwable e) {
-            Log.printStackTrace(TAG, "answerQuestion err:",e);
+        } catch (e: Throwable) {
+            Log.printStackTrace(TAG, "answerQuestion err:", e)
         }
-        return false;
+        return false
     }
 }
