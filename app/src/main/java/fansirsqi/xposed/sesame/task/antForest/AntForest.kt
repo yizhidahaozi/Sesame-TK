@@ -11,8 +11,10 @@ import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listEcoLifeOptions
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listHealthcareOptions
 import fansirsqi.xposed.sesame.entity.VitalityStore
 import fansirsqi.xposed.sesame.entity.VitalityStore.Companion.getNameById
+import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.RequestManager.requestString
 import fansirsqi.xposed.sesame.hook.Toast
+import fansirsqi.xposed.sesame.hook.internal.AuthCodeHelper
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.FixedOrRangeIntervalLimit
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.IntervalLimit
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit.addIntervalLimit
@@ -800,6 +802,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     override suspend fun runSuspend() {
         val runStartTime = System.currentTimeMillis()
         Log.record(TAG, "🌲🌲🌲 森林主任务开始执行 🌲🌲🌲")
+        val authCode = AuthCodeHelper.getAuthCode("2021005114632037" )
+        Log.record(TAG, "获取到的 authCode: $authCode")
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters()
