@@ -9,6 +9,7 @@ import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
@@ -39,14 +40,9 @@ class AntOrchard : ModelTask() {
     private lateinit var orchardSpreadManureCount: IntegerModelField
     private lateinit var assistFriendList: SelectModelField
     //模式选择
-    private lateinit var plantModeField: SelectModelField
+    private lateinit var plantModeField: ChoiceModelField
 
-    private class ModeOption(key: String, label: String) : MapperEntity() {
-        init {
-            this.id = key
-            this.name = label
-        }
-    }
+
 
     override fun getName(): String = "农场"
 
@@ -57,17 +53,14 @@ class AntOrchard : ModelTask() {
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
 
-        // 构建种植模式选项
-        val modeOptions = mutableListOf<MapperEntity>(
-            ModeOption("MAIN", "种果树(Main)"),
-            ModeOption("YEB", "种摇钱树(Yeb)"),
-            ModeOption("HYBRID", "混合模式(先摇钱树后果树)")
-        )
 
         modelFields.addField(
-            SelectModelField("plantMode", "种植模式",
-                mutableSetOf("MAIN"),
-                modeOptions
+            ChoiceModelField(
+                "plantMode",
+                "种植模式",
+                PlantModeType.MAIN,
+                PlantModeType.nickNames,
+                "选择森林自动种植的优先策略"
             ).also { plantModeField = it }
         )
 
@@ -194,18 +187,19 @@ class AntOrchard : ModelTask() {
         }
     }
 
-    private suspend fun orchardSpreadManure() {
+    private fun orchardSpreadManure() {
         try {
             val modeSet = plantModeField.value
             val targetLimit = orchardSpreadManureCount.value
 
-            // 混合模式或单独模式：先处理摇钱树 (YEB)
-            if (modeSet.contains("YEB") || modeSet.contains("HYBRID")) {
+
+            // 1. 如果是 摇钱树模式(YEB) 或者 混合模式(HYBRID)
+            if (modeSet == PlantModeType.YEB || modeSet == PlantModeType.HYBRID) {
                 waterTree("yeb", targetLimit)
             }
 
-            // 混合模式或单独模式：处理果树 (MAIN)
-            if (modeSet.contains("MAIN") || modeSet.contains("HYBRID")) {
+            // 2. 如果是 果树模式(MAIN) 或者 混合模式(HYBRID)
+            if (modeSet == PlantModeType.MAIN || modeSet == PlantModeType.HYBRID) {
                 waterTree("main", targetLimit)
             }
 
@@ -214,7 +208,7 @@ class AntOrchard : ModelTask() {
         }
     }
 
-    private suspend fun waterTree(targetScene: String, targetLimit: Int) {
+    private fun waterTree(targetScene: String, targetLimit: Int) {
         val isMain = targetScene == "main"
         val sceneName = if (isMain) "种果树" else "种摇钱树"
         // 独立计数：果树使用原Flag，摇钱树使用新Key
@@ -333,7 +327,7 @@ class AntOrchard : ModelTask() {
         Log.record(TAG, "$sceneName 施肥结束，最终累计: $totalWatered")
     }
 
-    private suspend fun receiveMoneyTreeReward() {
+    private fun receiveMoneyTreeReward() {
         try {
             val cal = Calendar.getInstance()
             val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -363,7 +357,7 @@ class AntOrchard : ModelTask() {
     }
 
     // 辅助方法：施肥后检测肥料礼盒
-    private suspend fun checkFertilizerBox(currentPlantScene: String) {
+    private fun checkFertilizerBox(currentPlantScene: String) {
         extraInfoGet(from = "water")
     }
 
@@ -396,7 +390,7 @@ class AntOrchard : ModelTask() {
         }
     }
 
-    private suspend fun checkLotteryPlus() {
+    private fun checkLotteryPlus() {
         try {
             if (treeLevel == null) return
             val response = AntOrchardRpcCall.querySubplotsActivity(treeLevel!!)
@@ -461,7 +455,7 @@ class AntOrchard : ModelTask() {
         }
     }
 
-    private suspend fun doOrchardDailyTask(userId: String) {
+    private fun doOrchardDailyTask(userId: String) {
         try {
             val response = AntOrchardRpcCall.orchardListTask()
             val responseJson = JSONObject(response)
@@ -857,5 +851,17 @@ class AntOrchard : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "orchardAssistFriend err:", t)
         }
+    }
+    object PlantModeType {
+        const val MAIN = 0
+        const val YEB = 1
+        const val HYBRID = 2
+
+        @JvmField
+        val nickNames = arrayOf(
+            "种果树(Main)",
+            "种摇钱树(Yeb)",
+            "混合模式(先摇钱树后果树)"
+        )
     }
 }
