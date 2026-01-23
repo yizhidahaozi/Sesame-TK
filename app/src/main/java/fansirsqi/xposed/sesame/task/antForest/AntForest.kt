@@ -4437,17 +4437,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val propName = jo.getJSONObject("propConfigVO").getString("propName")
                 if (usePropBag(jo)) {
                     Log.forest("使用加速卡🌪[$propName]")
-                    // 🚀 使用加速卡后，等待1秒让能量球加速成熟，然后收取3次
-                    Log.record(TAG, "🚀 加速卡使用成功，等待3秒让能量球成熟...")
-                    GlobalThreadPools.sleepCompat(1000L)
-
-                    // 连续收取3次，确保收到加速后的能量
-                    repeat(3) { index ->
-                        Log.record(TAG, "🎯 第${index + 1}次收取自己能量...")
-                        collectSelfEnergyImmediately("加速卡第${index + 1}次")
-                        if (index < 2) GlobalThreadPools.sleepCompat(1000L)
-                    }
-                    Log.record(TAG, "✅ 加速卡自收能量完成（共3次）")
+                    collectSelfEnergyImmediately("加速卡")
                 }
             } else {
                 Log.record(TAG, "背包中无可用加速卡")
@@ -4465,8 +4455,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val selfHomeObj = querySelfHome()
             if (selfHomeObj != null) {
                 Log.record(TAG, "🎯 $tag：开始收取自己能量...")
-
-                // 使用快速收取模式，跳过道具检查
                 val availableBubbles: MutableList<Long> = ArrayList()
                 val serverTime = selfHomeObj.optLong("now", System.currentTimeMillis())
                 extractBubbleInfo(selfHomeObj, serverTime, availableBubbles, UserMap.currentUid)
@@ -4474,11 +4462,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (availableBubbles.isNotEmpty()) {
                     Log.record(TAG, "🎯 $tag：找到${availableBubbles.size}个可收能量球")
                     collectVivaEnergy(UserMap.currentUid, selfHomeObj, availableBubbles, "加速卡$tag", skipPropCheck = true)
-                } else {
-                    Log.record(TAG, "🎯 $tag：无可收能量球")
                 }
-            } else {
-                Log.error(TAG, "❌ $tag：获取自己主页信息失败")
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "collectSelfEnergyImmediately err", e)
