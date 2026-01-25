@@ -513,6 +513,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             )
         )
+        /*
         modelFields.addField(
             ChoiceModelField(
                 "stealthCard",
@@ -526,6 +527,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "限时隐身永动机 | 开关",
                 false
             ).also { stealthCardConstant = it })
+         */
         modelFields.addField(
             IntegerModelField(
                 "returnWater10",
@@ -564,6 +566,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "浇水 | 通知好友",
                 false
             ).also { notifyFriend = it })
+        /*
         modelFields.addField(
             BooleanModelField(
                 "giveProp",
@@ -578,12 +581,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 { AlipayUser.getList() },
                 "所有可赠送的道具将全部赠"
             ).also { whoYouWantToGiveTo = it })
+         */
         modelFields.addField(
             BooleanModelField(
                 "collectProp",
                 "收集道具",
                 false
             ).also { collectProp = it })
+        /*
         modelFields.addField(
             ChoiceModelField(
                 "helpFriendCollectType",
@@ -607,6 +612,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ) { AlipayUser.getList() }.also {
                 alternativeAccountList = it
             })
+         */
         modelFields.addField(BooleanModelField("vitalityExchange", "活力值 | 兑换开关", false).also { vitalityExchange = it })
         modelFields.addField(
             SelectAndCountModelField(
@@ -632,7 +638,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
         modelFields.addField(BooleanModelField("forestMarket", "森林集市", false).also { forestMarket = it })
         modelFields.addField(BooleanModelField("youthPrivilege", "青春特权 | 森林道具", false).also { youthPrivilege = it })
-        modelFields.addField(BooleanModelField("studentCheckIn", "青春特权 | 签到红包", false).also { dailyCheckIn = it })
+        //modelFields.addField(BooleanModelField("studentCheckIn", "青春特权 | 签到红包", false).also { dailyCheckIn = it })
         modelFields.addField(BooleanModelField("ecoLife", "绿色行动 | 开关", false).also { ecoLife = it })
         modelFields.addField(StringModelField("ecoLifeTime", "绿色行动 | 默认8点后执行", "0800").also { ecoLifeTime = it })
         modelFields.addField(BooleanModelField("ecoLifeOpen", "绿色任务 |  自动开通", false).also { ecoLifeOpen = it })
@@ -641,15 +647,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "ecoLifeOption", "绿色行动 | 选项", LinkedHashSet<String?>(), listEcoLifeOptions(), "光盘行动需要先完成一次光盘打卡"
             ).also { ecoLifeOption = it })
 
-        modelFields.addField(StringModelField("queryInterval", "查询间隔(毫秒或毫秒范围)", "1000-2000").also { queryInterval = it })
-        modelFields.addField(StringModelField("collectInterval", "收取间隔(毫秒或毫秒范围)", "1000-1500").also { collectInterval = it })
-        modelFields.addField(StringModelField("doubleCollectInterval", "双击间隔(毫秒或毫秒范围)", "800-2400").also { doubleCollectInterval = it })
+        modelFields.addField(StringModelField("queryInterval", "查询间隔(毫秒或毫秒范围)", "500-1500").also { queryInterval = it })
+        modelFields.addField(StringModelField("collectInterval", "收取间隔(毫秒或毫秒范围)", "500-1500").also { collectInterval = it })
+        modelFields.addField(StringModelField("doubleCollectInterval", "双击间隔(毫秒或毫秒范围)", "50-150").also { doubleCollectInterval = it })
         modelFields.addField(BooleanModelField("balanceNetworkDelay", "平衡网络延迟", true).also { balanceNetworkDelay = it })
         modelFields.addField(IntegerModelField("advanceTime", "提前时间(毫秒)", 0, Int.MIN_VALUE, 500).also { advanceTime = it })
-        modelFields.addField(IntegerModelField("tryCount", "尝试收取(次数)", 1, 0, 5).also { tryCount = it })
+        modelFields.addField(IntegerModelField("tryCount", "尝试收取(次数)", 3, 0, 5).also { tryCount = it })
         modelFields.addField(IntegerModelField("retryInterval", "重试间隔(毫秒)", 1200, 0, 10000).also { retryInterval = it })
-        modelFields.addField(IntegerModelField("cycleinterval", "循环间隔(毫秒)", 5000, 0, 10000).also { cycleinterval = it })
-        modelFields.addField(BooleanModelField("showBagList", "显示背包内容", true).also { showBagList = it })
+        modelFields.addField(IntegerModelField("cycleinterval", "循环间隔(毫秒)", 1500, 0, 10000).also { cycleinterval = it })
+        //modelFields.addField(BooleanModelField("showBagList", "显示背包内容", true).also { showBagList = it })
         return modelFields
     }
 

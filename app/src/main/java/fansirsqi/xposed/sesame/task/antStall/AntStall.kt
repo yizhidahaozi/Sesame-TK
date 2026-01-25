@@ -129,6 +129,7 @@ class AntStall : ModelTask() {
                     "丢肥料 | 开启",
                     false
                 ).also { stallThrowManure = it })
+            /*
             addField(
                 ChoiceModelField(
                     "stallThrowManureType",
@@ -163,6 +164,7 @@ class AntStall : ModelTask() {
                     LinkedHashSet(),
                     AlipayUser::getList
                 ).also { stallInviteShopList = it })
+             */
             addField(
                 BooleanModelField(
                     "stallAllowOpenReject",
@@ -200,6 +202,7 @@ class AntStall : ModelTask() {
                 ).also { stallReceiveAward = it })
             addField(BooleanModelField("stallDonate", "自动捐赠", false).also { stallDonate = it })
             addField(BooleanModelField("roadmap", "自动进入下一村", false).also { roadmap = it })
+            /*
             addField(
                 BooleanModelField(
                     "stallInviteRegister",
@@ -220,6 +223,7 @@ class AntStall : ModelTask() {
                     LinkedHashSet(),
                     AlipayUser::getList
                 ).also { assistFriendList = it })
+             */
         }
     }
 

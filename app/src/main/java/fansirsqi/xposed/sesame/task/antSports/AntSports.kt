@@ -139,7 +139,7 @@ class AntSports : ModelTask() {
         modelFields.addField(
             BooleanModelField("openTreasureBox", "开启宝箱", false).also { openTreasureBox = it }
         )
-
+        /*
         // 运动任务 & 能量球
         modelFields.addField(
             BooleanModelField("sportsTasks", "开启运动任务", false).also { sportsTasksField = it }
@@ -151,8 +151,6 @@ class AntSports : ModelTask() {
                 false
             ).also { sportsEnergyBubble = it }
         )
-
-        /*
         // 首页金币 & 捐步
         modelFields.addField(
             BooleanModelField("receiveCoinAsset", "收能量🎈", false).also { receiveCoinAssetField = it }
@@ -172,8 +170,6 @@ class AntSports : ModelTask() {
             IntegerModelField("donateCharityCoinAmount", "捐能量🎈 | 数量(每次)", 100)
                 .also { donateCharityCoinAmount = it }
         )
-         */
-
         // 健康岛任务
         modelFields.addField(
             BooleanModelField("neverlandTask", "健康岛 | 任务", false).also { neverlandTask = it }
@@ -185,8 +181,6 @@ class AntSports : ModelTask() {
             IntegerModelField("neverlandGridStepCount", "健康岛 | 今日走路最大次数", 20)
                 .also { neverlandGridStepCount = it }
         )
-
-        /*
         // 抢好友相关
         modelFields.addField(
             BooleanModelField("battleForFriends", "抢好友 | 开启", false).also { battleForFriends = it }
